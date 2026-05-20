@@ -28,7 +28,7 @@ public sealed class InMemoryToolRegistry : IToolRegistry
 
         try
         {
-            return await tool.ExecuteAsync(call, context, ct).ConfigureAwait(false);
+            return await tool.ExecuteAsync(call, context, ct);
         }
         catch (OperationCanceledException)
         {

@@ -20,9 +20,9 @@ public sealed class DefaultContextBuilder(
         IReadOnlyList<ITool> availableTools,
         CancellationToken ct)
     {
-        var selectedTools = await toolSelector.SelectAsync(state, availableTools, ct).ConfigureAwait(false);
-        var trajectory = await compactor.CompactAsync(state, ct).ConfigureAwait(false);
-        var memories = await memoryRetriever.RetrieveAsync(state, ct).ConfigureAwait(false);
+        var selectedTools = await toolSelector.SelectAsync(state, availableTools, ct);
+        var trajectory = await compactor.CompactAsync(state, ct);
+        var memories = await memoryRetriever.RetrieveAsync(state, ct);
 
         var messages = new List<Message>
         {

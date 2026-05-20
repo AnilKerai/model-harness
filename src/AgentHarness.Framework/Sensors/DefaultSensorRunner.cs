@@ -31,7 +31,7 @@ public sealed class DefaultSensorRunner(IEnumerable<ISensor> sensors) : ISensorR
     private static async Task<(ISensor Sensor, SensorResult Result)> RunOne(
         ISensor sensor, HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
     {
-        var result = await sensor.CheckAsync(hookPoint, state, triggeringStep, ct).ConfigureAwait(false);
+        var result = await sensor.CheckAsync(hookPoint, state, triggeringStep, ct);
         return (sensor, result);
     }
 }

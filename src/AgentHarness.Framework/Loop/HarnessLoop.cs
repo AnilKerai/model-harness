@@ -39,19 +39,19 @@ public sealed class HarnessLoop(
                 var budgetCheck = budgetEnforcer.Check(state, startedAt);
                 if (budgetCheck.IsExhausted)
                 {
-                    return await FinaliseOnBudgetAsync(state, budgetCheck.Reason!, ct).ConfigureAwait(false);
+                    return await FinaliseOnBudgetAsync(state, budgetCheck.Reason!, ct);
                 }
 
-                state = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct).ConfigureAwait(false);
+                state = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
 
-                var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct).ConfigureAwait(false);
+                var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct);
                 state = newState;
 
-                state = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct).ConfigureAwait(false);
+                state = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct);
 
                 if (response.ToolCalls.Count == 0)
                 {
-                    state = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct).ConfigureAwait(false);
+                    state = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct);
 
                     var done = state with { Status = AgentStatus.Done };
                     tracer.Complete(done.TaskId, AgentStatus.Done, failureReason: null);
@@ -67,7 +67,7 @@ public sealed class HarnessLoop(
                 foreach (var call in response.ToolCalls)
                 {
                     ct.ThrowIfCancellationRequested();
-                    state = await ExecuteToolAsync(state, call, ct).ConfigureAwait(false);
+                    state = await ExecuteToolAsync(state, call, ct);
                 }
             }
         }
@@ -111,7 +111,7 @@ public sealed class HarnessLoop(
 
     private async Task<AgentState> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
     {
-        var results = await sensorRunner.RunAsync(hookPoint, state, triggeringStep, ct).ConfigureAwait(false);
+        var results = await sensorRunner.RunAsync(hookPoint, state, triggeringStep, ct);
         var next = state;
         foreach (var (sensor, result) in results)
         {
@@ -133,7 +133,7 @@ public sealed class HarnessLoop(
     private async Task<(AgentState State, ModelResponse Response)> CallModelAsync(AgentState state, bool forceFinalise, CancellationToken ct)
     {
         var tools = toolRegistry.List();
-        var prompt = await contextBuilder.BuildAsync(state, tools, ct).ConfigureAwait(false);
+        var prompt = await contextBuilder.BuildAsync(state, tools, ct);
 
         if (forceFinalise)
         {
@@ -147,7 +147,7 @@ public sealed class HarnessLoop(
         var defs = tools.Select(t => new ToolDefinition(t.Name, t.Description, t.InputSchema)).ToArray();
         var modelTools = forceFinalise ? [] : (IReadOnlyList<ToolDefinition>)defs;
 
-        var response = await modelClient.CallAsync(prompt, modelTools, ct).ConfigureAwait(false);
+        var response = await modelClient.CallAsync(prompt, modelTools, ct);
         tracer.LogModelCall(state.TaskId, prompt, modelTools, response);
 
         var step = new ModelCallStep(
@@ -169,7 +169,7 @@ public sealed class HarnessLoop(
             Call: call,
             Result: new ToolResult(call.CallId, "(pending)"));
 
-        var afterPre = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct).ConfigureAwait(false);
+        var afterPre = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct);
         if (afterPre.Trajectory.Count > state.Trajectory.Count)
         {
             var lastIntervention = afterPre.Trajectory.OfType<SensorInterventionStep>().Last();
@@ -185,7 +185,7 @@ public sealed class HarnessLoop(
 
         var sw = Stopwatch.StartNew();
         var ctx = ToolContext.Empty(state.TaskId, call.CallId);
-        var result = await toolRegistry.DispatchAsync(call, ctx, ct).ConfigureAwait(false);
+        var result = await toolRegistry.DispatchAsync(call, ctx, ct);
         sw.Stop();
         tracer.LogToolCall(state.TaskId, call, result, sw.Elapsed);
 
@@ -196,12 +196,12 @@ public sealed class HarnessLoop(
             Result: result);
 
         var afterExec = afterPre.AppendStep(executed);
-        return await RunSensorsAsync(afterExec, HookPoint.PostToolCall, executed, ct).ConfigureAwait(false);
+        return await RunSensorsAsync(afterExec, HookPoint.PostToolCall, executed, ct);
     }
 
     private async Task<AgentOutcome> FinaliseOnBudgetAsync(AgentState state, string reason, CancellationToken ct)
     {
-        var (finalState, response) = await CallModelAsync(state, forceFinalise: true, ct).ConfigureAwait(false);
+        var (finalState, response) = await CallModelAsync(state, forceFinalise: true, ct);
         var partial = finalState with { Status = AgentStatus.PartialResult };
         tracer.Complete(partial.TaskId, AgentStatus.PartialResult, reason);
         return new AgentOutcome
