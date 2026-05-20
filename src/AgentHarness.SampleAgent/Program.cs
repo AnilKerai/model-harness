@@ -4,11 +4,34 @@ using AgentHarness.Framework.Loop;
 using AgentHarness.Framework.Sensors;
 using AgentHarness.Framework.State;
 using AgentHarness.Framework.Tools;
-using AgentHarness.Infrastructure.Model;
+using AgentHarness.Infrastructure.Anthropic.Model;
 using AgentHarness.Infrastructure.Tools;
 using AgentHarness.Infrastructure.Tracing;
 using AgentHarness.SampleAgent.Sensors;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
+// ── Configuration ────────────────────────────────────────────────────────────
+
+var config = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: false)
+    .AddJsonFile("appsettings.local.json", optional: true)
+    .Build();
+
+var apiKey = config["Anthropic:ApiKey"];
+if (string.IsNullOrWhiteSpace(apiKey))
+    throw new InvalidOperationException(
+        "Anthropic:ApiKey is empty. Set it in appsettings.local.json " +
+        "with { \"Anthropic\": { \"ApiKey\": \"sk-ant-...\" } }.");
+
+var anthropicOptions = new ClaudeClientOptions
+{
+    ApiKey = apiKey,
+    ModelId = config["Anthropic:ModelId"] ?? "claude-sonnet-4-5-20251001"
+};
+
+// ── DI ───────────────────────────────────────────────────────────────────────
 
 const string SystemPrompt =
     "You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.";
@@ -19,7 +42,7 @@ services
     .AddAgentHarness(SystemPrompt)
     .AddTracer<ConsoleTracer>()
     .AddToolRegistry<InMemoryToolRegistry>()
-    .AddModelClient(_ => new PollyResilientModelClient(new FakeModelClient()));
+    .AddModelClient(_ => new ClaudeModelClient(anthropicOptions));
 
 services.AddSingleton<ITool, EchoTool>();
 services.AddSingleton<ITool, CalculatorTool>();
@@ -29,16 +52,18 @@ services.AddSingleton<ISensor, StuckDetector>();
 
 await using var provider = services.BuildServiceProvider();
 
+// ── Run ──────────────────────────────────────────────────────────────────────
+
 var harness = provider.GetRequiredService<HarnessLoop>();
 
 var state = AgentState.NewTask(
-    taskText: "What is twelve multiplied by seven?",
+    taskText: "What is 124 multiplied by 37?",
     budget: new Budget
     {
         MaxTurns = 8,
         MaxContextTokens = 100_000,
         MaxCostUsd = 1.00m,
-        MaxWallClock = TimeSpan.FromSeconds(30)
+        MaxWallClock = TimeSpan.FromSeconds(60)
     });
 
 using var cts = new CancellationTokenSource();

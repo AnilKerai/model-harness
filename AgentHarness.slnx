@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AgentHarness.Framework/AgentHarness.Framework.csproj" />
+    <Project Path="src/AgentHarness.Infrastructure.Anthropic/AgentHarness.Infrastructure.Anthropic.csproj" />
     <Project Path="src/AgentHarness.Infrastructure/AgentHarness.Infrastructure.csproj" />
     <Project Path="src/AgentHarness.SampleAgent/AgentHarness.SampleAgent.csproj" />
   </Folder>
