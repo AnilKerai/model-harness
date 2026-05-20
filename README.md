@@ -19,9 +19,11 @@ outcome and a flattened trajectory.
 Three projects with a strict dependency direction:
 
 ```
-AgentHarness.SampleAgent ──▶ AgentHarness.Infrastructure ──▶ AgentHarness.Framework
-                            └────────────────────────────────────────────▲
-                            └─────────────────────────────────────────────┘
+┌─────────────────────────┐     ┌──────────────────────────────┐     ┌──────────────────────────┐
+│   AgentHarness.Sample   │────▶│  AgentHarness.Infrastructure  │────▶│  AgentHarness.Framework  │
+│         Agent           │     │                              │     │                          │
+│  (composition root, DI) │────────────────────────────────────────▶│  (abstractions + loop)   │
+└─────────────────────────┘     └──────────────────────────────┘     └──────────────────────────┘
 ```
 
 - **`AgentHarness.Framework`** — pure abstractions, the core loop, and a thin
@@ -37,6 +39,62 @@ AgentHarness.SampleAgent ──▶ AgentHarness.Infrastructure ──▶ AgentHa
   the framework into a domain agent via `Microsoft.Extensions.DependencyInjection`.
 
 ### The loop (`HarnessLoop`)
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant L as HarnessLoop
+    participant B as IBudgetEnforcer
+    participant S as ISensorRunner
+    participant CB as IContextBuilder
+    participant M as IModelClient
+    participant R as IToolRegistry
+
+    C->>L: RunAsync(AgentState)
+
+    loop Each turn
+        L->>B: Check(state, startedAt)
+        alt Budget exhausted
+            B-->>L: Exhausted(reason)
+            L->>CB: BuildAsync (force-finalise prompt)
+            L->>M: CallAsync (no tools)
+            M-->>L: ModelResponse (final answer)
+            L-->>C: AgentOutcome { PartialResult }
+        else Budget ok
+            B-->>L: Ok
+
+            L->>S: RunAsync(PreModelCall)
+            S-->>L: results (Pass / Block → SensorInterventionStep appended)
+
+            L->>CB: BuildAsync(state, tools)
+            CB-->>L: messages
+            L->>M: CallAsync(messages, toolDefinitions)
+            M-->>L: ModelResponse
+
+            L->>S: RunAsync(PostModelCall)
+            S-->>L: results
+
+            alt No tool calls
+                L->>S: RunAsync(PreReturn)
+                S-->>L: results
+                L-->>C: AgentOutcome { Done, FinalAnswer }
+            else Tool calls requested
+                loop Each tool call
+                    L->>S: RunAsync(PreToolCall)
+                    alt Sensor blocks
+                        S-->>L: Block → SensorInterventionStep appended, ToolCallStep(IsError) recorded
+                    else Sensor passes
+                        S-->>L: Pass
+                        L->>R: DispatchAsync(call)
+                        R-->>L: ToolResult
+                        L->>S: RunAsync(PostToolCall)
+                        S-->>L: results
+                    end
+                end
+            end
+        end
+    end
+```
 
 Per turn:
 
