@@ -1,12 +1,9 @@
 using System.Globalization;
-using AgentHarness.Framework.Budget;
-using AgentHarness.Framework.Context;
+using AgentHarness.Framework.DependencyInjection;
 using AgentHarness.Framework.Loop;
-using AgentHarness.Framework.Model;
 using AgentHarness.Framework.Sensors;
 using AgentHarness.Framework.State;
 using AgentHarness.Framework.Tools;
-using AgentHarness.Framework.Tracing;
 using AgentHarness.Infrastructure.Model;
 using AgentHarness.Infrastructure.Tools;
 using AgentHarness.Infrastructure.Tracing;
@@ -18,29 +15,17 @@ const string SystemPrompt =
 
 var services = new ServiceCollection();
 
+services
+    .AddAgentHarness(SystemPrompt)
+    .AddTracer<ConsoleTracer>()
+    .AddToolRegistry<InMemoryToolRegistry>()
+    .AddModelClient(_ => new PollyResilientModelClient(new FakeModelClient()));
+
 services.AddSingleton<ITool, EchoTool>();
 services.AddSingleton<ITool, CalculatorTool>();
-services.AddSingleton<IToolRegistry>(sp => new InMemoryToolRegistry(sp.GetRequiredService<IEnumerable<ITool>>()));
 
 services.AddSingleton<ISensor, ToolCallReasonablenessSensor>();
 services.AddSingleton<ISensor, StuckDetector>();
-services.AddSingleton<ISensorRunner>(sp => new DefaultSensorRunner(sp.GetRequiredService<IEnumerable<ISensor>>()));
-
-services.AddSingleton<IToolSelector, PassthroughToolSelector>();
-services.AddSingleton<ITrajectoryCompactor, NoopTrajectoryCompactor>();
-services.AddSingleton<IMemoryRetriever, NoopMemoryRetriever>();
-services.AddSingleton<IContextBuilder>(sp => new DefaultContextBuilder(
-    SystemPrompt,
-    sp.GetRequiredService<IToolSelector>(),
-    sp.GetRequiredService<ITrajectoryCompactor>(),
-    sp.GetRequiredService<IMemoryRetriever>()));
-
-services.AddSingleton<IBudgetEnforcer, DefaultBudgetEnforcer>();
-services.AddSingleton<ITracer, ConsoleTracer>();
-
-services.AddSingleton<IModelClient>(_ => new PollyResilientModelClient(new FakeModelClient()));
-
-services.AddSingleton<HarnessLoop>();
 
 await using var provider = services.BuildServiceProvider();
 

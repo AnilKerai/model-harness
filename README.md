@@ -24,10 +24,11 @@ AgentHarness.SampleAgent ──▶ AgentHarness.Infrastructure ──▶ AgentHa
                             └─────────────────────────────────────────────┘
 ```
 
-- **`AgentHarness.Framework`** — pure abstractions and the core loop. No
-  dependencies beyond `System.*` and `System.Text.Json`. Reusable across any
-  agent, any model, any transport. Exposes plain constructors (no DI
-  abstractions live here).
+- **`AgentHarness.Framework`** — pure abstractions, the core loop, and a thin
+  set of `IServiceCollection` extension methods so consumers can compose the
+  defaults via `services.AddAgentHarness(systemPrompt)`. Only external
+  dependency is `Microsoft.Extensions.DependencyInjection.Abstractions`.
+  Reusable across any agent, any model, any transport.
 - **`AgentHarness.Infrastructure`** — concrete adapters that implement the
   framework's interfaces: `FakeModelClient`, `PollyResilientModelClient`,
   `ConsoleTracer`, `InMemoryToolRegistry`, plus sample `EchoTool` and
@@ -124,10 +125,38 @@ Three injectable interfaces are seams for context engineering:
 - `ITrajectoryCompactor` — shrink long trajectories before rendering (default: no-op)
 - `IMemoryRetriever` — fetch long-term memory snippets (default: no-op)
 
-Replace any of them in DI without touching the loop:
+Each follows the framework's two-method pattern:
 
 ```csharp
-services.AddSingleton<ITrajectoryCompactor, MyRollingWindowCompactor>();
+services.AddTrajectoryCompactor<MyRollingWindowCompactor>();  // override
+// or
+services.AddTrajectoryCompactorDefault();                     // keep the no-op
+```
+
+### Composition pattern
+
+For every abstraction with a framework default there are two extension methods:
+
+- `AddXxx<TImpl>()` (or factory overload) — explicit override; uses `Replace`.
+- `AddXxxDefault()` — registers the framework's default via `TryAdd`, so any
+  explicit registration the consumer made wins regardless of call order.
+
+`AddAgentHarness(systemPrompt)` is an aggregate that calls every default plus
+registers `HarnessLoop`. Consumers still need to register `IModelClient`,
+`IToolRegistry`, `ITracer`, and any `ITool` / `ISensor` instances themselves —
+those have no framework default (the framework can't choose them for you).
+
+Typical wireup:
+
+```csharp
+services
+    .AddAgentHarness(systemPrompt)
+    .AddTracer<ConsoleTracer>()
+    .AddToolRegistry<InMemoryToolRegistry>()
+    .AddModelClient(_ => new PollyResilientModelClient(new MyModelClient()));
+
+services.AddSingleton<ITool, MyTool>();
+services.AddSingleton<ISensor, MySensor>();
 ```
 
 ## What's deliberately out of scope (and where the seams are)
