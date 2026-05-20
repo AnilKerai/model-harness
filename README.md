@@ -114,6 +114,50 @@ Per turn:
 sub-agents) that breach budget from underneath the loop — actual unexpected
 conditions, not control flow.
 
+### Guides (perception shaping)
+
+Guides shape what the model perceives on each turn. They run sequentially in
+registration order before every model call, each contributing to a shared
+`ContextDraft`. `DefaultContextBuilder` assembles the draft into a prompt.
+
+The guide/sensor split is intentional:
+
+| Concept | Role |
+|---|---|
+| **Guides** | Shape perception — what tools are visible, what history is shown, what memory is surfaced |
+| **Sensors** | Observe and intervene — can block transitions and inject `SensorInterventionStep` records |
+
+Sensor intervention records feed *back through* the guide pipeline (specifically
+`TrajectoryGuide`) so their rendering into the next prompt is also a guide
+concern — the loop stays clean.
+
+Four built-in guides are registered by `AddAgentHarness`:
+
+| Guide | Responsibility |
+|---|---|
+| `SystemPromptGuide` | Sets `ContextDraft.SystemPrompt` |
+| `TrajectoryGuide` | Renders trajectory steps (model turns, tool results, sensor notes) into `ContextDraft.TrajectoryMessages` |
+| `MemoryGuide` | No-op; replace to surface long-term memory into `ContextDraft.MemorySnippets` |
+| `ToolSelectorGuide` | No-op passthrough; replace to filter/rank `ContextDraft.AvailableTools` |
+
+To add a custom guide:
+
+```csharp
+public sealed class MyRankingGuide : IGuide
+{
+    public string Name => "my-ranking-guide";
+
+    public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+    {
+        // filter draft.AvailableTools, append to draft.MemorySnippets, etc.
+        return Task.CompletedTask;
+    }
+}
+
+// registration — runs after the built-in guides
+services.AddGuide<MyRankingGuide>();
+```
+
 ### Sensor blocks
 
 A sensor block at any hookpoint appends a `SensorInterventionStep` to the
@@ -175,34 +219,22 @@ etc.):
 The `PollyResilientModelClient` decorator is reusable — wrap any inner
 `IModelClient` to get retry + circuit-breaker.
 
-### Plug in compaction, tool selection, memory
-
-Three injectable interfaces are seams for context engineering:
-
-- `IToolSelector` — filter/rank tools per turn (default: passthrough)
-- `ITrajectoryCompactor` — shrink long trajectories before rendering (default: no-op)
-- `IMemoryRetriever` — fetch long-term memory snippets (default: no-op)
-
-Each follows the framework's two-method pattern:
-
-```csharp
-services.AddTrajectoryCompactor<MyRollingWindowCompactor>();  // override
-// or
-services.AddTrajectoryCompactorDefault();                     // keep the no-op
-```
-
 ### Composition pattern
 
-For every abstraction with a framework default there are two extension methods:
+Two patterns per single-instance abstraction:
 
-- `AddXxx<TImpl>()` (or factory overload) — explicit override; uses `Replace`.
+- `AddXxx<TImpl>()` / `AddXxx(factory)` — explicit override; uses `Replace`.
 - `AddXxxDefault()` — registers the framework's default via `TryAdd`, so any
-  explicit registration the consumer made wins regardless of call order.
+  prior explicit registration wins regardless of call order.
 
-`AddAgentHarness(systemPrompt)` is an aggregate that calls every default plus
-registers `HarnessLoop`. Consumers still need to register `IModelClient`,
-`IToolRegistry`, `ITracer`, and any `ITool` / `ISensor` instances themselves —
-those have no framework default (the framework can't choose them for you).
+Guides are a collection, not a single registration, so the pattern differs:
+`AddXxxGuideDefault()` unconditionally adds the built-in guide; opt-out is
+simply not calling it. `AddGuide<T>()` appends a consumer-defined guide that
+runs after the built-in ones.
+
+`AddAgentHarness(systemPrompt)` aggregates everything. Consumers still need to
+register `IModelClient`, `IToolRegistry`, `ITracer`, and any `ITool` / `ISensor`
+instances — the framework can't choose those.
 
 Typical wireup:
 
@@ -215,18 +247,20 @@ services
 
 services.AddSingleton<ITool, MyTool>();
 services.AddSingleton<ISensor, MySensor>();
+services.AddGuide<MyCustomGuide>();   // optional — runs after built-in guides
 ```
 
 ## What's deliberately out of scope (and where the seams are)
 
-| Future capability        | Seam to extend                                       |
-| ------------------------ | ---------------------------------------------------- |
-| Real model providers     | `IModelClient`                                       |
-| Sub-agents / A2A         | `ITool` (a sub-agent is just another tool)           |
-| MCP integration          | `ITool` (an MCP tool implements the same interface)  |
-| Long-term memory         | `IMemoryRetriever`                                   |
-| Checkpoint / persistence | `AgentState` is plain-serialisable; no impl yet      |
-| Token-aware compaction   | `ITrajectoryCompactor`                               |
+| Future capability        | Seam to extend                                              |
+| ------------------------ | ----------------------------------------------------------- |
+| Real model providers     | `IModelClient`                                              |
+| Sub-agents / A2A         | `ITool` (a sub-agent is just another tool)                  |
+| MCP integration          | `ITool` (an MCP tool implements the same interface)         |
+| Long-term memory         | `MemoryGuide` — implement `IGuide`, populate `MemorySnippets` |
+| Token-aware compaction   | `TrajectoryGuide` — replace with a compacting implementation |
+| Tool relevance ranking   | `ToolSelectorGuide` — replace to filter `AvailableTools`    |
+| Checkpoint / persistence | `AgentState` is plain-serialisable; no impl yet             |
 
 A `JsonSerializerContext` for source-gen JSON is deliberately *not* in the
 Framework — nothing in the skeleton serialises state. When checkpointing

@@ -3,11 +3,15 @@ using AgentHarness.Framework.Tools;
 
 namespace AgentHarness.Framework.Context;
 
-/// <summary>Materialises the next prompt the model will see from the current agent state.</summary>
+/// <summary>
+/// Runs the guide pipeline and assembles its output into a prompt. This is
+/// the boundary between the guide layer (perception shaping) and the model
+/// layer (inference).
+/// </summary>
 public interface IContextBuilder
 {
-    Task<IReadOnlyList<Message>> BuildAsync(
+    Task<ContextBuildResult> BuildAsync(
         AgentState state,
-        IReadOnlyList<ITool> availableTools,
+        IReadOnlyList<ITool> allTools,
         CancellationToken ct);
 }

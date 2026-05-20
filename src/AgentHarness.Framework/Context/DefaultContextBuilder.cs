@@ -1,83 +1,55 @@
 using System.Text;
+using AgentHarness.Framework.Guides;
 using AgentHarness.Framework.State;
 using AgentHarness.Framework.Tools;
 
 namespace AgentHarness.Framework.Context;
 
 /// <summary>
-/// Builds the next prompt as: system prompt + memory snippets + tool catalogue
-/// + flattened trajectory (model turns, tool results, sensor interventions) +
-/// the original task as a final user message.
+/// Runs the guide pipeline then assembles the populated <see cref="ContextDraft"/>
+/// into a prompt: system message (prompt + tool catalogue + memories),
+/// trajectory messages, then the task as a final user message.
 /// </summary>
-public sealed class DefaultContextBuilder(
-    string systemPrompt,
-    IToolSelector toolSelector,
-    ITrajectoryCompactor compactor,
-    IMemoryRetriever memoryRetriever) : IContextBuilder
+public sealed class DefaultContextBuilder(IGuideRunner guideRunner) : IContextBuilder
 {
-    public async Task<IReadOnlyList<Message>> BuildAsync(
+    public async Task<ContextBuildResult> BuildAsync(
         AgentState state,
-        IReadOnlyList<ITool> availableTools,
+        IReadOnlyList<ITool> allTools,
         CancellationToken ct)
     {
-        var selectedTools = await toolSelector.SelectAsync(state, availableTools, ct);
-        var trajectory = await compactor.CompactAsync(state, ct);
-        var memories = await memoryRetriever.RetrieveAsync(state, ct);
+        var draft = await guideRunner.RunAsync(state, allTools, ct);
 
         var messages = new List<Message>
         {
-            new(MessageRole.System, BuildSystem(systemPrompt, selectedTools, memories))
+            new(MessageRole.System, AssembleSystemMessage(draft))
         };
 
-        foreach (var step in trajectory)
-        {
-            switch (step)
-            {
-                case ModelCallStep mc:
-                    if (!string.IsNullOrEmpty(mc.Response.Text))
-                    {
-                        messages.Add(new Message(MessageRole.Assistant, mc.Response.Text));
-                    }
-                    break;
-
-                case ToolCallStep tc:
-                    messages.Add(new Message(MessageRole.Assistant,
-                        $"[tool_call name={tc.Call.ToolName} id={tc.Call.CallId}] {tc.Call.Arguments.GetRawText()}"));
-                    messages.Add(new Message(MessageRole.Tool,
-                        $"[tool_result id={tc.Result.CallId} error={tc.Result.IsError}] {tc.Result.Content}"));
-                    break;
-
-                case SensorInterventionStep si:
-                    messages.Add(new Message(MessageRole.System,
-                        $"[sensor:{si.SensorName} at {si.HookPoint}] {si.Reason} — adjust your plan accordingly."));
-                    break;
-            }
-        }
-
+        messages.AddRange(draft.TrajectoryMessages);
         messages.Add(new Message(MessageRole.User, state.TaskText));
-        return messages;
+
+        return new ContextBuildResult(messages, draft.AvailableTools);
     }
 
-    private static string BuildSystem(string systemPrompt, IReadOnlyList<ITool> tools, IReadOnlyList<string> memories)
+    private static string AssembleSystemMessage(ContextDraft draft)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(systemPrompt);
+        sb.AppendLine(draft.SystemPrompt);
 
-        if (memories.Count > 0)
+        if (draft.MemorySnippets.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("# Relevant memory");
-            foreach (var m in memories)
+            foreach (var m in draft.MemorySnippets)
             {
                 sb.Append("- ").AppendLine(m);
             }
         }
 
-        if (tools.Count > 0)
+        if (draft.AvailableTools.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("# Available tools");
-            foreach (var t in tools)
+            foreach (var t in draft.AvailableTools)
             {
                 sb.Append("- ").Append(t.Name).Append(": ").AppendLine(t.Description);
             }

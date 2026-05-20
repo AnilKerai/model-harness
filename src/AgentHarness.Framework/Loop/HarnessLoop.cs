@@ -132,28 +132,26 @@ public sealed class HarnessLoop(
 
     private async Task<(AgentState State, ModelResponse Response)> CallModelAsync(AgentState state, bool forceFinalise, CancellationToken ct)
     {
-        var tools = toolRegistry.List();
-        var prompt = await contextBuilder.BuildAsync(state, tools, ct);
+        var buildResult = await contextBuilder.BuildAsync(state, toolRegistry.List(), ct);
 
-        if (forceFinalise)
-        {
-            prompt = [
-                .. prompt,
-                new Message(MessageRole.System,
-                    "Budget is exhausted. Produce your best final answer now using only what you already know. Do not request more tools.")
-            ];
-        }
+        var messages = forceFinalise
+            ? [.. buildResult.Messages, new Message(MessageRole.System,
+                "Budget is exhausted. Produce your best final answer now using only what you already know. Do not request more tools.")]
+            : buildResult.Messages;
 
-        var defs = tools.Select(t => new ToolDefinition(t.Name, t.Description, t.InputSchema)).ToArray();
-        var modelTools = forceFinalise ? [] : (IReadOnlyList<ToolDefinition>)defs;
+        var modelTools = forceFinalise
+            ? []
+            : (IReadOnlyList<ToolDefinition>)buildResult.SelectedTools
+                .Select(t => new ToolDefinition(t.Name, t.Description, t.InputSchema))
+                .ToArray();
 
-        var response = await modelClient.CallAsync(prompt, modelTools, ct);
-        tracer.LogModelCall(state.TaskId, prompt, modelTools, response);
+        var response = await modelClient.CallAsync(messages, modelTools, ct);
+        tracer.LogModelCall(state.TaskId, messages, modelTools, response);
 
         var step = new ModelCallStep(
             Id: Guid.NewGuid(),
             Timestamp: DateTimeOffset.UtcNow,
-            Prompt: prompt,
+            Prompt: messages,
             Response: response,
             Usage: response.Usage,
             Cost: response.Cost);
