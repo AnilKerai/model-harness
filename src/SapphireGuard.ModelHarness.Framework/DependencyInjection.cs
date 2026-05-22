@@ -12,29 +12,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace SapphireGuard.ModelHarness.Framework;
 
-/// <summary>
-/// Composition helpers for wiring the harness into <see cref="IServiceCollection"/>.
-///
-/// Two patterns per abstraction:
-/// <list type="bullet">
-///   <item><c>AddXxx&lt;TImpl&gt;()</c> — explicit override; replaces any existing registration.</item>
-///   <item><c>AddXxxDefault()</c> — registers the framework default via <c>TryAdd</c>,
-///         so any explicit registration the consumer made wins regardless of call order.</item>
-/// </list>
-///
-/// <see cref="AddModelHarness"/> is the aggregate. It registers the four built-in
-/// guides (system prompt, trajectory, memory, tool selector), the guide runner,
-/// the context builder, the budget enforcer, and the loop itself. Consumers
-/// still need to register an <see cref="IModelClient"/>, an <see cref="IToolRegistry"/>,
-/// an <see cref="ITracer"/>, and any <see cref="ITool"/> / <see cref="ISensor"/> /
-/// custom <see cref="IGuide"/> instances.
-/// </summary>
 public static class DependencyInjection
 {
-    /// <summary>
-    /// Registers the loop and all framework-provided defaults. Defaults use
-    /// <c>TryAdd</c>, so any prior explicit registration is preserved.
-    /// </summary>
     public static IServiceCollection AddModelHarness(this IServiceCollection services, string systemPrompt) =>
         services
             .AddHarnessLoop()
@@ -49,15 +28,7 @@ public static class DependencyInjection
             .AddToolSelectorGuideDefault()
             .AddSensorRunnerDefault();
 
-    // ── Loop ────────────────────────────────────────────────────────────────
-
-    public static IServiceCollection AddHarnessLoop(this IServiceCollection services)
-    {
-        services.TryAddSingleton<HarnessLoop>();
-        return services;
-    }
-
-    // ── Infrastructure abstractions (no framework default) ──────────────────
+    // ── Public API ───────────────────────────────────────────────────────────
 
     public static IServiceCollection AddModelClient<TImpl>(this IServiceCollection services)
         where TImpl : class, IModelClient =>
@@ -80,95 +51,28 @@ public static class DependencyInjection
     public static IServiceCollection AddTracer(this IServiceCollection services, Func<IServiceProvider, ITracer> factory) =>
         services.Replace(ServiceDescriptor.Singleton(factory));
 
-    // ── Sensors ─────────────────────────────────────────────────────────────
-
-    public static IServiceCollection AddSensorRunner<TImpl>(this IServiceCollection services)
-        where TImpl : class, ISensorRunner =>
-        services.Replace(ServiceDescriptor.Singleton<ISensorRunner, TImpl>());
-
-    public static IServiceCollection AddSensorRunnerDefault(this IServiceCollection services)
-    {
-        services.TryAddSingleton<ISensorRunner>(sp =>
-            new DefaultSensorRunner(sp.GetRequiredService<IEnumerable<ISensor>>()));
-        return services;
-    }
-
-    // ── Budget ───────────────────────────────────────────────────────────────
-
     public static IServiceCollection AddBudgetEnforcer<TImpl>(this IServiceCollection services)
         where TImpl : class, IBudgetEnforcer =>
         services.Replace(ServiceDescriptor.Singleton<IBudgetEnforcer, TImpl>());
-
-    public static IServiceCollection AddBudgetEnforcerDefault(this IServiceCollection services)
-    {
-        services.TryAddSingleton<IBudgetEnforcer, DefaultBudgetEnforcer>();
-        return services;
-    }
-
-    // ── Context builder ──────────────────────────────────────────────────────
 
     public static IServiceCollection AddContextBuilder<TImpl>(this IServiceCollection services)
         where TImpl : class, IContextBuilder =>
         services.Replace(ServiceDescriptor.Singleton<IContextBuilder, TImpl>());
 
-    public static IServiceCollection AddContextBuilderDefault(this IServiceCollection services)
-    {
-        services.TryAddSingleton<IContextBuilder, DefaultContextBuilder>();
-        return services;
-    }
+    public static IServiceCollection AddSensorRunner<TImpl>(this IServiceCollection services)
+        where TImpl : class, ISensorRunner =>
+        services.Replace(ServiceDescriptor.Singleton<ISensorRunner, TImpl>());
 
-    // ── Guides ───────────────────────────────────────────────────────────────
-    //
-    // Guides form a collection, not a single registration, so the Add/Replace
-    // duality used for single-instance abstractions does not apply here.
-    // AddXxxGuideDefault() adds to the collection unconditionally; the opt-out
-    // is simply not calling it. AddGuide<T>() is the open extension point for
-    // consumer-defined guides, which run after the built-in ones.
+    public static IServiceCollection AddGuideRunner<TImpl>(this IServiceCollection services)
+        where TImpl : class, IGuideRunner =>
+        services.Replace(ServiceDescriptor.Singleton<IGuideRunner, TImpl>());
 
-    /// <summary>Registers a custom guide. Runs after the built-in guides in registration order.</summary>
     public static IServiceCollection AddGuide<TImpl>(this IServiceCollection services)
         where TImpl : class, IGuide
     {
         services.AddSingleton<IGuide, TImpl>();
         return services;
     }
-
-    public static IServiceCollection AddGuideRunner<TImpl>(this IServiceCollection services)
-        where TImpl : class, IGuideRunner =>
-        services.Replace(ServiceDescriptor.Singleton<IGuideRunner, TImpl>());
-
-    public static IServiceCollection AddGuideRunnerDefault(this IServiceCollection services)
-    {
-        services.TryAddSingleton<IGuideRunner>(sp =>
-            new DefaultGuideRunner(sp.GetRequiredService<IEnumerable<IGuide>>()));
-        return services;
-    }
-
-    public static IServiceCollection AddSystemPromptGuide(this IServiceCollection services, string systemPrompt)
-    {
-        services.AddSingleton<IGuide>(_ => new SystemPromptGuide(systemPrompt));
-        return services;
-    }
-
-    public static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services)
-    {
-        services.AddSingleton<IGuide, TrajectoryGuide>();
-        return services;
-    }
-
-    public static IServiceCollection AddMemoryGuideDefault(this IServiceCollection services)
-    {
-        services.AddSingleton<IGuide, MemoryGuide>();
-        return services;
-    }
-
-    public static IServiceCollection AddToolSelectorGuideDefault(this IServiceCollection services)
-    {
-        services.AddSingleton<IGuide, ToolSelectorGuide>();
-        return services;
-    }
-
-    // ── Memory store ─────────────────────────────────────────────────────────
 
     public static IServiceCollection AddMemoryStore<TImpl>(this IServiceCollection services)
         where TImpl : class, IMemoryStore =>
@@ -177,14 +81,6 @@ public static class DependencyInjection
     public static IServiceCollection AddMemoryStore(this IServiceCollection services, Func<IServiceProvider, IMemoryStore> factory) =>
         services.Replace(ServiceDescriptor.Singleton(factory));
 
-    public static IServiceCollection AddMemoryStoreDefault(this IServiceCollection services)
-    {
-        services.TryAddSingleton<IMemoryStore, NullMemoryStore>();
-        return services;
-    }
-
-    // ── Tool selector ────────────────────────────────────────────────────────
-
     public static IServiceCollection AddToolSelector<TImpl>(this IServiceCollection services)
         where TImpl : class, IToolSelector =>
         services.Replace(ServiceDescriptor.Singleton<IToolSelector, TImpl>());
@@ -192,9 +88,64 @@ public static class DependencyInjection
     public static IServiceCollection AddToolSelector(this IServiceCollection services, Func<IServiceProvider, IToolSelector> factory) =>
         services.Replace(ServiceDescriptor.Singleton(factory));
 
-    public static IServiceCollection AddToolSelectorDefault(this IServiceCollection services)
+    // ── Internal wiring ──────────────────────────────────────────────────────
+
+    private static IServiceCollection AddHarnessLoop(this IServiceCollection services)
+    {
+        services.TryAddSingleton<HarnessLoop>();
+        return services;
+    }
+
+    private static IServiceCollection AddBudgetEnforcerDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IBudgetEnforcer, DefaultBudgetEnforcer>();
+        return services;
+    }
+
+    private static IServiceCollection AddContextBuilderDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IContextBuilder, DefaultContextBuilder>();
+        return services;
+    }
+
+    private static IServiceCollection AddGuideRunnerDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IGuideRunner>(sp =>
+            new DefaultGuideRunner(sp.GetRequiredService<IEnumerable<IGuide>>()));
+        return services;
+    }
+
+    private static IServiceCollection AddSensorRunnerDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<ISensorRunner>(sp =>
+            new DefaultSensorRunner(sp.GetRequiredService<IEnumerable<ISensor>>()));
+        return services;
+    }
+
+    private static IServiceCollection AddMemoryStoreDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IMemoryStore, NullMemoryStore>();
+        return services;
+    }
+
+    private static IServiceCollection AddToolSelectorDefault(this IServiceCollection services)
     {
         services.TryAddSingleton<IToolSelector, PassthroughToolSelector>();
         return services;
     }
+
+    private static IServiceCollection AddSystemPromptGuide(this IServiceCollection services, string systemPrompt)
+    {
+        services.AddSingleton<IGuide>(_ => new SystemPromptGuide(systemPrompt));
+        return services;
+    }
+
+    private static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services) =>
+        services.AddGuide<TrajectoryGuide>();
+
+    private static IServiceCollection AddMemoryGuideDefault(this IServiceCollection services) =>
+        services.AddGuide<MemoryGuide>();
+
+    private static IServiceCollection AddToolSelectorGuideDefault(this IServiceCollection services) =>
+        services.AddGuide<ToolSelectorGuide>();
 }
