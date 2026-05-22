@@ -1,3 +1,4 @@
+using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.Framework.Guides;
@@ -37,14 +38,19 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
     {
         var groups = new List<(Step, List<Message>)>(trajectory.Count);
 
-        foreach (var step in trajectory)
+        for (var i = 0; i < trajectory.Count; i++)
         {
+            var step = trajectory[i];
             var messages = new List<Message>();
 
             switch (step)
             {
                 case ModelCallStep mc:
-                    if (!string.IsNullOrEmpty(mc.Response.Text))
+                    // If this response was immediately blocked by a PostModelCall sensor, suppress
+                    // the text — the model must not see its own blocked content on the next turn
+                    // (e.g. PII that was detected and stopped). The SensorInterventionStep that
+                    // follows will tell the model why it was blocked without repeating the content.
+                    if (!string.IsNullOrEmpty(mc.Response.Text) && !IsBlockedAtPostModelCall(trajectory, i))
                         messages.Add(new Message(MessageRole.Assistant, mc.Response.Text));
                     break;
 
@@ -66,6 +72,20 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
         }
 
         return groups;
+    }
+
+    // Scans forward from a ModelCallStep to see if it was immediately blocked at PostModelCall.
+    // Stops at the first non-intervention step (which would be the next model call or tool call).
+    private static bool IsBlockedAtPostModelCall(IReadOnlyList<Step> trajectory, int modelCallIndex)
+    {
+        for (var i = modelCallIndex + 1; i < trajectory.Count; i++)
+        {
+            if (trajectory[i] is SensorInterventionStep { HookPoint: HookPoint.PostModelCall })
+                return true;
+            if (trajectory[i] is not SensorInterventionStep)
+                break;
+        }
+        return false;
     }
 
     private static int ComputeTrimCount(List<(Step Step, List<Message> Messages)> groups, int tokenBudget)
