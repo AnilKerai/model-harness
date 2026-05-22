@@ -388,11 +388,14 @@ Implement it, translate `ToolDefinition.InputSchema` (`JsonElement`) into your
 provider's tool-def format, and replace the registration:
 
 ```csharp
-// Anthropic
+// Anthropic (wrap with Polly for retry + circuit-breaking in production)
 services.AddModelClient(_ => new PollyResilientModelClient(
     new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" })));
 
-// Ollama (local)
+// Anthropic (simple — no resilience decorator)
+services.AddClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" });
+
+// Ollama (local — no resilience needed)
 services.AddOllamaModelClient(new OllamaClientOptions { ModelId = "qwen2.5:7b" });
 
 // Custom

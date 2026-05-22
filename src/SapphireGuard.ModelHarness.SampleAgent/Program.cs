@@ -1,5 +1,4 @@
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
@@ -36,18 +35,17 @@ void ConfigureBase(IServiceCollection services)
 {
     services
         .AddTracer(_ => new CompositeTracer(new ConsoleTracer(), new OpenTelemetryTracer()))
-        .AddToolRegistry<InMemoryToolRegistry>()
-        .AddModelClient(_ =>
-        {
-            IModelClient inner = usingRealModel
-                ? new ClaudeModelClient(new ClaudeClientOptions
-                {
-                    ApiKey = apiKey!,
-                    ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5-20251001"
-                })
-                : new FakeModelClient();
-            return new PollyResilientModelClient(inner);
-        });
+        .AddToolRegistry<InMemoryToolRegistry>();
+
+    if (usingRealModel)
+        services.AddModelClient(_ => new PollyResilientModelClient(
+            new ClaudeModelClient(new ClaudeClientOptions
+            {
+                ApiKey = apiKey!,
+                ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5-20251001"
+            })));
+    else
+        services.AddModelClient(_ => new FakeModelClient());
 
     services.AddSingleton<ITool, EchoTool>();
     services.AddSingleton<ITool, CalculatorTool>();
