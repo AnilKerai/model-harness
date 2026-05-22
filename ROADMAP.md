@@ -5,8 +5,6 @@ where the implementation would live.
 
 ---
 
-## ✅ Done
-
 ### Core loop
 - [x] `HarnessLoop` — turn-by-turn orchestration (build context → call model → act on response)
 - [x] `IBudgetEnforcer` / `DefaultBudgetEnforcer` — hard limits on turns, tokens, cost, and wall clock
@@ -19,8 +17,9 @@ where the implementation would live.
 - [x] `SystemPromptGuide` — injects agent identity and standing instructions
 - [x] `HarnessInstructionsGuide` — appends harness conventions to the system prompt; teaches the model to treat `[HARNESS OBSERVATION — ...]` notes as directives (feedforward complement to sensor feedback)
 - [x] `TrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt; sensor notes use `[HARNESS OBSERVATION — ...]` prefix matching what `HarnessInstructionsGuide` declares
-- [x] `MemoryGuide` — seam for long-term memory; currently a no-op
-- [x] `ToolSelectorGuide` — seam for tool filtering/ranking; currently a no-op
+- [x] Token-aware trajectory compaction — `TrajectoryGuide` trims oldest steps when estimated token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped
+- [x] `MemoryGuide` — seam for long-term memory; default is `NullMemoryStore` (no-op); replace with a vector store or knowledge graph
+- [x] `ToolSelectorGuide` — seam for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
 
 ### Sensor pattern
 - [x] `ISensor` / `ISensorRunner` / `HookPoint` — parallel observation at five lifecycle positions
@@ -40,7 +39,11 @@ where the implementation would live.
 - [x] `FakeModelClient` — scripted responses for local development without an API key
 - [x] `PollyResilientModelClient` — retry (exponential back-off) + circuit breaker decorator
 - [x] `ConsoleTracer` — streams JSON trace events to stdout
+- [x] `OpenTelemetryTracer` — emits spans via `ActivitySource` and metrics via `Meter`; no OTel SDK dependency
+- [x] `CompositeTracer` — fans out to multiple `ITracer` instances simultaneously
 - [x] `ClaudeModelClient` — Anthropic SDK adapter; handles message alternation, tool result inlining, cost tracking
+- [x] `OllamaModelClient` — OllamaSharp v5 adapter; stateful tool-call grouping pass; cost is always zero (local inference)
+- [ ] Additional model provider adapters — OpenAI, Azure OpenAI, Google Gemini
 
 ### DI / composition
 - [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
@@ -54,44 +57,9 @@ where the implementation would live.
 - [x] `AddFileCheckpointStore(directory)` DI extension; `AddCheckpointStore<T>()` / factory override for custom backends
 - [x] At-least-once resume semantics — pass a loaded checkpoint's state (with `Status = Running`) back to `HarnessLoop.RunAsync`
 
+### Human-in-the-loop
+- [ ] `AgentStatus.AwaitingHuman` — status value is reserved; loop has no mechanism to pause, surface a question, and resume; requires a suspend/resume protocol and a delivery channel (webhook, queue, etc.)
+
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
 - [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
-
----
-
-## 🔲 Not yet implemented
-
-### Context management
-- [x] **Token-aware trajectory compaction** — `TrajectoryGuide` trims oldest steps when estimated
-  token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped.
-  Token budget is `MaxContextTokens - reservedTokens` (default 2000 for system prompt + output headroom).
-
-- [x] **Long-term memory** — `IMemoryStore` seam; `MemoryGuide` queries it with the task text and
-  surfaces snippets into `ContextDraft.MemorySnippets`. Default is `NullMemoryStore` (no-op).
-  Replace with a vector store or knowledge graph implementation.
-
-- [x] **Tool relevance ranking** — `IToolSelector` seam; `ToolSelectorGuide` delegates to it to
-  filter or rerank `ContextDraft.AvailableTools` per turn. Default is `PassthroughToolSelector`
-  (all tools, unchanged). Replace with a relevance-ranking implementation.
-
-### Model providers
-- [x] **Ollama adapter** — `OllamaModelClient` via OllamaSharp v5; handles Ollama's tool call
-  grouping requirement (all calls from one model turn in a single assistant message) with a
-  stateful flush pass over the trajectory. Cost is always zero (local inference).
-  _Lives in `SapphireGuard.ModelHarness.Infrastructure.Ollama`._
-- [ ] **Additional model provider adapters** — OpenAI, Azure OpenAI, Google Gemini.
-  _Seam: `IModelClient`; new project per provider (e.g. `SapphireGuard.ModelHarness.Infrastructure.OpenAI`)._
-
-### Human-in-the-loop
-- [ ] **`AgentStatus.AwaitingHuman`** — the status value is reserved but the loop has no mechanism
-  to pause, surface a question to a human, and resume. Requires a suspend/resume protocol on
-  `HarnessLoop` and a delivery channel (webhook, queue, etc.).
-  _Seam: `HarnessLoop`, new `IHumanChannel` abstraction._
-
-### Observability
-- [x] **Structured logging / OpenTelemetry** — `OpenTelemetryTracer` emits spans via
-  `System.Diagnostics.ActivitySource` and metrics via `System.Diagnostics.Metrics.Meter`.
-  No OTel SDK dependency — wire up exporters in the host. `CompositeTracer` fans out to
-  multiple `ITracer` instances simultaneously.
-  _Lives in `SapphireGuard.ModelHarness.Infrastructure` alongside `ConsoleTracer`._

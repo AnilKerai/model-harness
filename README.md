@@ -471,18 +471,20 @@ Understanding what the framework owns and what it deliberately leaves to the use
 
 These are things every agent needs, regardless of domain. The framework provides them and they are always present.
 
-| Concern | Where it lives |
-| ------- | -------------- |
-| Turn-by-turn loop orchestration | `HarnessLoop` |
-| Budget enforcement (turns, tokens, cost, wall clock) | `IBudgetEnforcer` / `DefaultBudgetEnforcer` |
-| Context assembly — what the model sees each turn | Guide pipeline / `IContextBuilder` |
-| Trajectory rendering and compaction | `TrajectoryGuide` |
-| Sensor observation and intervention routing | `ISensorRunner` / hookpoints |
-| Tool dispatch | `IToolRegistry` |
-| Model transport | `IModelClient` |
-| Tracing and metrics | `ITracer` / `CompositeTracer` | `ConsoleTracer` + `OpenTelemetryTracer` wired by default via `CompositeTracer`. `OpenTelemetryTracer` emits spans and metrics via `System.Diagnostics.ActivitySource` / `Meter` — no OTel SDK dependency; wire up exporters in the host. |
+| Concern | Where it lives | Status |
+| ------- | -------------- | ------ |
+| Turn-by-turn loop orchestration | `HarnessLoop` | ✅ |
+| Budget enforcement (turns, tokens, cost, wall clock) | `IBudgetEnforcer` / `DefaultBudgetEnforcer` | ✅ |
+| Context assembly — what the model sees each turn | Guide pipeline / `IContextBuilder` | ✅ |
+| Trajectory rendering and compaction | `TrajectoryGuide` | ✅ |
+| Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
+| Tool dispatch | `IToolRegistry` | ✅ |
+| Model transport | `IModelClient` | ✅ |
+| Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
+| Checkpoint / resume | `ICheckpointStore` / `FileCheckpointStore` | ✅ |
+| Human-in-the-loop | `HarnessLoop` + `IHumanChannel` | 🔲 |
 
-Infrastructure projects (`Infrastructure`, `Infrastructure.Anthropic`, `Infrastructure.Mcp`) ship concrete implementations of these seams. They are conveniences — a user could write their own — but they are implementations of harness-level abstractions and belong in this repo.
+Infrastructure projects ship concrete implementations of these seams. They are conveniences — a user could write their own — but they are implementations of harness-level abstractions and belong in this repo.
 
 ### User concerns — the framework does not own these
 
@@ -495,12 +497,6 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. |
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
-
-### Not yet implemented (harness concerns)
-
-| Capability | Seam | Notes |
-| ---------- | ---- | ----- |
-| Human-in-the-loop | `HarnessLoop` + new `IHumanChannel` | `AgentStatus.AwaitingHuman` is reserved; no suspend/resume protocol yet. |
 
 ---
 
