@@ -34,6 +34,7 @@ where the implementation would live.
 - [x] `ITool` / `IToolRegistry` / `ToolDefinition` — tool abstraction decoupled from `IModelClient`
 - [x] `InMemoryToolRegistry`
 - [x] `EchoTool`, `CalculatorTool` — sample tools
+- [x] `AskHumanTool` + `IHumanChannel` — signals HITL to the surrounding system; `ConsoleHumanChannel` for development; replace with a channel suited to the deployment environment
 
 ### Infrastructure
 - [x] `FakeModelClient` — scripted responses for local development without an API key

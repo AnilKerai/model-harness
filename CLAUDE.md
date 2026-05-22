@@ -23,7 +23,7 @@ Add an API key first:
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete adapters: `FakeModelClient`, `PollyResilientModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector` |
+| `Infrastructure` | Concrete adapters: `FakeModelClient`, `PollyResilientModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel` |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |
 | `Infrastructure.Persistence` | Checkpoint/resume (`FileCheckpointStore`, `StepJsonConverter`). Depends on Framework only |
