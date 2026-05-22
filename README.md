@@ -13,7 +13,7 @@ A `FakeModelClient` is also provided for local development without an API key.
 
 ## Run it
 
-Add your Anthropic API key to `src/SapphireGuard.SampleAgent/appsettings.local.json`:
+Add your Anthropic API key to `src/SapphireGuard.ModelHarness.SampleAgent/appsettings.local.json`:
 
 ```json
 {
@@ -26,7 +26,7 @@ Add your Anthropic API key to `src/SapphireGuard.SampleAgent/appsettings.local.j
 Then run:
 
 ```bash
-dotnet run --project src/SapphireGuard.SampleAgent
+dotnet run --project src/SapphireGuard.ModelHarness.SampleAgent
 ```
 
 JSON trace events stream to stdout, followed by the final outcome and a
@@ -40,34 +40,34 @@ Four projects with a strict dependency direction:
 
 ```
 ┌────────────────────────────┐
-│  SapphireGuard.SampleAgent  │──────────────────────────────────────────────────────┐
+│  SapphireGuard.ModelHarness.SampleAgent  │──────────────────────────────────────────────────────┐
 │  (composition root, DI)    │──────────────────────────────────┐                   │
 └────────────────────────────┘                                  │                   │
            │                                                    ▼                   │
            │                              ┌──────────────────────────────────────┐  │
-           │                              │  SapphireGuard.Infrastructure         │  │
+           │                              │  SapphireGuard.ModelHarness.Infrastructure         │  │
            │                              │  (FakeModelClient, Polly decorator,  │  │
            │                              │   ConsoleTracer, tools)              │  │
            │                              └──────────────────────────────────────┘  │
            │                                                    │                   │
            ▼                                                    ▼                   ▼
 ┌─────────────────────────────────────┐     ┌───────────────────────────────────────┐
-│  SapphireGuard.Infrastructure        │     │  SapphireGuard.Framework               │
+│  SapphireGuard.ModelHarness.Infrastructure        │     │  SapphireGuard.ModelHarness.Framework               │
 │  .Anthropic                         │────▶│  (abstractions + loop)                │
 │  (ClaudeModelClient, SDK adapter)   │     └───────────────────────────────────────┘
 └─────────────────────────────────────┘
 ```
 
-- **`SapphireGuard.Framework`** — abstractions, the core loop, four built-in
+- **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, four built-in
   guides, and `IServiceCollection` extension methods. Only external dependency
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
-- **`SapphireGuard.Infrastructure`** — concrete adapters: `FakeModelClient`,
+- **`SapphireGuard.ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
   `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry`,
   `EchoTool`, `CalculatorTool`. Depends on Framework + Polly v8.
-- **`SapphireGuard.Infrastructure.Anthropic`** — Anthropic SDK adapter:
+- **`SapphireGuard.ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
   `ClaudeModelClient` maps framework messages and tool definitions to the
   Anthropic Messages API and back. Depends on Framework only.
-- **`SapphireGuard.SampleAgent`** — console app showing how a domain agent wires
+- **`SapphireGuard.ModelHarness.SampleAgent`** — console app showing how a domain agent wires
   the framework via `Microsoft.Extensions.DependencyInjection`.
 
 ---

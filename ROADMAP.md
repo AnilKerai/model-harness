@@ -63,7 +63,7 @@ where the implementation would live.
 - [ ] **Checkpoint / resume** — `AgentState` is serialisation-ready (no mutable fields); no
   persistence implementation yet. When this lands it will need `[JsonPolymorphic]` source-gen
   for the `Step` hierarchy.
-  _Seam: new project `SapphireGuard.Infrastructure.Persistence`._
+  _Seam: new project `SapphireGuard.ModelHarness.Infrastructure.Persistence`._
 
 ### Sub-agents and integrations
 - [ ] **Sub-agents / A2A** — a sub-agent is an `ITool` that calls another `HarnessLoop`.
@@ -76,7 +76,7 @@ where the implementation would live.
 ### Model providers
 - [ ] **Additional model provider adapters** — only Anthropic is implemented. OpenAI, Azure OpenAI,
   Google Gemini, and local models (Ollama) are natural next targets.
-  _Seam: `IModelClient`; new project per provider (e.g. `SapphireGuard.Infrastructure.OpenAI`)._
+  _Seam: `IModelClient`; new project per provider (e.g. `SapphireGuard.ModelHarness.Infrastructure.OpenAI`)._
 
 ### Human-in-the-loop
 - [ ] **`AgentStatus.AwaitingHuman`** — the status value is reserved but the loop has no mechanism
@@ -88,4 +88,4 @@ where the implementation would live.
 - [ ] **Structured logging / OpenTelemetry** — `ConsoleTracer` writes to stdout; no structured
   spans, metrics, or log correlation. An `ITracer` adapter over `System.Diagnostics.Activity`
   or OpenTelemetry SDK would let runs be observed in standard tooling.
-  _Seam: `ITracer`; new project `SapphireGuard.Infrastructure.Telemetry`._
+  _Seam: `ITracer`; new project `SapphireGuard.ModelHarness.Infrastructure.Telemetry`._

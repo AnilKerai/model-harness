@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SapphireGuard.ModelHarness.Framework/SapphireGuard.ModelHarness.Framework.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Anthropic/SapphireGuard.ModelHarness.Infrastructure.Anthropic.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure/SapphireGuard.ModelHarness.Infrastructure.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.SampleAgent/SapphireGuard.ModelHarness.SampleAgent.csproj" />
+  </Folder>
+</Solution>
