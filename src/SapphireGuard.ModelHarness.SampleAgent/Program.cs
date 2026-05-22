@@ -1,16 +1,11 @@
-using System.Globalization;
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Framework.Loop;
-using SapphireGuard.ModelHarness.Framework.Sensors;
-using SapphireGuard.ModelHarness.Framework.State;
-using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
-using SapphireGuard.ModelHarness.Infrastructure.Sensors;
-using SapphireGuard.ModelHarness.SampleAgent.Sensors;
+using SapphireGuard.ModelHarness.SampleAgent.Scenarios;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,95 +25,49 @@ if (!usingRealModel)
         "WARNING: Anthropic:ApiKey not set — falling back to FakeModelClient. " +
         "Add appsettings.local.json with { \"Anthropic\": { \"ApiKey\": \"sk-ant-...\" } } to use Claude.");
 
-// ── DI ───────────────────────────────────────────────────────────────────────
+// ── Base services shared across all scenarios ─────────────────────────────────
 
 const string SystemPrompt =
     "You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.";
 
-var services = new ServiceCollection();
+void ConfigureBase(IServiceCollection services)
+{
+    services
+        .AddTracer<ConsoleTracer>()
+        .AddToolRegistry<InMemoryToolRegistry>()
+        .AddModelClient(_ =>
+        {
+            IModelClient inner = usingRealModel
+                ? new ClaudeModelClient(new ClaudeClientOptions
+                {
+                    ApiKey = apiKey!,
+                    ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5-20251001"
+                })
+                : new FakeModelClient();
+            return new PollyResilientModelClient(inner);
+        });
 
-services
-    .AddModelHarness(SystemPrompt)
-    .AddTracer<ConsoleTracer>()
-    .AddToolRegistry<InMemoryToolRegistry>()
-    .AddModelClient(_ =>
-    {
-        IModelClient inner = usingRealModel
-            ? new ClaudeModelClient(new ClaudeClientOptions
-            {
-                ApiKey = apiKey!,
-                ModelId = config["Anthropic:ModelId"] ?? "claude-sonnet-4-5-20251001"
-            })
-            : new FakeModelClient();
+    services.AddSingleton<ITool, EchoTool>();
+    services.AddSingleton<ITool, CalculatorTool>();
+}
 
-        return new PollyResilientModelClient(inner);
-    });
+// ── Run all scenarios ─────────────────────────────────────────────────────────
 
-services.AddSingleton<ITool, EchoTool>();
-services.AddSingleton<ITool, CalculatorTool>();
-
-services.AddSingleton<ISensor, ToolCallReasonablenessSensor>();
-services.AddSingleton<ISensor, StuckDetector>();
-
-// ── Production sensors ────────────────────────────────────────────────────────
-
-// Blocks model output that contains PII (email, phone, credit card, NI, SSN).
-services.AddSingleton<ISensor, PiiRedactionSensor>();
-
-// Soft spend cap — fires before the hard Budget.MaxCostUsd to give the model
-// a chance to wrap up gracefully. Set lower than MaxCostUsd to see it trigger.
-services.AddSingleton<ISensor>(_ => new CostThrottleSensor(softLimitUsd: 0.50m));
-
-// Validates tool output before the model reasons on it.
-// The optional per-tool validators enforce type contracts — here the calculator
-// must always return a parseable number.
-services.AddSingleton<ISensor>(sp => new ToolResultSanityCheckSensor(
-    maxResultLength: 10_000,
-    toolValidators: new Dictionary<string, Func<string, string?>>
-    {
-        ["calculator"] = result =>
-            double.TryParse(result, out _) ? null : $"expected a number but got: '{result}'"
-    }));
-
-await using var provider = services.BuildServiceProvider();
-
-// ── Run ──────────────────────────────────────────────────────────────────────
-
-var harness = provider.GetRequiredService<HarnessLoop>();
-
-var state = AgentState.NewTask(
-    taskText: "What is 124 multiplied by 37?",
-    budget: new Budget
-    {
-        MaxTurns = 8,
-        MaxContextTokens = 100_000,
-        MaxCostUsd = 1.00m,
-        MaxWallClock = TimeSpan.FromSeconds(60)
-    });
-
+var runner = new ScenarioRunner(SystemPrompt, ConfigureBase);
 using var cts = new CancellationTokenSource();
-var outcome = await harness.RunAsync(state, cts.Token);
 
-Console.WriteLine();
-Console.WriteLine("=== Outcome ===");
-Console.WriteLine($"TaskId: {outcome.TaskId}");
-Console.WriteLine($"Status: {outcome.Status}");
-Console.WriteLine($"FinalAnswer: {outcome.FinalAnswer}");
-if (outcome.FailureReason is not null)
+// To run a single scenario by name, pass it as a CLI argument:
+//   dotnet run --project ... -- pii-detection
+var filter = args.Length > 0 ? args[0] : null;
+var scenarios = filter is null
+    ? ScenarioLibrary.All
+    : ScenarioLibrary.All.Where(s => s.Name == filter).ToList();
+
+if (scenarios.Count == 0)
 {
-    Console.WriteLine($"FailureReason: {outcome.FailureReason}");
+    Console.WriteLine($"No scenario named '{filter}'. Available: {string.Join(", ", ScenarioLibrary.All.Select(s => s.Name))}");
+    return;
 }
 
-Console.WriteLine();
-Console.WriteLine("=== Trajectory ===");
-foreach (var step in outcome.FinalState.Trajectory)
-{
-    var line = step switch
-    {
-        ModelCallStep m => $"[model]  stop={m.Response.StopReason} tools={m.Response.ToolCalls.Count} cost=${m.Cost.ToString("F4", CultureInfo.InvariantCulture)} text=\"{m.Response.Text}\"",
-        ToolCallStep t => $"[tool]   {t.Call.ToolName}({t.Call.Arguments.GetRawText()}) -> {(t.Result.IsError ? "ERROR: " : "")}{t.Result.Content}",
-        SensorInterventionStep s => $"[sensor] {s.SensorName}@{s.HookPoint}: {s.Reason}",
-        _ => $"[?] {step.GetType().Name}"
-    };
-    Console.WriteLine(line);
-}
+foreach (var scenario in scenarios)
+    await runner.RunAsync(scenario, cts.Token);
