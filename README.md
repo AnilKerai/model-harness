@@ -386,8 +386,8 @@ See [ROADMAP.md](ROADMAP.md) for what's done and what's still to implement.
 | Future capability        | Seam to extend                                                |
 | ------------------------ | ------------------------------------------------------------- |
 | Real model providers     | `IModelClient`                                                |
-| Sub-agents / A2A         | `ITool` (a sub-agent is a tool that calls another `HarnessLoop`) |
-| MCP integration          | `ITool` (an MCP tool is a tool)                               |
+| Sub-agents / A2A         | `ITool` — sub-agent orchestration is a user concern, not a framework concern. A local sub-agent is an `ITool` whose `ExecuteAsync` runs another `HarnessLoop`; a remote one calls an A2A endpoint. The framework has no opinion on which. |
+| MCP integration          | `ITool` (an MCP tool proxies to an MCP server)                |
 | Long-term memory         | `MemoryGuide` — populate `ContextDraft.MemorySnippets`        |
 | Token-aware compaction   | `TrajectoryGuide` — replace with a windowing implementation   |
 | Tool relevance ranking   | `ToolSelectorGuide` — filter `ContextDraft.AvailableTools`    |

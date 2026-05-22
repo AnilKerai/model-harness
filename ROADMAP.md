@@ -74,11 +74,7 @@ where the implementation would live.
   for the `Step` hierarchy.
   _Seam: new project `SapphireGuard.ModelHarness.Infrastructure.Persistence`._
 
-### Sub-agents and integrations
-- [ ] **Sub-agents / A2A** — a sub-agent is an `ITool` that calls another `HarnessLoop`.
-  The seam already exists; no orchestration logic needed in the framework itself.
-  _Seam: `ITool`._
-
+### Integrations
 - [ ] **MCP (Model Context Protocol)** — an MCP tool is an `ITool` that proxies to an MCP server.
   _Seam: `ITool`._
 
