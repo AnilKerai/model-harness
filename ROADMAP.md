@@ -88,5 +88,6 @@ where the implementation would live.
 ### Observability
 - [x] **Structured logging / OpenTelemetry** — `OpenTelemetryTracer` emits spans via
   `System.Diagnostics.ActivitySource` and metrics via `System.Diagnostics.Metrics.Meter`.
-  No OTel SDK dependency — wire up exporters in the host.
-  _Project: `SapphireGuard.ModelHarness.Infrastructure.Telemetry`._
+  No OTel SDK dependency — wire up exporters in the host. `CompositeTracer` fans out to
+  multiple `ITracer` instances simultaneously.
+  _Lives in `SapphireGuard.ModelHarness.Infrastructure` alongside `ConsoleTracer`._

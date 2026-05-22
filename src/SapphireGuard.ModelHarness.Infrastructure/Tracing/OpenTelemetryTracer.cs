@@ -6,7 +6,7 @@ using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Framework.Tracing;
 
-namespace SapphireGuard.ModelHarness.Infrastructure.Telemetry.Tracing;
+namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 
 /// <summary>
 /// Emits traces and metrics via System.Diagnostics.ActivitySource and

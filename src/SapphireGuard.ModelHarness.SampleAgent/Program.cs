@@ -5,6 +5,7 @@ using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
+using SapphireGuard.ModelHarness.Framework.Tracing;
 using SapphireGuard.ModelHarness.SampleAgent.Scenarios;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,7 +34,7 @@ const string SystemPrompt =
 void ConfigureBase(IServiceCollection services)
 {
     services
-        .AddTracer<ConsoleTracer>()
+        .AddTracer(_ => new CompositeTracer(new ConsoleTracer(), new OpenTelemetryTracer()))
         .AddToolRegistry<InMemoryToolRegistry>()
         .AddModelClient(_ =>
         {
