@@ -53,29 +53,6 @@ dotnet run --project src/SapphireGuard.ModelHarness.SampleAgent -- ollama-tool-c
 
 Seven projects with a strict dependency direction:
 
-```mermaid
-flowchart TD
-    SA["**SapphireGuard.ModelHarness.SampleAgent**\ncomposition root, DI"]
-    INF["**SapphireGuard.ModelHarness.Infrastructure**\nFakeModelClient, Polly decorator, tracers, sensors, tools"]
-    ANT["**SapphireGuard.ModelHarness.Infrastructure.Anthropic**\nClaudeModelClient, SDK adapter"]
-    MCP["**SapphireGuard.ModelHarness.Infrastructure.Mcp**\nMcpTool, McpToolFactory"]
-    PER["**SapphireGuard.ModelHarness.Infrastructure.Persistence**\nFileCheckpointStore, StepJsonConverter"]
-    OLL["**SapphireGuard.ModelHarness.Infrastructure.Ollama**\nOllamaModelClient, OllamaSharp adapter"]
-    FW["**SapphireGuard.ModelHarness.Framework**\nabstractions + loop"]
-
-    SA --> INF
-    SA --> ANT
-    SA --> MCP
-    SA --> PER
-    SA --> OLL
-    SA --> FW
-    INF --> FW
-    ANT --> FW
-    MCP --> FW
-    PER --> FW
-    OLL --> FW
-```
-
 ![Architecture](docs/architecture.svg)
 
 - **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, five built-in
