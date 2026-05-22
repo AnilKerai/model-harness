@@ -351,6 +351,12 @@ services.AddGuide<MyCustomGuide>(); // optional
 
 ---
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for what's done and what's still to implement.
+
+---
+
 ## What's deliberately out of scope (and where the seams are)
 
 | Future capability        | Seam to extend                                                |

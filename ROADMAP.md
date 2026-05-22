@@ -1,0 +1,91 @@
+# Roadmap
+
+Features are grouped by theme. Each item links to the seam in the codebase
+where the implementation would live.
+
+---
+
+## ✅ Done
+
+### Core loop
+- [x] `HarnessLoop` — turn-by-turn orchestration (build context → call model → act on response)
+- [x] `IBudgetEnforcer` / `DefaultBudgetEnforcer` — hard limits on turns, tokens, cost, and wall clock
+- [x] Budget exhaustion as control flow (not exception) — one final model call, `PartialResult` outcome
+- [x] `AgentState` — immutable run-time state; `AppendStep` via `with`-expressions
+- [x] `AgentOutcome` — terminal result with status, final answer, and full trajectory
+
+### Guide pattern
+- [x] `IGuide` / `IGuideRunner` / `ContextDraft` — sequential pipeline that shapes what the model sees
+- [x] `SystemPromptGuide` — injects agent identity and standing instructions
+- [x] `TrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt
+- [x] `MemoryGuide` — seam for long-term memory; currently a no-op
+- [x] `ToolSelectorGuide` — seam for tool filtering/ranking; currently a no-op
+
+### Sensor pattern
+- [x] `ISensor` / `ISensorRunner` / `HookPoint` — parallel observation at five lifecycle positions
+- [x] `SensorResult.Block(reason)` → `SensorInterventionStep` fed back through `TrajectoryGuide`
+- [x] `StuckDetector` — built-in sensor; blocks repeated identical tool calls
+
+### Tools
+- [x] `ITool` / `IToolRegistry` / `ToolDefinition` — tool abstraction decoupled from `IModelClient`
+- [x] `InMemoryToolRegistry`
+- [x] `EchoTool`, `CalculatorTool` — sample tools
+
+### Infrastructure
+- [x] `FakeModelClient` — scripted responses for local development without an API key
+- [x] `PollyResilientModelClient` — retry (exponential back-off) + circuit breaker decorator
+- [x] `ConsoleTracer` — streams JSON trace events to stdout
+- [x] `ClaudeModelClient` — Anthropic SDK adapter; handles message alternation, tool result inlining, cost tracking
+
+### DI / composition
+- [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
+- [x] Two-method pattern per abstraction: `AddXxx<T>()` (explicit override) + `AddXxxDefault()` (TryAdd)
+- [x] Graceful fallback to `FakeModelClient` when no API key is configured
+
+---
+
+## 🔲 Not yet implemented
+
+### Context management
+- [ ] **Token-aware trajectory compaction** — `TrajectoryGuide` currently dumps the full history; replace
+  with a windowing strategy that trims older steps when approaching `MaxContextTokens`.
+  _Seam: implement `IGuide` and replace `TrajectoryGuide`._
+
+- [ ] **Long-term memory** — surface relevant snippets from a retrieval system into
+  `ContextDraft.MemorySnippets`.
+  _Seam: implement `MemoryGuide` (currently no-op)._
+
+- [ ] **Tool relevance ranking** — filter or reorder `ContextDraft.AvailableTools` per turn
+  to reduce noise in the prompt.
+  _Seam: implement `ToolSelectorGuide` (currently no-op)._
+
+### Persistence
+- [ ] **Checkpoint / resume** — `AgentState` is serialisation-ready (no mutable fields); no
+  persistence implementation yet. When this lands it will need `[JsonPolymorphic]` source-gen
+  for the `Step` hierarchy.
+  _Seam: new project `ModelHarness.Infrastructure.Persistence`._
+
+### Sub-agents and integrations
+- [ ] **Sub-agents / A2A** — a sub-agent is an `ITool` that calls another `HarnessLoop`.
+  The seam already exists; no orchestration logic needed in the framework itself.
+  _Seam: `ITool`._
+
+- [ ] **MCP (Model Context Protocol)** — an MCP tool is an `ITool` that proxies to an MCP server.
+  _Seam: `ITool`._
+
+### Model providers
+- [ ] **Additional model provider adapters** — only Anthropic is implemented. OpenAI, Azure OpenAI,
+  Google Gemini, and local models (Ollama) are natural next targets.
+  _Seam: `IModelClient`; new project per provider (e.g. `ModelHarness.Infrastructure.OpenAI`)._
+
+### Human-in-the-loop
+- [ ] **`AgentStatus.AwaitingHuman`** — the status value is reserved but the loop has no mechanism
+  to pause, surface a question to a human, and resume. Requires a suspend/resume protocol on
+  `HarnessLoop` and a delivery channel (webhook, queue, etc.).
+  _Seam: `HarnessLoop`, new `IHumanChannel` abstraction._
+
+### Observability
+- [ ] **Structured logging / OpenTelemetry** — `ConsoleTracer` writes to stdout; no structured
+  spans, metrics, or log correlation. An `ITracer` adapter over `System.Diagnostics.Activity`
+  or OpenTelemetry SDK would let runs be observed in standard tooling.
+  _Seam: `ITracer`; new project `ModelHarness.Infrastructure.Telemetry`._
