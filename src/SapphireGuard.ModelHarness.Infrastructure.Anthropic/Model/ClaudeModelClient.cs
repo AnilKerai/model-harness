@@ -74,7 +74,9 @@ public sealed class ClaudeModelClient : IModelClient
 
         foreach (var msg in nonSystem)
         {
-            var sdkRole = msg.Role == MessageRole.Assistant ? SdkRole.Assistant : SdkRole.User;
+            var sdkRole = msg.Role is MessageRole.Assistant or MessageRole.ToolUse
+                ? SdkRole.Assistant
+                : SdkRole.User;
 
             if (pendingRole is not null && pendingRole != sdkRole)
             {
@@ -88,7 +90,7 @@ public sealed class ClaudeModelClient : IModelClient
             {
                 pendingBlocks.Add(new ContentBlockParam(ParseToolResult(msg.Content)));
             }
-            else if (msg.Role == MessageRole.Assistant && msg.Content.StartsWith("[tool_call ", StringComparison.Ordinal))
+            else if (msg.Role == MessageRole.ToolUse)
             {
                 pendingBlocks.Add(new ContentBlockParam(ParseToolUse(msg.Content)));
             }

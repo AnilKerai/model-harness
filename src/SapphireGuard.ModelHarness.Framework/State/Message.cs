@@ -8,5 +8,8 @@ public enum MessageRole
     System,
     User,
     Assistant,
+    /// <summary>A tool invocation request emitted by the model (call + args).</summary>
+    ToolUse,
+    /// <summary>The result returned by a tool after execution.</summary>
     Tool
 }

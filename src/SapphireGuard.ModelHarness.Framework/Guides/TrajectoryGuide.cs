@@ -49,7 +49,7 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
                     break;
 
                 case ToolCallStep tc:
-                    messages.Add(new Message(MessageRole.Assistant,
+                    messages.Add(new Message(MessageRole.ToolUse,
                         $"[tool_call name={tc.Call.ToolName} id={tc.Call.CallId}] {tc.Call.Arguments.GetRawText()}"));
                     messages.Add(new Message(MessageRole.Tool,
                         $"[tool_result id={tc.Result.CallId} error={tc.Result.IsError}] {tc.Result.Content}"));
