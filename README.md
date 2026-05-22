@@ -532,29 +532,18 @@ The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. Whe
 
 ## Glossary
 
-| Term | Definition                                                                                                                                                                                                 |
-|---|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Agent** | An Agent = Model + Harness. A loop-driven process that takes a natural-language task, uses tools and a model to produce a result, and records every step it takes.                                         |
-| **Turn** | One iteration of the loop: build context → call model → act on response. Each turn appends one or more `Step`s to the trajectory.                                                                          |
-| **Trajectory** | The append-only, ordered list of `Step`s on `AgentState`. It is the durable log of everything the agent has done and seen.                                                                                 |
-| **Step** | An immutable record of a discrete event. Subtypes: `ModelCallStep`, `ToolCallStep`, `SensorInterventionStep`.                                                                                              |
-| **ModelCallStep** | Records a prompt sent to the model and the response received, including token usage and cost.                                                                                                              |
-| **ToolCallStep** | Records a tool invocation requested by the model and the result returned.                                                                                                                                  |
-| **SensorInterventionStep** | Records that a sensor blocked a transition. Rendered as a system note by `TrajectoryGuide`; kept separate from tool-call history.                                                                          |
-| **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn via `with`-expressions — the trajectory is the log of those transitions.                                    |
-| **AgentOutcome** | The terminal result of a run: final answer, status, and the last `AgentState`.                                                                                                                             |
-| **Budget** | Hard limits on a run: `MaxTurns`, `MaxContextTokens`, `MaxCostUsd`, `MaxWallClock`. Checked by `IBudgetEnforcer` at the top of every turn.                                                                 |
-| **Guide** | An `IGuide` implementation that shapes what the model perceives. Contributes to `ContextDraft` before each model call. Runs sequentially in registration order.                                            |
-| **ContextDraft** | Mutable object populated by the guide pipeline. Fields: `SystemPrompt`, `TrajectoryMessages`, `MemorySnippets`, `AvailableTools`. Assembled into a prompt by `DefaultContextBuilder`.                      |
-| **ContextBuildResult** | What `IContextBuilder` returns: the assembled message list and the guide-filtered tool list. Keeping these in sync is why the result type exists.                                                          |
-| **Sensor** | An `ISensor` implementation that observes the loop at declared `HookPoint`s and can return `SensorResult.Intervene(reason)` to raise a concern. The loop's response to an intervention depends on the hookpoint — see the hookpoint table. Runs in parallel with peer sensors. |
-| **HookPoint** | An enumerated lifecycle position where sensors fire: `PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`.                                                                          |
-| **SensorResult** | The outcome of a sensor check: `Pass` (continue) or `Intervene(reason)` (append a `SensorInterventionStep`; the loop's response depends on the hookpoint — see hookpoint table).                             |
-| **Tool** | An `ITool` implementation that the model can invoke. The harness never chooses which tool to call — the model requests it by name; `IToolRegistry` dispatches it.                                          |
-| **ToolDefinition** | The model-facing projection of a tool: `Name`, `Description`, `InputSchema` (`JsonElement`). The loop projects `ITool → ToolDefinition` before each model call so `IModelClient` never references `ITool`. |
-| **IModelClient** | The transport abstraction. Receives a message list and `ToolDefinition`s; returns a `ModelResponse`. Knows nothing about tools, state, or the loop.                                                        |
-| **ModelResponse** | What `IModelClient` returns: optional text, zero or more `ToolCall`s, `StopReason`, `Usage`, and `Cost`.                                                                                                   |
-| **HarnessLoop** | The core orchestrator. Drives turn-by-turn execution: enforce budget → run sensors → build context → call model → act on response → repeat.                                                                |
-| **StuckDetector** | Built-in sensor that fires at `PreToolCall`. Blocks if the same tool is called with identical arguments three or more times consecutively, preventing infinite loops.                                      |
-| **Checkpoint** | A durable snapshot: `AgentState` at the start of a turn, wrapped with `CheckpointId`, `RunId`, `TurnNumber`, and `CreatedAt`. Written by `HarnessLoop` via `ICheckpointStore` at the top of every turn. |
-| **ICheckpointStore** | Persistence seam: `SaveAsync`, `LoadAsync`, `LoadLatestAsync`. Default is `NullCheckpointStore` (no-op). `FileCheckpointStore` in `Infrastructure.Persistence` writes JSON files. |
+| Term | Definition |
+|---|---|
+| **Agent** | An Agent = Model + Harness. A loop-driven process that takes a natural-language task, uses tools and a model to produce a result, and records every step it takes. |
+| **Harness** | The scaffolding that wraps a model: loop, guides, sensors, and budget. The harness is a model control concern — it does not own application or system design decisions. |
+| **Turn** | One iteration of the loop: build context → call model → act on response. Each turn appends one or more `Step`s to the trajectory. |
+| **Trajectory** | The append-only, ordered list of `Step`s on `AgentState`. It is the durable log of everything the agent has done and seen. Three step types: `ModelCallStep` (a model call and its response), `ToolCallStep` (a tool invocation and its result), `SensorInterventionStep` (a sensor concern and its reason). |
+| **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn — the trajectory is the log of those transitions. |
+| **AgentOutcome** | The terminal result of a run: final answer, status (`Done`, `PartialResult`, `Failed`), and the last `AgentState`. |
+| **Budget** | Hard limits on a run: `MaxTurns`, `MaxContextTokens`, `MaxCostUsd`, `MaxWallClock`. Checked at the top of every turn before any sensor or model call. |
+| **Guide** | Shapes what the model perceives. Guides run sequentially before each model call, each contributing to a shared context draft — system prompt, trajectory, memory snippets, available tools. |
+| **Sensor** | Observes the loop at declared hookpoints and can raise a concern. Sensors run in parallel; the loop's response to a concern depends on the hookpoint (see the hookpoint table). |
+| **HookPoint** | A lifecycle position where sensors fire: `PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`. |
+| **Tool** | Something the model can invoke by name. The harness dispatches the call; the model decides when and why to use it. |
+| **Model client** | The transport seam (`IModelClient`). Receives a message list and tool definitions; returns a response. Knows nothing about state, the loop, or tool implementations. |
+| **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
