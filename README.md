@@ -356,12 +356,12 @@ Two patterns per **single-instance** abstraction:
 `AddSingleton` (not `TryAdd`). Opt-out by not calling the default. Custom guides
 append with `AddGuide<T>()`.
 
-`AddSapphireGuard(systemPrompt)` aggregates everything. You still need to register
+`AddModelHarness(systemPrompt)` aggregates everything. You still need to register
 `IModelClient`, `IToolRegistry`, `ITracer`, and your `ITool` / `ISensor` instances.
 
 ```csharp
 services
-    .AddSapphireGuard(systemPrompt)
+    .AddModelHarness(systemPrompt)
     .AddTracer<ConsoleTracer>()
     .AddToolRegistry<InMemoryToolRegistry>()
     .AddModelClient(_ => new PollyResilientModelClient(new MyModelClient()));

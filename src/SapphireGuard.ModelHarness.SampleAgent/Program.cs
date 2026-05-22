@@ -37,7 +37,7 @@ const string SystemPrompt =
 var services = new ServiceCollection();
 
 services
-    .AddSapphireGuard(SystemPrompt)
+    .AddModelHarness(SystemPrompt)
     .AddTracer<ConsoleTracer>()
     .AddToolRegistry<InMemoryToolRegistry>()
     .AddModelClient(_ =>

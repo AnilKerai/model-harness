@@ -21,7 +21,7 @@ namespace SapphireGuard.ModelHarness.Framework.DependencyInjection;
 ///         so any explicit registration the consumer made wins regardless of call order.</item>
 /// </list>
 ///
-/// <see cref="AddSapphireGuard"/> is the aggregate. It registers the four built-in
+/// <see cref="AddModelHarness"/> is the aggregate. It registers the four built-in
 /// guides (system prompt, trajectory, memory, tool selector), the guide runner,
 /// the context builder, the budget enforcer, and the loop itself. Consumers
 /// still need to register an <see cref="IModelClient"/>, an <see cref="IToolRegistry"/>,
@@ -34,7 +34,7 @@ public static class SapphireGuardServiceCollectionExtensions
     /// Registers the loop and all framework-provided defaults. Defaults use
     /// <c>TryAdd</c>, so any prior explicit registration is preserved.
     /// </summary>
-    public static IServiceCollection AddSapphireGuard(this IServiceCollection services, string systemPrompt) =>
+    public static IServiceCollection AddModelHarness(this IServiceCollection services, string systemPrompt) =>
         services
             .AddHarnessLoop()
             .AddBudgetEnforcerDefault()

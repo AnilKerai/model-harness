@@ -38,7 +38,7 @@ where the implementation would live.
 - [x] `ClaudeModelClient` — Anthropic SDK adapter; handles message alternation, tool result inlining, cost tracking
 
 ### DI / composition
-- [x] `AddSapphireGuard(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
+- [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
 - [x] Two-method pattern per abstraction: `AddXxx<T>()` (explicit override) + `AddXxxDefault()` (TryAdd)
 - [x] Graceful fallback to `FakeModelClient` when no API key is configured
 
