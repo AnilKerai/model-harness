@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Framework.Persistence;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Persistence;
 

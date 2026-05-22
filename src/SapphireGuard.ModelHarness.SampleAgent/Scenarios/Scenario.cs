@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.SampleAgent.Scenarios;
