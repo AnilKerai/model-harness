@@ -63,7 +63,7 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
 
                 case SensorInterventionStep si:
                     messages.Add(new Message(MessageRole.System,
-                        $"[sensor:{si.SensorName} at {si.HookPoint}] {si.Reason} — adjust your plan accordingly."));
+                        $"[HARNESS OBSERVATION — {si.SensorName} at {si.HookPoint}] {si.Reason} — adjust your next action and do not repeat flagged behaviour."));
                     break;
             }
 

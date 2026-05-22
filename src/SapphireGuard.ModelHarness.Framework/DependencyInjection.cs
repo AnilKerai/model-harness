@@ -23,6 +23,7 @@ public static class DependencyInjection
             .AddMemoryStoreDefault()
             .AddToolSelectorDefault()
             .AddSystemPromptGuide(systemPrompt)
+            .AddHarnessInstructionsGuideDefault()
             .AddTrajectoryGuideDefault()
             .AddMemoryGuideDefault()
             .AddToolSelectorGuideDefault()
@@ -73,6 +74,8 @@ public static class DependencyInjection
         services.AddSingleton<IGuide, TImpl>();
         return services;
     }
+
+
 
     public static IServiceCollection AddMemoryStore<TImpl>(this IServiceCollection services)
         where TImpl : class, IMemoryStore =>
@@ -139,6 +142,9 @@ public static class DependencyInjection
         services.AddSingleton<IGuide>(_ => new SystemPromptGuide(systemPrompt));
         return services;
     }
+
+    private static IServiceCollection AddHarnessInstructionsGuideDefault(this IServiceCollection services) =>
+        services.AddGuide<HarnessInstructionsGuide>();
 
     private static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services) =>
         services.AddGuide<TrajectoryGuide>();
