@@ -3,42 +3,84 @@ using SapphireGuard.ModelHarness.Framework.State;
 namespace SapphireGuard.ModelHarness.Framework.Guides;
 
 /// <summary>
-/// Renders the agent's trajectory into <see cref="ContextDraft.TrajectoryMessages"/>.
+/// Renders the agent's trajectory into <see cref="ContextDraft.TrajectoryMessages"/>,
+/// trimming the oldest steps when the estimated token count approaches the context limit.
 /// Each step type has a distinct rendering: model turns as assistant messages,
 /// tool calls and results as paired messages, sensor interventions as system
 /// notes so the model can re-plan without them polluting tool-call history.
 /// </summary>
-public sealed class TrajectoryGuide : IGuide
+public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
 {
     public string Name => "trajectory";
 
     public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
     {
-        foreach (var step in state.Trajectory)
+        var stepGroups = RenderSteps(state.Trajectory);
+
+        var budget = state.Budget.MaxContextTokens - reservedTokens;
+        var trimCount = ComputeTrimCount(stepGroups, budget);
+
+        if (trimCount > 0)
         {
+            draft.TrajectoryMessages.Add(new Message(MessageRole.System,
+                $"[{trimCount} earlier step(s) omitted — context window limit]"));
+            stepGroups = stepGroups[trimCount..];
+        }
+
+        foreach (var (_, messages) in stepGroups)
+            draft.TrajectoryMessages.AddRange(messages);
+
+        return Task.CompletedTask;
+    }
+
+    private static List<(Step Step, List<Message> Messages)> RenderSteps(IReadOnlyList<Step> trajectory)
+    {
+        var groups = new List<(Step, List<Message>)>(trajectory.Count);
+
+        foreach (var step in trajectory)
+        {
+            var messages = new List<Message>();
+
             switch (step)
             {
                 case ModelCallStep mc:
                     if (!string.IsNullOrEmpty(mc.Response.Text))
-                    {
-                        draft.TrajectoryMessages.Add(new Message(MessageRole.Assistant, mc.Response.Text));
-                    }
+                        messages.Add(new Message(MessageRole.Assistant, mc.Response.Text));
                     break;
 
                 case ToolCallStep tc:
-                    draft.TrajectoryMessages.Add(new Message(MessageRole.Assistant,
+                    messages.Add(new Message(MessageRole.Assistant,
                         $"[tool_call name={tc.Call.ToolName} id={tc.Call.CallId}] {tc.Call.Arguments.GetRawText()}"));
-                    draft.TrajectoryMessages.Add(new Message(MessageRole.Tool,
+                    messages.Add(new Message(MessageRole.Tool,
                         $"[tool_result id={tc.Result.CallId} error={tc.Result.IsError}] {tc.Result.Content}"));
                     break;
 
                 case SensorInterventionStep si:
-                    draft.TrajectoryMessages.Add(new Message(MessageRole.System,
+                    messages.Add(new Message(MessageRole.System,
                         $"[sensor:{si.SensorName} at {si.HookPoint}] {si.Reason} — adjust your plan accordingly."));
                     break;
             }
+
+            if (messages.Count > 0)
+                groups.Add((step, messages));
         }
 
-        return Task.CompletedTask;
+        return groups;
     }
+
+    private static int ComputeTrimCount(List<(Step Step, List<Message> Messages)> groups, int tokenBudget)
+    {
+        var total = groups.Sum(g => g.Messages.Sum(m => EstimateTokens(m.Content)));
+
+        var trimCount = 0;
+        while (trimCount < groups.Count && total > tokenBudget)
+        {
+            total -= groups[trimCount].Messages.Sum(m => EstimateTokens(m.Content));
+            trimCount++;
+        }
+
+        return trimCount;
+    }
+
+    private static int EstimateTokens(string text) => (text.Length + 3) / 4;
 }

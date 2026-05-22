@@ -47,17 +47,17 @@ where the implementation would live.
 ## 🔲 Not yet implemented
 
 ### Context management
-- [ ] **Token-aware trajectory compaction** — `TrajectoryGuide` currently dumps the full history; replace
-  with a windowing strategy that trims older steps when approaching `MaxContextTokens`.
-  _Seam: implement `IGuide` and replace `TrajectoryGuide`._
+- [x] **Token-aware trajectory compaction** — `TrajectoryGuide` trims oldest steps when estimated
+  token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped.
+  Token budget is `MaxContextTokens - reservedTokens` (default 2000 for system prompt + output headroom).
 
-- [ ] **Long-term memory** — surface relevant snippets from a retrieval system into
-  `ContextDraft.MemorySnippets`.
-  _Seam: implement `MemoryGuide` (currently no-op)._
+- [x] **Long-term memory** — `IMemoryStore` seam; `MemoryGuide` queries it with the task text and
+  surfaces snippets into `ContextDraft.MemorySnippets`. Default is `NullMemoryStore` (no-op).
+  Replace with a vector store or knowledge graph implementation.
 
-- [ ] **Tool relevance ranking** — filter or reorder `ContextDraft.AvailableTools` per turn
-  to reduce noise in the prompt.
-  _Seam: implement `ToolSelectorGuide` (currently no-op)._
+- [x] **Tool relevance ranking** — `IToolSelector` seam; `ToolSelectorGuide` delegates to it to
+  filter or rerank `ContextDraft.AvailableTools` per turn. Default is `PassthroughToolSelector`
+  (all tools, unchanged). Replace with a relevance-ranking implementation.
 
 ### Persistence
 - [ ] **Checkpoint / resume** — `AgentState` is serialisation-ready (no mutable fields); no

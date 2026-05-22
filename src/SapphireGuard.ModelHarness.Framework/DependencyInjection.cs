@@ -2,6 +2,7 @@ using SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Context;
 using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Loop;
+using SapphireGuard.ModelHarness.Framework.Memory;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -40,6 +41,8 @@ public static class DependencyInjection
             .AddBudgetEnforcerDefault()
             .AddGuideRunnerDefault()
             .AddContextBuilderDefault()
+            .AddMemoryStoreDefault()
+            .AddToolSelectorDefault()
             .AddSystemPromptGuide(systemPrompt)
             .AddTrajectoryGuideDefault()
             .AddMemoryGuideDefault()
@@ -162,6 +165,36 @@ public static class DependencyInjection
     public static IServiceCollection AddToolSelectorGuideDefault(this IServiceCollection services)
     {
         services.AddSingleton<IGuide, ToolSelectorGuide>();
+        return services;
+    }
+
+    // ── Memory store ─────────────────────────────────────────────────────────
+
+    public static IServiceCollection AddMemoryStore<TImpl>(this IServiceCollection services)
+        where TImpl : class, IMemoryStore =>
+        services.Replace(ServiceDescriptor.Singleton<IMemoryStore, TImpl>());
+
+    public static IServiceCollection AddMemoryStore(this IServiceCollection services, Func<IServiceProvider, IMemoryStore> factory) =>
+        services.Replace(ServiceDescriptor.Singleton(factory));
+
+    public static IServiceCollection AddMemoryStoreDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IMemoryStore, NullMemoryStore>();
+        return services;
+    }
+
+    // ── Tool selector ────────────────────────────────────────────────────────
+
+    public static IServiceCollection AddToolSelector<TImpl>(this IServiceCollection services)
+        where TImpl : class, IToolSelector =>
+        services.Replace(ServiceDescriptor.Singleton<IToolSelector, TImpl>());
+
+    public static IServiceCollection AddToolSelector(this IServiceCollection services, Func<IServiceProvider, IToolSelector> factory) =>
+        services.Replace(ServiceDescriptor.Singleton(factory));
+
+    public static IServiceCollection AddToolSelectorDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IToolSelector, PassthroughToolSelector>();
         return services;
     }
 }
