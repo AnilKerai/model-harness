@@ -71,7 +71,7 @@ public sealed class ScenarioRunner(
                     $"  [tool]    {t.Call.ToolName}({t.Call.Arguments.GetRawText()}) " +
                     $"→ {(t.Result.IsError ? "ERROR: " : "")}{t.Result.Content}",
                 SensorInterventionStep s =>
-                    $"  [BLOCKED] {s.SensorName} @ {s.HookPoint}: {s.Reason}",
+                    $"  [HARNESS OBSERVATION — {s.SensorName} @ {s.HookPoint}] {s.Reason}",
                 _ =>
                     $"  [?] {step.GetType().Name}"
             };
