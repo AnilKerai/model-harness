@@ -74,10 +74,6 @@ where the implementation would live.
   for the `Step` hierarchy.
   _Seam: new project `SapphireGuard.ModelHarness.Infrastructure.Persistence`._
 
-### Integrations
-- [ ] **MCP (Model Context Protocol)** — an MCP tool is an `ITool` that proxies to an MCP server.
-  _Seam: `ITool`._
-
 ### Model providers
 - [ ] **Additional model provider adapters** — only Anthropic is implemented. OpenAI, Azure OpenAI,
   Google Gemini, and local models (Ollama) are natural next targets.

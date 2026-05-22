@@ -381,22 +381,46 @@ See [ROADMAP.md](ROADMAP.md) for what's done and what's still to implement.
 
 ---
 
-## What's deliberately out of scope (and where the seams are)
+## Harness concerns vs. user concerns
 
-| Future capability        | Seam to extend                                                |
-| ------------------------ | ------------------------------------------------------------- |
-| Real model providers     | `IModelClient`                                                |
-| Sub-agents / A2A         | `ITool` — sub-agent orchestration is a user concern, not a framework concern. A local sub-agent is an `ITool` whose `ExecuteAsync` runs another `HarnessLoop`; a remote one calls an A2A endpoint. The framework has no opinion on which. |
-| MCP integration          | `ITool` (an MCP tool proxies to an MCP server)                |
-| Long-term memory         | `MemoryGuide` — populate `ContextDraft.MemorySnippets`        |
-| Token-aware compaction   | `TrajectoryGuide` — replace with a windowing implementation   |
-| Tool relevance ranking   | `ToolSelectorGuide` — filter `ContextDraft.AvailableTools`    |
-| Checkpoint / persistence | `AgentState` is serialisation-ready; no persistence impl yet  |
+Understanding what the framework owns and what it deliberately leaves to the user is key to extending it correctly.
 
-A `JsonSerializerContext` is deliberately absent — nothing in the skeleton
-serialises state. When checkpointing lands it goes in whichever project owns
-persistence, alongside a spike of `[JsonPolymorphic]` source-gen for the `Step`
-hierarchy.
+### Harness concerns — the framework owns these
+
+These are things every agent needs, regardless of domain. The framework provides them and they are always present.
+
+| Concern | Where it lives |
+| ------- | -------------- |
+| Turn-by-turn loop orchestration | `HarnessLoop` |
+| Budget enforcement (turns, tokens, cost, wall clock) | `IBudgetEnforcer` / `DefaultBudgetEnforcer` |
+| Context assembly — what the model sees each turn | Guide pipeline / `IContextBuilder` |
+| Trajectory rendering and compaction | `TrajectoryGuide` |
+| Sensor observation and intervention routing | `ISensorRunner` / hookpoints |
+| Tool dispatch | `IToolRegistry` |
+| Model transport | `IModelClient` |
+
+Infrastructure projects (`Infrastructure`, `Infrastructure.Anthropic`, `Infrastructure.Mcp`) ship concrete implementations of these seams. They are conveniences — a user could write their own — but they are implementations of harness-level abstractions and belong in this repo.
+
+### User concerns — the framework does not own these
+
+These are things that vary by agent, deployment, or domain. The framework provides the seam; the user provides the implementation.
+
+| Concern | Seam | Notes |
+| ------- | ---- | ----- |
+| Sub-agents / A2A | `ITool` | A local sub-agent is an `ITool` whose `ExecuteAsync` runs another `HarnessLoop`. A remote one calls an A2A endpoint. The framework has no opinion on which — it just dispatches the tool call. |
+| Long-term memory | `IMemoryStore` → `MemoryGuide` | Replace `NullMemoryStore` with a vector store or knowledge graph. |
+| Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. |
+| Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
+| Domain tools | `ITool` | Everything the model can invoke. |
+
+### Not yet implemented (harness concerns)
+
+| Capability | Seam | Notes |
+| ---------- | ---- | ----- |
+| Checkpoint / resume | `AgentState` | Serialisation-ready; needs `[JsonPolymorphic]` source-gen for the `Step` hierarchy. New project: `Infrastructure.Persistence`. |
+| Human-in-the-loop | `HarnessLoop` + new `IHumanChannel` | `AgentStatus.AwaitingHuman` is reserved; no suspend/resume protocol yet. |
+| OpenTelemetry | `ITracer` | `ConsoleTracer` writes to stdout; no structured spans or metrics. New project: `Infrastructure.Telemetry`. |
+| Additional model providers | `IModelClient` | Only Anthropic is implemented. OpenAI, Azure OpenAI, Gemini, Ollama are natural targets; one new project per provider. |
 
 ---
 
