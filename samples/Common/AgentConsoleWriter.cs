@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using SapphireGuard.ModelHarness.Framework.State;
 
-namespace SapphireGuard.ModelHarness.SampleAgent;
+namespace SapphireGuard.ModelHarness.Samples.Common;
 
 [ExcludeFromCodeCoverage]
 public static class AgentConsoleWriter
@@ -12,7 +12,7 @@ public static class AgentConsoleWriter
         var bar = new string('─', 60);
         Console.WriteLine();
         Console.WriteLine(bar);
-        Console.WriteLine($"  Scenario : {name}");
+        Console.WriteLine($"  {name}");
         Console.WriteLine($"  {description}");
         Console.WriteLine(bar);
     }

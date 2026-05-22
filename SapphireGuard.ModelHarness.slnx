@@ -1,13 +1,22 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SapphireGuard.ModelHarness.Framework/SapphireGuard.ModelHarness.Framework.csproj" />
-    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Anthropic/SapphireGuard.ModelHarness.Infrastructure.Anthropic.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure/SapphireGuard.ModelHarness.Infrastructure.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Anthropic/SapphireGuard.ModelHarness.Infrastructure.Anthropic.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Mcp/SapphireGuard.ModelHarness.Infrastructure.Mcp.csproj" />
-    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Persistence/SapphireGuard.ModelHarness.Infrastructure.Persistence.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Ollama/SapphireGuard.ModelHarness.Infrastructure.Ollama.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Persistence/SapphireGuard.ModelHarness.Infrastructure.Persistence.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Resilience/SapphireGuard.ModelHarness.Infrastructure.Resilience.csproj" />
-    <Project Path="src/SapphireGuard.ModelHarness.SampleAgent/SapphireGuard.ModelHarness.SampleAgent.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Common/SapphireGuard.ModelHarness.Samples.Common.csproj" />
+    <Project Path="samples/CheckpointResume/SapphireGuard.ModelHarness.Samples.CheckpointResume.csproj" />
+    <Project Path="samples/CostThrottle/SapphireGuard.ModelHarness.Samples.CostThrottle.csproj" />
+    <Project Path="samples/HappyPath/SapphireGuard.ModelHarness.Samples.HappyPath.csproj" />
+    <Project Path="samples/OllamaToolCall/SapphireGuard.ModelHarness.Samples.OllamaToolCall.csproj" />
+    <Project Path="samples/PiiDetection/SapphireGuard.ModelHarness.Samples.PiiDetection.csproj" />
+    <Project Path="samples/ToolCallReasonableness/SapphireGuard.ModelHarness.Samples.ToolCallReasonableness.csproj" />
+    <Project Path="samples/ToolResultSanity/SapphireGuard.ModelHarness.Samples.ToolResultSanity.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/SapphireGuard.ModelHarness.Framework.Tests.Unit.csproj" />

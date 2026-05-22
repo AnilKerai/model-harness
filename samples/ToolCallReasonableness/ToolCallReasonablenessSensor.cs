@@ -2,12 +2,8 @@ using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 
-namespace SapphireGuard.ModelHarness.SampleAgent.Sensors;
+namespace SapphireGuard.ModelHarness.Samples.ToolCallReasonableness;
 
-/// <summary>
-/// Catches obviously-wrong tool calls before they are dispatched:
-/// missing arguments, division by zero, and non-finite operands.
-/// </summary>
 public sealed class ToolCallReasonablenessSensor : ISensor
 {
     public string Name => "tool-call-reasonableness";
