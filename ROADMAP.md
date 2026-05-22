@@ -17,7 +17,8 @@ where the implementation would live.
 ### Guide pattern
 - [x] `IGuide` / `IGuideRunner` / `ContextDraft` — sequential pipeline that shapes what the model sees
 - [x] `SystemPromptGuide` — injects agent identity and standing instructions
-- [x] `TrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt
+- [x] `HarnessInstructionsGuide` — appends harness conventions to the system prompt; teaches the model to treat `[HARNESS OBSERVATION — ...]` notes as directives (feedforward complement to sensor feedback)
+- [x] `TrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt; sensor notes use `[HARNESS OBSERVATION — ...]` prefix matching what `HarnessInstructionsGuide` declares
 - [x] `MemoryGuide` — seam for long-term memory; currently a no-op
 - [x] `ToolSelectorGuide` — seam for tool filtering/ranking; currently a no-op
 

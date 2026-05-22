@@ -52,7 +52,7 @@ flowchart TD
     ANT --> FW
 ```
 
-- **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, four built-in
+- **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, five built-in
   guides, and `IServiceCollection` extension methods. Only external dependency
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
 - **`SapphireGuard.ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
@@ -87,10 +87,11 @@ flowchart LR
     subgraph "Guide pipeline — runs before every model call"
         direction LR
         D[ContextDraft\ninitialised] --> G1[SystemPromptGuide\nsets SystemPrompt]
-        G1 --> G2[TrajectoryGuide\nrenders history]
-        G2 --> G3[MemoryGuide\nsurfaces snippets]
-        G3 --> G4[ToolSelectorGuide\nfilters AvailableTools]
-        G4 --> GN[... custom guides]
+        G1 --> G2[HarnessInstructionsGuide\nappends harness conventions]
+        G2 --> G3[TrajectoryGuide\nrenders history]
+        G3 --> G4[MemoryGuide\nsurfaces snippets]
+        G4 --> G5[ToolSelectorGuide\nfilters AvailableTools]
+        G5 --> GN[... custom guides]
     end
 
     GN --> CB[DefaultContextBuilder\nassembles prompt]
@@ -124,7 +125,7 @@ public sealed class MyGuide : IGuide
     }
 }
 
-services.AddGuide<MyGuide>(); // runs after the four built-in guides
+services.AddGuide<MyGuide>(); // runs after the five built-in guides
 ```
 
 Guides run **sequentially** so each one can build on what the previous added —
@@ -163,10 +164,11 @@ The five hookpoints, their typical use, and what the loop does when a sensor int
 
 An intervention does not terminate the run. The sensor's reason is wrapped in a
 `SensorInterventionStep` and appended to the trajectory. On the next turn,
-`TrajectoryGuide` renders it as a system-role note — the model sees *"sensor X
-intervened at PreToolCall because … — adjust your plan"* and can re-plan.
-Intervention records are separate from tool-call history so tool history stays
-clean.
+`TrajectoryGuide` renders it as a system-role note prefixed `[HARNESS OBSERVATION — ...]`.
+`HarnessInstructionsGuide` tells the model upfront (in the system prompt) what these
+notes mean and that they must be treated as directives — this is the feedforward complement
+to the sensor's feedback. Intervention records are separate from tool-call history so
+tool history stays clean.
 
 What the loop does with an intervention depends on the hookpoint:
 
@@ -208,7 +210,7 @@ SensorInterventionStep appended to AgentState.Trajectory
 TrajectoryGuide renders it as a system-role note in ContextDraft
         │
         ▼
-Model sees: "[sensor:my-sensor at PreToolCall] dangerous-tool is not permitted — adjust your plan"
+Model sees: "[HARNESS OBSERVATION — my-sensor at PreToolCall] dangerous-tool is not permitted — adjust your next action and do not repeat flagged behaviour."
         │
         ▼
 Model re-plans without that tool
@@ -305,7 +307,7 @@ other sensors registered at the same hookpoint.
 ### Add a guide
 
 ```csharp
-services.AddGuide<MyGuide>(); // runs after the four built-in guides
+services.AddGuide<MyGuide>(); // runs after the five built-in guides
 ```
 
 ### Swap the model client

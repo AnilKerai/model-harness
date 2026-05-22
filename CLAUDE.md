@@ -35,10 +35,10 @@ Dependency direction is strict and unidirectional: SampleAgent → Infrastructur
 Turn-by-turn state machine: check budget → sensors (PreModelCall) → build context via guides → call model → sensors (PostModelCall) → dispatch tools → sensors (Pre/PostToolCall) → repeat. Budget exhaustion is control flow, not an exception — one final model call with tools disabled, then `PartialResult`.
 
 ### Guide pattern
-Guides run **sequentially** before each model call, each contributing to a shared `ContextDraft`. Built-ins: `SystemPromptGuide`, `TrajectoryGuide` (with token-aware compaction), `MemoryGuide` (queries `IMemoryStore`), `ToolSelectorGuide` (delegates to `IToolSelector`). Add custom guides with `services.AddGuide<T>()`.
+Guides run **sequentially** before each model call, each contributing to a shared `ContextDraft`. Built-ins: `SystemPromptGuide`, `HarnessInstructionsGuide` (appends harness conventions to system prompt), `TrajectoryGuide` (with token-aware compaction), `MemoryGuide` (queries `IMemoryStore`), `ToolSelectorGuide` (delegates to `IToolSelector`). Add custom guides with `services.AddGuide<T>()`.
 
 ### Sensor pattern
-Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Intervene(reason)` appends a `SensorInterventionStep` to the trajectory, which `TrajectoryGuide` renders as a system note on the next turn so the model can re-plan.
+Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Intervene(reason)` appends a `SensorInterventionStep` to the trajectory, which `TrajectoryGuide` renders as a `[HARNESS OBSERVATION — ...]` system note on the next turn. `HarnessInstructionsGuide` primes the model in the system prompt to treat these notes as directives — feedforward and feedback working together.
 
 Sensors observe and report a concern; the loop decides what "intervening" means per hookpoint:
 - **PreModelCall**: force-finalises immediately (looping would produce identical state — infinite loop risk)
