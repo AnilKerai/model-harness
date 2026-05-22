@@ -323,6 +323,34 @@ provider's tool-def format, and replace the registration:
 services.AddModelClient(_ => new PollyResilientModelClient(new MyProviderClient(apiKey)));
 ```
 
+### Resilience — the decorator pattern
+
+`PollyResilientModelClient` wraps any `IModelClient` and adds retry and
+circuit-breaking without the wrapped client knowing anything about it. This is
+the **decorator pattern**: a class that implements an interface by delegating to
+another implementation of the same interface, adding behaviour around it.
+
+```
+PollyResilientModelClient   ← adds retry + circuit breaker
+        │
+        └─▶ ClaudeModelClient       ← does the actual Anthropic API call
+                 (or FakeModelClient, or any other IModelClient)
+```
+
+Because resilience lives in the decorator rather than in `ClaudeModelClient`
+itself, it applies automatically to any provider — swap the inner client and
+you get the same retry behaviour for free. It also keeps each class focused on
+one job: `ClaudeModelClient` handles the Anthropic API, `PollyResilientModelClient`
+handles failure.
+
+The two behaviours it adds:
+
+- **Retry** — on a network error or timeout, waits 200 ms then tries again,
+  doubling the wait each time, up to 3 retries.
+- **Circuit breaker** — if more than 50% of recent calls fail, stops trying
+  immediately for 15 seconds rather than hammering a broken endpoint. Lets one
+  call through after the break to check if the service has recovered.
+
 ### Composition pattern
 
 Two patterns per **single-instance** abstraction:
