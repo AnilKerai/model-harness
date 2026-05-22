@@ -23,7 +23,7 @@ Add an API key first:
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete adapters: `FakeModelClient`, `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry` |
+| `Infrastructure` | Concrete adapters: `FakeModelClient`, `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor` |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `SampleAgent` | Composition root — shows how to wire everything via DI |
 
@@ -38,7 +38,14 @@ Turn-by-turn state machine: check budget → sensors (PreModelCall) → build co
 Guides run **sequentially** before each model call, each contributing to a shared `ContextDraft`. Built-ins: `SystemPromptGuide`, `TrajectoryGuide` (with token-aware compaction), `MemoryGuide` (queries `IMemoryStore`), `ToolSelectorGuide` (delegates to `IToolSelector`). Add custom guides with `services.AddGuide<T>()`.
 
 ### Sensor pattern
-Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Block(reason)` appends a `SensorInterventionStep` to the trajectory, which `TrajectoryGuide` renders as a system note on the next turn so the model can re-plan.
+Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Intervene(reason)` appends a `SensorInterventionStep` to the trajectory, which `TrajectoryGuide` renders as a system note on the next turn so the model can re-plan.
+
+Sensors observe and report a concern; the loop decides what "intervening" means per hookpoint:
+- **PreModelCall**: force-finalises immediately (looping would produce identical state — infinite loop risk)
+- **PostModelCall**: loops back; blocked response text is **suppressed from trajectory** so the model cannot re-see flagged content (e.g. PII) on the retry turn
+- **PreReturn**: loops back; model retries with its prior answer visible so it can correct it
+- **PreToolCall**: tool is never dispatched; a `ToolCallStep` with `IsError = true` is recorded as the outcome
+- **PostToolCall**: **advisory only** — the tool has already run and its result is in the trajectory; intervention annotates the result but cannot prevent the model from reasoning on it
 
 ### State
 `AgentState` is an immutable record. Every turn produces a new state via `with`-expressions. The trajectory (`IReadOnlyList<Step>`) is the append-only log of `ModelCallStep`, `ToolCallStep`, and `SensorInterventionStep`.
@@ -77,6 +84,16 @@ Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`,
 - Before designing a non-trivial solution, ask clarifying questions to improve the spec.
 - When using external SDKs or APIs, fetch up-to-date docs rather than relying on training data.
 
+## Testing
+
+Unit tests live in `tests/SapphireGuard.ModelHarness.Framework.Tests.Unit`. Run with:
+
+```bash
+dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/
+```
+
+Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelClient`, etc.) carry `[ExcludeFromCodeCoverage]` — no tests needed for them. Everything with conditional logic has tests.
+
 ## Roadmap status
 
-See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern, tools, Anthropic adapter, DI composition, context management (memory + tool selection). Still to do: persistence/checkpoint, sub-agents, MCP integration, additional model providers (OpenAI etc.), human-in-the-loop, OpenTelemetry observability.
+See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, Anthropic adapter, DI composition, context management (memory + tool selection), unit tests. Still to do: persistence/checkpoint, sub-agents, MCP integration, additional model providers (OpenAI etc.), human-in-the-loop, OpenTelemetry observability.

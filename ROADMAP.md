@@ -23,8 +23,12 @@ where the implementation would live.
 
 ### Sensor pattern
 - [x] `ISensor` / `ISensorRunner` / `HookPoint` — parallel observation at five lifecycle positions
-- [x] `SensorResult.Block(reason)` → `SensorInterventionStep` fed back through `TrajectoryGuide`
+- [x] `SensorResult.Intervene(reason)` → `SensorInterventionStep` fed back through `TrajectoryGuide`
 - [x] `StuckDetector` — built-in sensor; blocks repeated identical tool calls
+- [x] `PiiRedactionSensor` — PostModelCall; regex scan for email, phone, credit card, NI, SSN
+- [x] `CostThrottleSensor` — PreModelCall; soft spend cap with force-finalise on trigger
+- [x] `ToolResultSanityCheckSensor` — PostToolCall; validates result shape and per-tool custom rules
+- [x] Per-hookpoint intervention semantics clarified and documented (PostModelCall suppresses blocked content; PostToolCall is advisory-only; PreModelCall force-finalises)
 
 ### Tools
 - [x] `ITool` / `IToolRegistry` / `ToolDefinition` — tool abstraction decoupled from `IModelClient`
@@ -41,6 +45,10 @@ where the implementation would live.
 - [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
 - [x] Two-method pattern per abstraction: `AddXxx<T>()` (explicit override) + `AddXxxDefault()` (TryAdd)
 - [x] Graceful fallback to `FakeModelClient` when no API key is configured
+
+### Testing
+- [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
+- [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
 
 ---
 

@@ -57,7 +57,10 @@ flowchart TD
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
 - **`SapphireGuard.ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
   `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry`,
-  `EchoTool`, `CalculatorTool`. Depends on Framework + Polly v8.
+  `EchoTool`, `CalculatorTool`. Production sensors: `PiiRedactionSensor` (PostModelCall,
+  scans for email/phone/card/NI/SSN patterns), `CostThrottleSensor` (PreModelCall, soft
+  spend cap), `ToolResultSanityCheckSensor` (PostToolCall, validates result shape and
+  custom per-tool rules). Depends on Framework + Polly v8.
 - **`SapphireGuard.ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
   `ClaudeModelClient` maps framework messages and tool definitions to the
   Anthropic Messages API and back. Depends on Framework only.
@@ -131,7 +134,7 @@ which tools to expose.
 ### The Sensor pattern — observing and intervening
 
 A **Sensor** observes the loop at declared hookpoints and can block a transition
-by returning `SensorResult.Block(reason)`. Sensors run in **parallel** at each
+by returning `SensorResult.Intervene(reason)`. Sensors run in **parallel** at each
 hookpoint — they observe independently and do not share state.
 
 ```mermaid
@@ -140,34 +143,32 @@ flowchart TD
     SR --> S1[Sensor A]
     SR --> S2[Sensor B]
     SR --> SN[Sensor N ...]
-    S1 -- Pass --> M{Any block?}
+    S1 -- Pass --> M{Any intervene?}
     S2 -- Pass --> M
-    SN -- Block: reason --> M
+    SN -- Intervene: reason --> M
     M -- No --> CONT([Continue normally])
     M -- Yes --> INT[SensorInterventionStep\nappended to trajectory]
     INT --> NEXT([Next guide pass renders\nit as a system note])
 ```
 
-The five hookpoints and what they guard:
+The five hookpoints, their typical use, and what the loop does when a sensor intervenes:
 
-| HookPoint | Fires | Typical use |
-|---|---|---|
-| `PreModelCall` | Before building context and calling the model | Rate limiting, state validation |
-| `PostModelCall` | After the model responds, before acting on it | Output filtering, PII checks |
-| `PreToolCall` | Before each tool is dispatched | Policy enforcement, authorisation |
-| `PostToolCall` | After each tool result is received | Result validation, audit logging |
-| `PreReturn` | Before returning a final answer to the caller | Answer quality checks |
+| HookPoint | Fires | Typical use | On intervention |
+|---|---|---|---|
+| `PreModelCall` | Before building context and calling the model | Rate limiting, cost throttling | **Force-finalises immediately** — calls model once with tools disabled so it can answer from what it already knows, then returns `Done`. Looping would produce identical state (no model call happened), causing an infinite loop. |
+| `PostModelCall` | After the model responds, before acting on it | PII detection, output filtering | **Loops back** — the model gets another turn. Crucially, the blocked response text is **suppressed from the next context**: `TrajectoryGuide` omits it so the model cannot re-see flagged content. The intervention note still appears so the model knows why it was stopped. |
+| `PreToolCall` | Before each tool is dispatched | Policy enforcement, authorisation | **Tool is never dispatched** — a `ToolCallStep` with `IsError = true` is recorded so the model sees a clean error result and can replan. |
+| `PostToolCall` | After each tool result is received | Result validation, audit logging | **Advisory only** — the tool has already run and its result is already in the trajectory. The intervention is recorded as a system note; the model can still reason on the result. Use `PreToolCall` if you need to prevent execution. |
+| `PreReturn` | Before returning a final answer to the caller | Answer quality checks | **Loops back** — the model retries. Unlike PostModelCall, the prior answer *is* visible in context so the model can see what it said and correct it. |
 
-A block does not terminate the run. The sensor's reason is wrapped in a
+An intervention does not terminate the run. The sensor's reason is wrapped in a
 `SensorInterventionStep` and appended to the trajectory. On the next turn,
 `TrajectoryGuide` renders it as a system-role note — the model sees *"sensor X
-blocked you at PreToolCall because … — adjust your plan"* and can re-plan.
-Intervention records are separate from tool-call history, so tool history stays
+intervened at PreToolCall because … — adjust your plan"* and can re-plan.
+Intervention records are separate from tool-call history so tool history stays
 clean.
 
-At `PreToolCall` specifically, a block also short-circuits dispatch: the tool
-is never called and a `ToolCallStep` with `IsError = true` is recorded as the
-outcome.
+What the loop does with an intervention depends on the hookpoint:
 
 Implement `ISensor` to create a custom sensor:
 
@@ -182,7 +183,7 @@ public sealed class MySensor : ISensor
         HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
     {
         if (triggeringStep is ToolCallStep tc && tc.Call.ToolName == "dangerous-tool")
-            return Task.FromResult(SensorResult.Block("dangerous-tool is not permitted."));
+            return Task.FromResult(SensorResult.Intervene("dangerous-tool is not permitted."));
 
         return Task.FromResult(SensorResult.Pass);
     }
@@ -198,7 +199,7 @@ The loop itself stays unaware of either pattern's semantics — it just runs the
 runners and records the steps.
 
 ```
-Sensor blocks PreToolCall
+Sensor intervenes at PreToolCall
         │
         ▼
 SensorInterventionStep appended to AgentState.Trajectory
@@ -240,22 +241,22 @@ sequenceDiagram
         else Budget ok
             B-->>L: Ok
             L->>S: RunAsync(PreModelCall)
-            S-->>L: Pass / Block → SensorInterventionStep
+            S-->>L: Pass / Intervene → SensorInterventionStep
             L->>CB: BuildAsync(state, allTools)
             CB-->>L: ContextBuildResult(messages, selectedTools)
             L->>M: CallAsync(messages, toolDefinitions)
             M-->>L: ModelResponse
             L->>S: RunAsync(PostModelCall)
-            S-->>L: Pass / Block → SensorInterventionStep
+            S-->>L: Pass / Intervene → SensorInterventionStep
             alt No tool calls in response
                 L->>S: RunAsync(PreReturn)
-                S-->>L: Pass / Block → SensorInterventionStep
+                S-->>L: Pass / Intervene → SensorInterventionStep
                 L-->>C: AgentOutcome { Done, FinalAnswer }
             else Tool calls requested
                 loop Each tool call
                     L->>S: RunAsync(PreToolCall)
-                    alt Sensor blocks
-                        S-->>L: Block → SensorInterventionStep + ToolCallStep(IsError)
+                    alt Sensor intervenes
+                        S-->>L: Intervene → SensorInterventionStep + ToolCallStep(IsError)
                     else Sensor passes
                         L->>R: DispatchAsync(call)
                         R-->>L: ToolResult
@@ -415,9 +416,9 @@ hierarchy.
 | **Guide** | An `IGuide` implementation that shapes what the model perceives. Contributes to `ContextDraft` before each model call. Runs sequentially in registration order.                                            |
 | **ContextDraft** | Mutable object populated by the guide pipeline. Fields: `SystemPrompt`, `TrajectoryMessages`, `MemorySnippets`, `AvailableTools`. Assembled into a prompt by `DefaultContextBuilder`.                      |
 | **ContextBuildResult** | What `IContextBuilder` returns: the assembled message list and the guide-filtered tool list. Keeping these in sync is why the result type exists.                                                          |
-| **Sensor** | An `ISensor` implementation that observes the loop at declared `HookPoint`s and can return `SensorResult.Block(reason)` to interrupt a transition. Runs in parallel with peer sensors.                     |
+| **Sensor** | An `ISensor` implementation that observes the loop at declared `HookPoint`s and can return `SensorResult.Intervene(reason)` to raise a concern. The loop's response to an intervention depends on the hookpoint — see the hookpoint table. Runs in parallel with peer sensors. |
 | **HookPoint** | An enumerated lifecycle position where sensors fire: `PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`.                                                                          |
-| **SensorResult** | The outcome of a sensor check: `Pass` (continue) or `Block(reason)` (append a `SensorInterventionStep` and handle per hookpoint).                                                                          |
+| **SensorResult** | The outcome of a sensor check: `Pass` (continue) or `Intervene(reason)` (append a `SensorInterventionStep`; the loop's response depends on the hookpoint — see hookpoint table).                             |
 | **Tool** | An `ITool` implementation that the model can invoke. The harness never chooses which tool to call — the model requests it by name; `IToolRegistry` dispatches it.                                          |
 | **ToolDefinition** | The model-facing projection of a tool: `Name`, `Description`, `InputSchema` (`JsonElement`). The loop projects `ITool → ToolDefinition` before each model call so `IModelClient` never references `ITool`. |
 | **IModelClient** | The transport abstraction. Receives a message list and `ToolDefinition`s; returns a `ModelResponse`. Knows nothing about tools, state, or the loop.                                                        |
