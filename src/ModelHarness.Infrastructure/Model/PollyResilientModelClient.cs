@@ -44,7 +44,6 @@ public sealed class PollyResilientModelClient : IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct) =>
         await _pipeline.ExecuteAsync(
-            static async (state, token) => await state.Inner.CallAsync(state.Messages, state.Tools, token),
-            (Inner: _inner, Messages: messages, Tools: availableTools),
+            async token => await _inner.CallAsync(messages, availableTools, token),
             ct);
 }
