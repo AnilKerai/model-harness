@@ -28,7 +28,7 @@ namespace SapphireGuard.ModelHarness.Framework.DependencyInjection;
 /// an <see cref="ITracer"/>, and any <see cref="ITool"/> / <see cref="ISensor"/> /
 /// custom <see cref="IGuide"/> instances.
 /// </summary>
-public static class SapphireGuardServiceCollectionExtensions
+public static class ModelHarnessServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the loop and all framework-provided defaults. Defaults use
