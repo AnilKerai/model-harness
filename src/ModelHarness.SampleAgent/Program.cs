@@ -5,6 +5,7 @@ using ModelHarness.Framework.Sensors;
 using ModelHarness.Framework.State;
 using ModelHarness.Framework.Tools;
 using ModelHarness.Infrastructure.Anthropic.Model;
+using ModelHarness.Infrastructure.Model;
 using ModelHarness.Infrastructure.Tools;
 using ModelHarness.Infrastructure.Tracing;
 using ModelHarness.SampleAgent.Sensors;
@@ -20,16 +21,12 @@ var config = new ConfigurationBuilder()
     .Build();
 
 var apiKey = config["Anthropic:ApiKey"];
-if (string.IsNullOrWhiteSpace(apiKey))
-    throw new InvalidOperationException(
-        "Anthropic:ApiKey is empty. Set it in appsettings.local.json " +
-        "with { \"Anthropic\": { \"ApiKey\": \"sk-ant-...\" } }.");
+var usingRealModel = !string.IsNullOrWhiteSpace(apiKey);
 
-var anthropicOptions = new ClaudeClientOptions
-{
-    ApiKey = apiKey,
-    ModelId = config["Anthropic:ModelId"] ?? "claude-sonnet-4-5-20251001"
-};
+if (!usingRealModel)
+    Console.WriteLine(
+        "WARNING: Anthropic:ApiKey not set — falling back to FakeModelClient. " +
+        "Add appsettings.local.json with { \"Anthropic\": { \"ApiKey\": \"sk-ant-...\" } } to use Claude.");
 
 // ── DI ───────────────────────────────────────────────────────────────────────
 
@@ -42,7 +39,13 @@ services
     .AddModelHarness(SystemPrompt)
     .AddTracer<ConsoleTracer>()
     .AddToolRegistry<InMemoryToolRegistry>()
-    .AddModelClient(_ => new ClaudeModelClient(anthropicOptions));
+    .AddModelClient(_ => usingRealModel
+        ? new ClaudeModelClient(new ClaudeClientOptions
+        {
+            ApiKey = apiKey!,
+            ModelId = config["Anthropic:ModelId"] ?? "claude-sonnet-4-5-20251001"
+        })
+        : new PollyResilientModelClient(new FakeModelClient()));
 
 services.AddSingleton<ITool, EchoTool>();
 services.AddSingleton<ITool, CalculatorTool>();
