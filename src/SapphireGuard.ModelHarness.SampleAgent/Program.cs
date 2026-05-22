@@ -9,6 +9,7 @@ using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
+using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.SampleAgent.Sensors;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,6 +59,26 @@ services.AddSingleton<ITool, CalculatorTool>();
 
 services.AddSingleton<ISensor, ToolCallReasonablenessSensor>();
 services.AddSingleton<ISensor, StuckDetector>();
+
+// ── Production sensors ────────────────────────────────────────────────────────
+
+// Blocks model output that contains PII (email, phone, credit card, NI, SSN).
+services.AddSingleton<ISensor, PiiRedactionSensor>();
+
+// Soft spend cap — fires before the hard Budget.MaxCostUsd to give the model
+// a chance to wrap up gracefully. Set lower than MaxCostUsd to see it trigger.
+services.AddSingleton<ISensor>(_ => new CostThrottleSensor(softLimitUsd: 0.50m));
+
+// Validates tool output before the model reasons on it.
+// The optional per-tool validators enforce type contracts — here the calculator
+// must always return a parseable number.
+services.AddSingleton<ISensor>(sp => new ToolResultSanityCheckSensor(
+    maxResultLength: 10_000,
+    toolValidators: new Dictionary<string, Func<string, string?>>
+    {
+        ["calculator"] = result =>
+            double.TryParse(result, out _) ? null : $"expected a number but got: '{result}'"
+    }));
 
 await using var provider = services.BuildServiceProvider();
 
