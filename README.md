@@ -36,34 +36,41 @@ flattened trajectory.
 
 ## Architecture
 
-Four projects with a strict dependency direction:
+Six projects with a strict dependency direction:
 
 ```mermaid
 flowchart TD
     SA["**SapphireGuard.ModelHarness.SampleAgent**\ncomposition root, DI"]
-    INF["**SapphireGuard.ModelHarness.Infrastructure**\nFakeModelClient, Polly decorator, ConsoleTracer, tools"]
+    INF["**SapphireGuard.ModelHarness.Infrastructure**\nFakeModelClient, Polly decorator, tracers, sensors, tools"]
     ANT["**SapphireGuard.ModelHarness.Infrastructure.Anthropic**\nClaudeModelClient, SDK adapter"]
+    MCP["**SapphireGuard.ModelHarness.Infrastructure.Mcp**\nMcpTool, McpToolFactory"]
     FW["**SapphireGuard.ModelHarness.Framework**\nabstractions + loop"]
 
     SA --> INF
     SA --> ANT
+    SA --> MCP
     SA --> FW
     INF --> FW
     ANT --> FW
+    MCP --> FW
 ```
 
 - **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, five built-in
   guides, and `IServiceCollection` extension methods. Only external dependency
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
 - **`SapphireGuard.ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
-  `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry`,
-  `EchoTool`, `CalculatorTool`. Production sensors: `PiiRedactionSensor` (PostModelCall,
-  scans for email/phone/card/NI/SSN patterns), `CostThrottleSensor` (PreModelCall, soft
-  spend cap), `ToolResultSanityCheckSensor` (PostToolCall, validates result shape and
-  custom per-tool rules). Depends on Framework + Polly v8.
+  `PollyResilientModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`,
+  `InMemoryToolRegistry`, `EchoTool`, `CalculatorTool`. Production sensors: `PiiRedactionSensor`
+  (PostModelCall, scans for email/phone/card/NI/SSN patterns), `CostThrottleSensor`
+  (PreModelCall, soft spend cap), `ToolResultSanityCheckSensor` (PostToolCall, validates
+  result shape and custom per-tool rules), `StuckDetector` (PreToolCall, blocks repeated
+  identical tool calls). Depends on Framework + Polly v8.
 - **`SapphireGuard.ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
   `ClaudeModelClient` maps framework messages and tool definitions to the
   Anthropic Messages API and back. Depends on Framework only.
+- **`SapphireGuard.ModelHarness.Infrastructure.Mcp`** — MCP adapter: `McpTool` wraps an
+  `McpClientTool` as `ITool`; `McpToolFactory` lists tools from an MCP server and returns
+  them as `IReadOnlyList<ITool>` ready to register. Depends on Framework + ModelContextProtocol.
 - **`SapphireGuard.ModelHarness.SampleAgent`** — console app showing how a domain agent wires
   the framework via `Microsoft.Extensions.DependencyInjection`.
 

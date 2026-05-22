@@ -23,11 +23,12 @@ Add an API key first:
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete adapters: `FakeModelClient`, `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor` |
+| `Infrastructure` | Concrete adapters: `FakeModelClient`, `PollyResilientModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector` |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
+| `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |
 | `SampleAgent` | Composition root — shows how to wire everything via DI |
 
-Dependency direction is strict and unidirectional: SampleAgent → Infrastructure / Infrastructure.Anthropic → Framework.
+Dependency direction is strict and unidirectional: SampleAgent → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp → Framework.
 
 ## Core patterns
 
@@ -59,7 +60,7 @@ Sensors observe and report a concern; the loop decides what "intervening" means 
 | Memory retrieval | `IMemoryStore` | `NullMemoryStore` (no-op) |
 | Tool filtering | `IToolSelector` | `PassthroughToolSelector` |
 | Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` |
-| Tracing | `ITracer` | `ConsoleTracer` |
+| Tracing | `ITracer` | `CompositeTracer(ConsoleTracer, OpenTelemetryTracer)` |
 
 ## DI conventions
 
@@ -96,4 +97,4 @@ Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelCl
 
 ## Roadmap status
 
-See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, Anthropic adapter, DI composition, context management (memory + tool selection), unit tests. Still to do: persistence/checkpoint, sub-agents, MCP integration, additional model providers (OpenAI etc.), human-in-the-loop, OpenTelemetry observability.
+See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, Anthropic adapter, MCP adapter, DI composition, context management (memory + tool selection), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`. Still to do: persistence/checkpoint, additional model providers (OpenAI etc.), human-in-the-loop.
