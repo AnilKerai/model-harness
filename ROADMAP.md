@@ -47,6 +47,13 @@ where the implementation would live.
 - [x] Two-method pattern per abstraction: `AddXxx<T>()` (explicit override) + `AddXxxDefault()` (TryAdd)
 - [x] Graceful fallback to `FakeModelClient` when no API key is configured
 
+### Persistence
+- [x] `ICheckpointStore` / `Checkpoint` / `NullCheckpointStore` — seam in `Framework.Persistence`; `HarnessLoop` auto-saves at the top of every turn (captures the fully-completed prior turn)
+- [x] `FileCheckpointStore` — writes `{dir}/{taskId}/{timestamp}_{id}.json`; lexicographic filename order makes `LoadLatestAsync` a trivial sort
+- [x] `StepJsonConverter` — custom `JsonConverter<Step>` using a `$type` discriminator; handles the polymorphic `Step` hierarchy without annotating the domain model
+- [x] `AddFileCheckpointStore(directory)` DI extension; `AddCheckpointStore<T>()` / factory override for custom backends
+- [x] At-least-once resume semantics — pass a loaded checkpoint's state (with `Status = Running`) back to `HarnessLoop.RunAsync`
+
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
 - [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
@@ -67,12 +74,6 @@ where the implementation would live.
 - [x] **Tool relevance ranking** — `IToolSelector` seam; `ToolSelectorGuide` delegates to it to
   filter or rerank `ContextDraft.AvailableTools` per turn. Default is `PassthroughToolSelector`
   (all tools, unchanged). Replace with a relevance-ranking implementation.
-
-### Persistence
-- [ ] **Checkpoint / resume** — `AgentState` is serialisation-ready (no mutable fields); no
-  persistence implementation yet. When this lands it will need `[JsonPolymorphic]` source-gen
-  for the `Step` hierarchy.
-  _Seam: new project `SapphireGuard.ModelHarness.Infrastructure.Persistence`._
 
 ### Model providers
 - [ ] **Additional model provider adapters** — only Anthropic is implemented. OpenAI, Azure OpenAI,

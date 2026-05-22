@@ -36,7 +36,7 @@ flattened trajectory.
 
 ## Architecture
 
-Six projects with a strict dependency direction:
+Seven projects with a strict dependency direction:
 
 ```mermaid
 flowchart TD
@@ -44,15 +44,18 @@ flowchart TD
     INF["**SapphireGuard.ModelHarness.Infrastructure**\nFakeModelClient, Polly decorator, tracers, sensors, tools"]
     ANT["**SapphireGuard.ModelHarness.Infrastructure.Anthropic**\nClaudeModelClient, SDK adapter"]
     MCP["**SapphireGuard.ModelHarness.Infrastructure.Mcp**\nMcpTool, McpToolFactory"]
+    PER["**SapphireGuard.ModelHarness.Infrastructure.Persistence**\nFileCheckpointStore, StepJsonConverter"]
     FW["**SapphireGuard.ModelHarness.Framework**\nabstractions + loop"]
 
     SA --> INF
     SA --> ANT
     SA --> MCP
+    SA --> PER
     SA --> FW
     INF --> FW
     ANT --> FW
     MCP --> FW
+    PER --> FW
 ```
 
 - **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, five built-in
@@ -71,6 +74,11 @@ flowchart TD
 - **`SapphireGuard.ModelHarness.Infrastructure.Mcp`** — MCP adapter: `McpTool` wraps an
   `McpClientTool` as `ITool`; `McpToolFactory` lists tools from an MCP server and returns
   them as `IReadOnlyList<ITool>` ready to register. Depends on Framework + ModelContextProtocol.
+- **`SapphireGuard.ModelHarness.Infrastructure.Persistence`** — checkpoint/resume:
+  `FileCheckpointStore` persists each `AgentState` as a JSON file under
+  `{dir}/{taskId}/{timestamp}_{id}.json`. A custom `StepJsonConverter` handles the polymorphic
+  `Step` hierarchy without annotating the domain model. Wire up with
+  `services.AddFileCheckpointStore(directory)`. Depends on Framework only.
 - **`SapphireGuard.ModelHarness.SampleAgent`** — console app showing how a domain agent wires
   the framework via `Microsoft.Extensions.DependencyInjection`.
 
@@ -230,6 +238,7 @@ Model re-plans without that tool
 sequenceDiagram
     participant C as Caller
     participant L as HarnessLoop
+    participant CP as ICheckpointStore
     participant B as IBudgetEnforcer
     participant S as ISensorRunner
     participant CB as IContextBuilder
@@ -239,6 +248,7 @@ sequenceDiagram
     C->>L: RunAsync(AgentState)
 
     loop Each turn
+        L->>CP: SaveAsync(Checkpoint{turn, state})
         L->>B: Check(state, startedAt)
         alt Budget exhausted
             B-->>L: Exhausted(reason)
@@ -314,6 +324,39 @@ other sensors registered at the same hookpoint.
 
 ```csharp
 services.AddGuide<MyGuide>(); // runs after the five built-in guides
+```
+
+### Enable checkpoint / resume
+
+`HarnessLoop` auto-saves a `Checkpoint` at the start of each turn when an
+`ICheckpointStore` is registered. The default is `NullCheckpointStore` (no-op).
+Register `FileCheckpointStore` to write checkpoints to disk:
+
+```csharp
+services.AddFileCheckpointStore("/var/checkpoints");
+```
+
+Each checkpoint captures the fully-completed prior turn — `AgentState` plus an
+envelope (`CheckpointId`, `RunId`, `TurnNumber`, `CreatedAt`). To resume after
+a crash, load the latest checkpoint and pass its state back to a fresh harness:
+
+```csharp
+var store = new FileCheckpointStore("/var/checkpoints");
+var checkpoint = await store.LoadLatestAsync(taskId);
+
+var resumedState = checkpoint!.State with { Status = AgentStatus.Running };
+var outcome = await harness.RunAsync(resumedState, ct);
+```
+
+The loop replays from the start of the interrupted turn (at-least-once
+semantics — idempotent tools are safe; tools with side effects should be
+designed accordingly).
+
+Implement `ICheckpointStore` to target blob storage, a database, or any other
+backend:
+
+```csharp
+services.AddCheckpointStore(_ => new MyBlobCheckpointStore(connectionString));
 ```
 
 ### Swap the model client
@@ -425,7 +468,6 @@ These are things that vary by agent, deployment, or domain. The framework provid
 
 | Capability | Seam | Notes |
 | ---------- | ---- | ----- |
-| Checkpoint / resume | `AgentState` | Serialisation-ready; needs `[JsonPolymorphic]` source-gen for the `Step` hierarchy. New project: `Infrastructure.Persistence`. |
 | Human-in-the-loop | `HarnessLoop` + new `IHumanChannel` | `AgentStatus.AwaitingHuman` is reserved; no suspend/resume protocol yet. |
 | Additional model providers | `IModelClient` | Only Anthropic is implemented. OpenAI, Azure OpenAI, Gemini, Ollama are natural targets; one new project per provider. |
 
@@ -479,3 +521,5 @@ The asymmetry is intentional: budget enforcer → first-class because it is an u
 | **ModelResponse** | What `IModelClient` returns: optional text, zero or more `ToolCall`s, `StopReason`, `Usage`, and `Cost`.                                                                                                   |
 | **HarnessLoop** | The core orchestrator. Drives turn-by-turn execution: enforce budget → run sensors → build context → call model → act on response → repeat.                                                                |
 | **StuckDetector** | Built-in sensor that fires at `PreToolCall`. Blocks if the same tool is called with identical arguments three or more times consecutively, preventing infinite loops.                                      |
+| **Checkpoint** | A durable snapshot: `AgentState` at the start of a turn, wrapped with `CheckpointId`, `RunId`, `TurnNumber`, and `CreatedAt`. Written by `HarnessLoop` via `ICheckpointStore` at the top of every turn. |
+| **ICheckpointStore** | Persistence seam: `SaveAsync`, `LoadAsync`, `LoadLatestAsync`. Default is `NullCheckpointStore` (no-op). `FileCheckpointStore` in `Infrastructure.Persistence` writes JSON files. |
