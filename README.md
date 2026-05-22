@@ -501,7 +501,6 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Capability | Seam | Notes |
 | ---------- | ---- | ----- |
 | Human-in-the-loop | `HarnessLoop` + new `IHumanChannel` | `AgentStatus.AwaitingHuman` is reserved; no suspend/resume protocol yet. |
-| Additional model providers | `IModelClient` | Anthropic and Ollama are implemented. OpenAI, Azure OpenAI, and Gemini are natural next targets; one new project per provider. |
 
 ---
 
