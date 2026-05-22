@@ -64,7 +64,8 @@ Seven projects with a strict dependency direction:
   (PostModelCall, scans for email/phone/card/NI/SSN patterns), `CostThrottleSensor`
   (PreModelCall, soft spend cap), `ToolResultSanityCheckSensor` (PostToolCall, validates
   result shape and custom per-tool rules), `StuckDetector` (PreToolCall, blocks repeated
-  identical tool calls). Depends on Framework + Polly v8.
+  identical tool calls). Harness tools: `AskHumanTool` backed by `IHumanChannel`;
+  `ConsoleHumanChannel` for development. Depends on Framework + Polly v8.
 - **`SapphireGuard.ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
   `ClaudeModelClient` maps framework messages and tool definitions to the
   Anthropic Messages API and back. Depends on Framework only.
@@ -362,6 +363,24 @@ backend:
 services.AddCheckpointStore(_ => new MyBlobCheckpointStore(connectionString));
 ```
 
+### Enable human-in-the-loop
+
+`AskHumanTool` lets the model signal that it needs human input. Register it with
+an `IHumanChannel` implementation — the channel decides how the question is
+surfaced and how the response is collected:
+
+```csharp
+// Development — blocks on stdin
+services.AddAskHumanTool<ConsoleHumanChannel>();
+
+// Production — implement IHumanChannel for your delivery mechanism
+services.AddAskHumanTool(_ => new SlackHumanChannel(slackClient, channelId));
+```
+
+`IHumanChannel` has one method: `AskAsync(question, ct) → string`. Everything
+about *how* a human is reached is the caller's concern; the harness just
+dispatches the tool call and feeds the response back to the model.
+
 ### Swap the model client
 
 `IModelClient` only sees `ToolDefinition` records — it never touches `ITool`.
@@ -461,7 +480,6 @@ These are things every agent needs, regardless of domain. The framework provides
 | Model transport | `IModelClient` | ✅ |
 | Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
 | Checkpoint / resume | `ICheckpointStore` / `FileCheckpointStore` | ✅ |
-| Human-in-the-loop | `HarnessLoop` + `IHumanChannel` | 🔲 |
 
 Infrastructure projects ship concrete implementations of these seams. They are conveniences — a user could write their own — but they are implementations of harness-level abstractions and belong in this repo.
 
@@ -476,6 +494,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. |
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
+| Human-in-the-loop | `IHumanChannel` → `AskHumanTool` | The harness provides the seam and a `ConsoleHumanChannel` for development. How a question is surfaced — stdin, Slack, webhook, queue — is a system design decision the harness cannot make. See the FAQ. |
 
 ---
 
@@ -499,15 +518,15 @@ More importantly, pulling them into the explicit sequential path would require t
 
 The asymmetry is intentional: budget enforcer → first-class because it is an unconditional framework guarantee with a fixed shape; cost throttle / rate limit → sensors because they are optional, per-agent policies that vary in threshold, number, and kind.
 
-### Why doesn't the harness implement human-in-the-loop?
+### Why is human-in-the-loop a user concern rather than a harness concern?
 
 Because HITL is a **system design concern**, not a **model control concern** — and the harness only owns the latter.
 
 The harness controls the model: it shapes what the model perceives (guides), observes and constrains what it does (sensors), enforces resource limits (budget), and records everything (trajectory). That is its complete job.
 
-HITL is about what happens *outside* the model loop: how a question is surfaced to a human, over what channel, how long you wait, and how the response is routed back. That is entirely dependent on the surrounding system — a CLI tool, a Slack bot, a web app, and an async queue-based pipeline all have fundamentally different answers. The harness cannot make that decision without becoming an application framework.
+HITL is about what happens *outside* the model loop: how a question is surfaced to a human, over what channel, how long you wait, and how the response is routed back. A CLI tool, a Slack bot, a web app, and an async queue-based pipeline all have fundamentally different answers. The harness cannot make that decision without becoming an application framework.
 
-The right boundary: the harness provides an `AskHumanTool` backed by an `IHumanChannel` seam. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is the user's implementation. The harness ships a `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
+The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is entirely the user's implementation. The harness ships `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
 
 ---
 

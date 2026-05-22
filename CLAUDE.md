@@ -99,4 +99,4 @@ Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelCl
 
 ## Roadmap status
 
-See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, Anthropic adapter, MCP adapter, Ollama adapter, DI composition, context management (memory + tool selection), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: additional model providers (OpenAI etc.), human-in-the-loop.
+See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, `AskHumanTool` + `IHumanChannel` (HITL seam), Anthropic adapter, MCP adapter, Ollama adapter, DI composition, context management (memory + tool selection), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: additional model providers (OpenAI etc.).

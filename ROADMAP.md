@@ -59,7 +59,11 @@ where the implementation would live.
 - [x] At-least-once resume semantics — pass a loaded checkpoint's state (with `Status = Running`) back to `HarnessLoop.RunAsync`
 
 ### Human-in-the-loop
-- [ ] `AgentStatus.AwaitingHuman` — status value is reserved; loop has no mechanism to pause, surface a question, and resume; requires a suspend/resume protocol and a delivery channel (webhook, queue, etc.)
+- [x] `IHumanChannel` — seam in `Framework.Tools`; one method: `AskAsync(question, ct) → string`
+- [x] `AskHumanTool` — standard `ITool` the model invokes when it needs human input; delegates to `IHumanChannel`
+- [x] `ConsoleHumanChannel` — development-time implementation that blocks on stdin; replace with a channel suited to the deployment environment
+- [x] `AddAskHumanTool<TChannel>()` / factory overload DI extension in `Infrastructure`
+- [x] Decision: HITL is a **system design concern**, not a harness concern — the harness provides the seam (`IHumanChannel`) and signals intent (`AskHumanTool`); how a human is reached is entirely the user's implementation
 
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
