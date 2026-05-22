@@ -8,8 +8,9 @@ architecture.
 > turns it into an agent. Calling it an "agent harness" would imply the harness
 > *is* the agent; "model harness" names what it actually is.
 
-The `SampleAgent` wires up `ClaudeModelClient` against the real Anthropic API.
-A `FakeModelClient` is also provided for local development without an API key.
+The `SampleAgent` wires up `ClaudeModelClient` against the Anthropic API and
+`OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
+provided for local development with no external dependencies.
 
 ## Run it
 
@@ -23,6 +24,16 @@ Add your Anthropic API key to `src/SapphireGuard.ModelHarness.SampleAgent/appset
 }
 ```
 
+To also run the Ollama scenario, add the Ollama model you want to use (the model
+must be pulled locally with `ollama pull <model>`):
+
+```json
+{
+  "Anthropic": { "ApiKey": "sk-ant-..." },
+  "Ollama": { "ModelId": "qwen2.5:7b" }
+}
+```
+
 Then run:
 
 ```bash
@@ -30,7 +41,11 @@ dotnet run --project src/SapphireGuard.ModelHarness.SampleAgent
 ```
 
 JSON trace events stream to stdout, followed by the final outcome and a
-flattened trajectory.
+flattened trajectory. To run a single scenario by name:
+
+```bash
+dotnet run --project src/SapphireGuard.ModelHarness.SampleAgent -- ollama-tool-call
+```
 
 ---
 
@@ -375,6 +390,14 @@ Implement it, translate `ToolDefinition.InputSchema` (`JsonElement`) into your
 provider's tool-def format, and replace the registration:
 
 ```csharp
+// Anthropic
+services.AddModelClient(_ => new PollyResilientModelClient(
+    new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" })));
+
+// Ollama (local)
+services.AddOllamaModelClient(new OllamaClientOptions { ModelId = "qwen2.5:7b" });
+
+// Custom
 services.AddModelClient(_ => new PollyResilientModelClient(new MyProviderClient(apiKey)));
 ```
 
@@ -478,7 +501,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Capability | Seam | Notes |
 | ---------- | ---- | ----- |
 | Human-in-the-loop | `HarnessLoop` + new `IHumanChannel` | `AgentStatus.AwaitingHuman` is reserved; no suspend/resume protocol yet. |
-| Additional model providers | `IModelClient` | Only Anthropic is implemented. OpenAI, Azure OpenAI, Gemini, Ollama are natural targets; one new project per provider. |
+| Additional model providers | `IModelClient` | Anthropic and Ollama are implemented. OpenAI, Azure OpenAI, and Gemini are natural next targets; one new project per provider. |
 
 ---
 
