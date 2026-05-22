@@ -4,6 +4,7 @@ using ModelHarness.Framework.Loop;
 using ModelHarness.Framework.Sensors;
 using ModelHarness.Framework.State;
 using ModelHarness.Framework.Tools;
+using ModelHarness.Framework.Model;
 using ModelHarness.Infrastructure.Anthropic.Model;
 using ModelHarness.Infrastructure.Model;
 using ModelHarness.Infrastructure.Tools;
@@ -39,13 +40,18 @@ services
     .AddModelHarness(SystemPrompt)
     .AddTracer<ConsoleTracer>()
     .AddToolRegistry<InMemoryToolRegistry>()
-    .AddModelClient(_ => usingRealModel
-        ? new ClaudeModelClient(new ClaudeClientOptions
-        {
-            ApiKey = apiKey!,
-            ModelId = config["Anthropic:ModelId"] ?? "claude-sonnet-4-5-20251001"
-        })
-        : new PollyResilientModelClient(new FakeModelClient()));
+    .AddModelClient(_ =>
+    {
+        IModelClient inner = usingRealModel
+            ? new ClaudeModelClient(new ClaudeClientOptions
+            {
+                ApiKey = apiKey!,
+                ModelId = config["Anthropic:ModelId"] ?? "claude-sonnet-4-5-20251001"
+            })
+            : new FakeModelClient();
+
+        return new PollyResilientModelClient(inner);
+    });
 
 services.AddSingleton<ITool, EchoTool>();
 services.AddSingleton<ITool, CalculatorTool>();
