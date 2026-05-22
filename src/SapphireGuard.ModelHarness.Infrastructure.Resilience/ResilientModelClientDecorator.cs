@@ -1,20 +1,13 @@
-using SapphireGuard.ModelHarness.Framework.Model;
-using SapphireGuard.ModelHarness.Framework.State;
-using SapphireGuard.ModelHarness.Framework.Tools;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
+using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Framework.Tools;
 
-namespace SapphireGuard.ModelHarness.Infrastructure.Model;
+namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 
-/// <summary>
-/// Decorates an <see cref="IModelClient"/> with retry + circuit-breaker via
-/// Polly v8 resilience pipelines. Lives in Infrastructure so the Framework
-/// stays free of Polly.
-/// </summary>
-public sealed class PollyResilientModelClient(
-    IModelClient inner
-) : IModelClient
+public sealed class ResilientModelClientDecorator(IModelClient inner) : IModelClient
 {
     private readonly ResiliencePipeline<ModelResponse> _pipeline = new ResiliencePipelineBuilder<ModelResponse>()
         .AddRetry(new RetryStrategyOptions<ModelResponse>
@@ -34,16 +27,12 @@ public sealed class PollyResilientModelClient(
         })
         .Build();
 
-    public async Task<ModelResponse> CallAsync(
+    public Task<ModelResponse> CallAsync(
         IReadOnlyList<Message> messages,
         IReadOnlyList<ToolDefinition> availableTools,
-        CancellationToken ct)
-    {
-        var state = (Client: inner, Messages: messages, Tools: availableTools);
-
-        return await _pipeline.ExecuteAsync(
+        CancellationToken ct) =>
+        _pipeline.ExecuteAsync(
             static async (s, token) => await s.Client.CallAsync(s.Messages, s.Tools, token),
-            state,
-            ct);
-    }
+            (Client: inner, Messages: messages, Tools: availableTools),
+            ct).AsTask();
 }

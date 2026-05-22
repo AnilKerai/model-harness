@@ -3,9 +3,9 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
+using SapphireGuard.ModelHarness.Infrastructure.Resilience;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
-using SapphireGuard.ModelHarness.Framework.Tracing;
 using SapphireGuard.ModelHarness.SampleAgent.Scenarios;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,7 +38,7 @@ void ConfigureBase(IServiceCollection services)
         .AddToolRegistry<InMemoryToolRegistry>();
 
     if (usingRealModel)
-        services.AddModelClient(_ => new PollyResilientModelClient(
+        services.AddModelClient(_ => new ResilientModelClientDecorator(
             new ClaudeModelClient(new ClaudeClientOptions
             {
                 ApiKey = apiKey!,

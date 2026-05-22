@@ -6,6 +6,7 @@
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Infrastructure.Anthropic\SapphireGuard.ModelHarness.Infrastructure.Anthropic.csproj" />
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Infrastructure.Persistence\SapphireGuard.ModelHarness.Infrastructure.Persistence.csproj" />
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Infrastructure.Ollama\SapphireGuard.ModelHarness.Infrastructure.Ollama.csproj" />
+    <ProjectReference Include="..\SapphireGuard.ModelHarness.Infrastructure.Resilience\SapphireGuard.ModelHarness.Infrastructure.Resilience.csproj" />
   </ItemGroup>
 
   <ItemGroup>

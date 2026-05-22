@@ -4,6 +4,10 @@
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Framework\SapphireGuard.ModelHarness.Framework.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Polly" Version="8.6.6" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

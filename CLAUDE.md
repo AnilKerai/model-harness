@@ -23,14 +23,15 @@ Add an API key first:
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete adapters: `FakeModelClient`, `PollyResilientModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel` |
+| `Infrastructure` | Concrete adapters: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Depends on Framework only |
+| `Infrastructure.Resilience` | `ResilientModelClientDecorator` — wraps any `IModelClient` with Polly retry + circuit breaker. Depends on Framework + Polly v8 |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |
 | `Infrastructure.Persistence` | Checkpoint/resume (`FileCheckpointStore`, `StepJsonConverter`). Depends on Framework only |
 | `Infrastructure.Ollama` | Ollama adapter (`OllamaModelClient`) via OllamaSharp v5. Depends on Framework only |
 | `SampleAgent` | Composition root — shows how to wire everything via DI |
 
-Dependency direction is strict and unidirectional: SampleAgent → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp / Infrastructure.Ollama → Framework.
+Dependency direction is strict and unidirectional: SampleAgent → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp / Infrastructure.Ollama / Infrastructure.Resilience → Framework.
 
 ## Core patterns
 

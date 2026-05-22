@@ -59,13 +59,13 @@ Seven projects with a strict dependency direction:
   guides, and `IServiceCollection` extension methods. Only external dependency
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
 - **`SapphireGuard.ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
-  `PollyResilientModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`,
-  `InMemoryToolRegistry`, `EchoTool`, `CalculatorTool`. Production sensors: `PiiRedactionSensor`
+  `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`,
+  `EchoTool`, `CalculatorTool`. Production sensors: `PiiRedactionSensor`
   (PostModelCall, scans for email/phone/card/NI/SSN patterns), `CostThrottleSensor`
   (PreModelCall, soft spend cap), `ToolResultSanityCheckSensor` (PostToolCall, validates
   result shape and custom per-tool rules), `StuckDetector` (PreToolCall, blocks repeated
   identical tool calls). Harness tools: `AskHumanTool` backed by `IHumanChannel`;
-  `ConsoleHumanChannel` for development. Depends on Framework + Polly v8.
+  `ConsoleHumanChannel` for development. Depends on Framework only.
 - **`SapphireGuard.ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
   `ClaudeModelClient` maps framework messages and tool definitions to the
   Anthropic Messages API and back. Depends on Framework only.
@@ -77,6 +77,9 @@ Seven projects with a strict dependency direction:
   `{dir}/{taskId}/{timestamp}_{id}.json`. A custom `StepJsonConverter` handles the polymorphic
   `Step` hierarchy without annotating the domain model. Wire up with
   `services.AddFileCheckpointStore(directory)`. Depends on Framework only.
+- **`SapphireGuard.ModelHarness.Infrastructure.Resilience`** — `ResilientModelClientDecorator`:
+  wraps any `IModelClient` with Polly retry (exponential back-off, 3 attempts) and circuit
+  breaker (50% failure ratio, 15 s break). Depends on Framework + Polly v8.
 - **`SapphireGuard.ModelHarness.Infrastructure.Ollama`** — Ollama adapter:
   `OllamaModelClient` maps framework messages and tool definitions to the OllamaSharp API.
   Handles Ollama's requirement that all tool calls from one model turn be grouped into a single
@@ -388,8 +391,8 @@ Implement it, translate `ToolDefinition.InputSchema` (`JsonElement`) into your
 provider's tool-def format, and replace the registration:
 
 ```csharp
-// Anthropic (wrap with Polly for retry + circuit-breaking in production)
-services.AddModelClient(_ => new PollyResilientModelClient(
+// Anthropic (wrap with resilience decorator for retry + circuit-breaking in production)
+services.AddModelClient(_ => new ResilientModelClientDecorator(
     new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" })));
 
 // Anthropic (simple — no resilience decorator)
@@ -410,9 +413,9 @@ the **decorator pattern**: a class that implements an interface by delegating to
 another implementation of the same interface, adding behaviour around it.
 
 ```
-PollyResilientModelClient   ← adds retry + circuit breaker
+ResilientModelClientDecorator   ← adds retry + circuit breaker
         │
-        └─▶ ClaudeModelClient       ← does the actual Anthropic API call
+        └─▶ ClaudeModelClient           ← does the actual Anthropic API call
                  (or FakeModelClient, or any other IModelClient)
 ```
 

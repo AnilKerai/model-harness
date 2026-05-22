@@ -38,7 +38,7 @@ where the implementation would live.
 
 ### Infrastructure
 - [x] `FakeModelClient` — scripted responses for local development without an API key
-- [x] `PollyResilientModelClient` — retry (exponential back-off) + circuit breaker decorator
+- [x] `ResilientModelClientDecorator` — wraps any `IModelClient` with Polly retry (exponential back-off) + circuit breaker; lives in `Infrastructure.Resilience` so the Polly dependency is isolated
 - [x] `ConsoleTracer` — streams JSON trace events to stdout
 - [x] `OpenTelemetryTracer` — emits spans via `ActivitySource` and metrics via `Meter`; no OTel SDK dependency
 - [x] `CompositeTracer` — fans out to multiple `ITracer` instances simultaneously

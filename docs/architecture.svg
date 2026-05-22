@@ -1,65 +1,72 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 415" width="1120" height="415">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 415" width="1280" height="415">
   <defs>
     <marker id="arr" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
       <polygon points="0 0, 10 3.5, 0 7" fill="#5c7a99"/>
     </marker>
   </defs>
 
-  <rect width="1120" height="415" fill="white"/>
+  <rect width="1280" height="415" fill="white"/>
 
   <!-- SA → FW routed around left side (drawn first so nodes render on top) -->
-  <path d="M 435,58 C 30,58 30,330 455,330"
+  <path d="M 515,58 C 30,58 30,330 535,330"
         stroke="#5c7a99" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
 
   <!-- SA → infrastructure nodes -->
-  <line x1="560" y1="85" x2="154" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="560" y1="85" x2="356" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="560" y1="85" x2="560" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="560" y1="85" x2="764" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="560" y1="85" x2="968" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="640" y1="85" x2="163" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="640" y1="85" x2="354" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="640" y1="85" x2="545" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="640" y1="85" x2="736" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="640" y1="85" x2="927" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="640" y1="85" x2="1118" y2="158" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- infrastructure nodes → FW -->
-  <line x1="154" y1="212" x2="488" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="356" y1="212" x2="510" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="560" y1="212" x2="537" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="764" y1="212" x2="593" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
-  <line x1="968" y1="212" x2="638" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="163"  y1="212" x2="570" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="354"  y1="212" x2="588" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="545"  y1="212" x2="606" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="736"  y1="212" x2="660" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="927"  y1="212" x2="690" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="1118" y1="212" x2="712" y2="303" stroke="#5c7a99" stroke-width="1.5" marker-end="url(#arr)"/>
 
   <!-- SA node -->
-  <rect x="435" y="31" width="250" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
-  <text x="560" y="52" text-anchor="middle" font-family="monospace" font-size="11" font-weight="bold" fill="#1a2744">SampleAgent</text>
-  <text x="560" y="69" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#5c6b7a">composition root · DI</text>
+  <rect x="515" y="31" width="250" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
+  <text x="640" y="52" text-anchor="middle" font-family="monospace" font-size="11" font-weight="bold" fill="#1a2744">SampleAgent</text>
+  <text x="640" y="69" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#5c6b7a">composition root · DI</text>
 
   <!-- Infrastructure -->
-  <rect x="57"  y="158" width="190" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
-  <text x="152" y="179" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="#1a2744">Infrastructure</text>
-  <text x="152" y="196" text-anchor="middle" font-family="sans-serif" font-size="8.5" fill="#5c6b7a">FakeModelClient · Polly · sensors · tools</text>
+  <rect x="75"  y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
+  <text x="163" y="179" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="#1a2744">Infrastructure</text>
+  <text x="163" y="196" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#5c6b7a">sensors · tools · tracers</text>
 
   <!-- Infrastructure.Anthropic -->
-  <rect x="261" y="158" width="190" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
-  <text x="356" y="179" text-anchor="middle" font-family="monospace" font-size="9.5" font-weight="bold" fill="#1a2744">Infrastructure.Anthropic</text>
-  <text x="356" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">ClaudeModelClient</text>
+  <rect x="266" y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
+  <text x="354" y="179" text-anchor="middle" font-family="monospace" font-size="9.5" font-weight="bold" fill="#1a2744">Infrastructure.Anthropic</text>
+  <text x="354" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">ClaudeModelClient</text>
 
   <!-- Infrastructure.Mcp -->
-  <rect x="465" y="158" width="190" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
-  <text x="560" y="179" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="#1a2744">Infrastructure.Mcp</text>
-  <text x="560" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">McpTool · McpToolFactory</text>
+  <rect x="457" y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
+  <text x="545" y="179" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="#1a2744">Infrastructure.Mcp</text>
+  <text x="545" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">McpTool · McpToolFactory</text>
 
   <!-- Infrastructure.Persistence -->
-  <rect x="669" y="158" width="190" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
-  <text x="764" y="179" text-anchor="middle" font-family="monospace" font-size="9.5" font-weight="bold" fill="#1a2744">Infrastructure.Persistence</text>
-  <text x="764" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">FileCheckpointStore</text>
+  <rect x="648" y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
+  <text x="736" y="179" text-anchor="middle" font-family="monospace" font-size="9.5" font-weight="bold" fill="#1a2744">Infrastructure.Persistence</text>
+  <text x="736" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">FileCheckpointStore</text>
 
   <!-- Infrastructure.Ollama -->
-  <rect x="873" y="158" width="190" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
-  <text x="968" y="179" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="#1a2744">Infrastructure.Ollama</text>
-  <text x="968" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">OllamaModelClient</text>
+  <rect x="839" y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
+  <text x="927" y="179" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="#1a2744">Infrastructure.Ollama</text>
+  <text x="927" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">OllamaModelClient</text>
+
+  <!-- Infrastructure.Resilience -->
+  <rect x="1030" y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
+  <text x="1118" y="179" text-anchor="middle" font-family="monospace" font-size="9.5" font-weight="bold" fill="#1a2744">Infrastructure.Resilience</text>
+  <text x="1118" y="196" text-anchor="middle" font-family="sans-serif" font-size="8.5" fill="#5c6b7a">ResilientModelClientDecorator</text>
 
   <!-- Framework (visually distinct — darker border) -->
-  <rect x="455" y="303" width="210" height="54" rx="8" fill="#dde8f2" stroke="#5c7a99" stroke-width="2"/>
-  <text x="560" y="324" text-anchor="middle" font-family="monospace" font-size="11" font-weight="bold" fill="#1a2744">Framework</text>
-  <text x="560" y="341" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">abstractions + loop</text>
+  <rect x="535" y="303" width="210" height="54" rx="8" fill="#dde8f2" stroke="#5c7a99" stroke-width="2"/>
+  <text x="640" y="324" text-anchor="middle" font-family="monospace" font-size="11" font-weight="bold" fill="#1a2744">Framework</text>
+  <text x="640" y="341" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">abstractions + loop</text>
 
   <!-- Footer note -->
-  <text x="560" y="398" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#adb5bd">All projects: SapphireGuard.ModelHarness.*  ·  arrows denote compile-time dependency</text>
+  <text x="640" y="398" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#adb5bd">All projects: SapphireGuard.ModelHarness.*  ·  arrows denote compile-time dependency</text>
 </svg>
