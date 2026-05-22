@@ -12,39 +12,32 @@ namespace ModelHarness.Infrastructure.Model;
 /// Polly v8 resilience pipelines. Lives in Infrastructure so the Framework
 /// stays free of Polly.
 /// </summary>
-public sealed class PollyResilientModelClient : IModelClient
+public sealed class PollyResilientModelClient(IModelClient inner) : IModelClient
 {
-    private readonly IModelClient _inner;
-    private readonly ResiliencePipeline<ModelResponse> _pipeline;
-
-    public PollyResilientModelClient(IModelClient inner)
-    {
-        _inner = inner;
-        _pipeline = new ResiliencePipelineBuilder<ModelResponse>()
-            .AddRetry(new RetryStrategyOptions<ModelResponse>
-            {
-                MaxRetryAttempts = 3,
-                BackoffType = DelayBackoffType.Exponential,
-                Delay = TimeSpan.FromMilliseconds(200),
-                ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
-            })
-            .AddCircuitBreaker(new CircuitBreakerStrategyOptions<ModelResponse>
-            {
-                FailureRatio = 0.5,
-                SamplingDuration = TimeSpan.FromSeconds(30),
-                MinimumThroughput = 4,
-                BreakDuration = TimeSpan.FromSeconds(15),
-                ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
-            })
-            .Build();
-    }
+    private readonly ResiliencePipeline<ModelResponse> _pipeline = new ResiliencePipelineBuilder<ModelResponse>()
+        .AddRetry(new RetryStrategyOptions<ModelResponse>
+        {
+            MaxRetryAttempts = 3,
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(200),
+            ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
+        })
+        .AddCircuitBreaker(new CircuitBreakerStrategyOptions<ModelResponse>
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(30),
+            MinimumThroughput = 4,
+            BreakDuration = TimeSpan.FromSeconds(15),
+            ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
+        })
+        .Build();
 
     public async Task<ModelResponse> CallAsync(
         IReadOnlyList<Message> messages,
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct)
     {
-        var state = (Client: _inner, Messages: messages, Tools: availableTools);
+        var state = (Client: inner, Messages: messages, Tools: availableTools);
 
         return await _pipeline.ExecuteAsync(
             static async (s, token) => await s.Client.CallAsync(s.Messages, s.Tools, token),
