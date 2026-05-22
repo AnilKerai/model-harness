@@ -12,7 +12,9 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Model;
 /// Polly v8 resilience pipelines. Lives in Infrastructure so the Framework
 /// stays free of Polly.
 /// </summary>
-public sealed class PollyResilientModelClient(IModelClient inner) : IModelClient
+public sealed class PollyResilientModelClient(
+    IModelClient inner
+) : IModelClient
 {
     private readonly ResiliencePipeline<ModelResponse> _pipeline = new ResiliencePipelineBuilder<ModelResponse>()
         .AddRetry(new RetryStrategyOptions<ModelResponse>
