@@ -1,10 +1,29 @@
-# agent-harness
+# model-harness
 
-A reusable agent harness framework for .NET 10, structured around Clean / Onion
-architecture. The walking skeleton runs end-to-end against a scripted
-`FakeModelClient` — no API keys required.
+A reusable model harness framework for .NET 10, structured around Clean / Onion
+architecture.
+
+> **Why "model harness"?** An *agent* is a model plus a harness — the harness
+> is the scaffolding (loop, guides, sensors, budget) that wraps a model and
+> turns it into an agent. Calling it an "agent harness" would imply the harness
+> *is* the agent; "model harness" names what it actually is.
+
+The `SampleAgent` wires up `ClaudeModelClient` against the real Anthropic API.
+A `FakeModelClient` is also provided for local development without an API key.
 
 ## Run it
+
+Add your Anthropic API key to `src/ModelHarness.SampleAgent/appsettings.local.json`:
+
+```json
+{
+  "Anthropic": {
+    "ApiKey": "sk-ant-..."
+  }
+}
+```
+
+Then run:
 
 ```bash
 dotnet run --project src/ModelHarness.SampleAgent
@@ -17,14 +36,26 @@ flattened trajectory.
 
 ## Architecture
 
-Three projects with a strict dependency direction:
+Four projects with a strict dependency direction:
 
 ```
-┌──────────────────────────┐     ┌───────────────────────────────┐     ┌──────────────────────────┐
-│  ModelHarness.SampleAgent │────▶│  ModelHarness.Infrastructure  │────▶│  ModelHarness.Framework  │
-│   (composition root, DI)  │     │   (concrete adapters, Polly)  │     │  (abstractions + loop)   │
-│                           │─────────────────────────────────────────▶│                          │
-└──────────────────────────┘     └───────────────────────────────┘     └──────────────────────────┘
+┌────────────────────────────┐
+│  ModelHarness.SampleAgent  │──────────────────────────────────────────────────────┐
+│  (composition root, DI)    │──────────────────────────────────┐                   │
+└────────────────────────────┘                                  │                   │
+           │                                                    ▼                   │
+           │                              ┌──────────────────────────────────────┐  │
+           │                              │  ModelHarness.Infrastructure         │  │
+           │                              │  (FakeModelClient, Polly decorator,  │  │
+           │                              │   ConsoleTracer, tools)              │  │
+           │                              └──────────────────────────────────────┘  │
+           │                                                    │                   │
+           ▼                                                    ▼                   ▼
+┌─────────────────────────────────────┐     ┌───────────────────────────────────────┐
+│  ModelHarness.Infrastructure        │     │  ModelHarness.Framework               │
+│  .Anthropic                         │────▶│  (abstractions + loop)                │
+│  (ClaudeModelClient, SDK adapter)   │     └───────────────────────────────────────┘
+└─────────────────────────────────────┘
 ```
 
 - **`ModelHarness.Framework`** — abstractions, the core loop, four built-in
@@ -33,6 +64,9 @@ Three projects with a strict dependency direction:
 - **`ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
   `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry`,
   `EchoTool`, `CalculatorTool`. Depends on Framework + Polly v8.
+- **`ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
+  `ClaudeModelClient` maps framework messages and tool definitions to the
+  Anthropic Messages API and back. Depends on Framework only.
 - **`ModelHarness.SampleAgent`** — console app showing how a domain agent wires
   the framework via `Microsoft.Extensions.DependencyInjection`.
 
