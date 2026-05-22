@@ -3,7 +3,7 @@ using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.State;
-using SapphireGuard.ModelHarness.Infrastructure.Output;
+
 using SapphireGuard.ModelHarness.Infrastructure.Persistence;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 

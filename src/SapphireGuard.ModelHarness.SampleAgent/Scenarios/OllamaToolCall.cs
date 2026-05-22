@@ -5,7 +5,7 @@ using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Infrastructure.Ollama;
 using SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 using SapphireGuard.ModelHarness.Framework.Sensors;
-using SapphireGuard.ModelHarness.Infrastructure.Output;
+
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 
 namespace SapphireGuard.ModelHarness.SampleAgent.Scenarios;

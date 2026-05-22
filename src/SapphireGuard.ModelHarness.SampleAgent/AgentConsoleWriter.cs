@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using SapphireGuard.ModelHarness.Framework.State;
 
-namespace SapphireGuard.ModelHarness.Infrastructure.Output;
+namespace SapphireGuard.ModelHarness.SampleAgent;
 
 [ExcludeFromCodeCoverage]
 public static class AgentConsoleWriter
