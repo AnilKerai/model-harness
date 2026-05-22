@@ -5,6 +5,7 @@
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure/SapphireGuard.ModelHarness.Infrastructure.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Mcp/SapphireGuard.ModelHarness.Infrastructure.Mcp.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Persistence/SapphireGuard.ModelHarness.Infrastructure.Persistence.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Ollama/SapphireGuard.ModelHarness.Infrastructure.Ollama.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.SampleAgent/SapphireGuard.ModelHarness.SampleAgent.csproj" />
   </Folder>
   <Folder Name="/tests/">

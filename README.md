@@ -45,17 +45,20 @@ flowchart TD
     ANT["**SapphireGuard.ModelHarness.Infrastructure.Anthropic**\nClaudeModelClient, SDK adapter"]
     MCP["**SapphireGuard.ModelHarness.Infrastructure.Mcp**\nMcpTool, McpToolFactory"]
     PER["**SapphireGuard.ModelHarness.Infrastructure.Persistence**\nFileCheckpointStore, StepJsonConverter"]
+    OLL["**SapphireGuard.ModelHarness.Infrastructure.Ollama**\nOllamaModelClient, OllamaSharp adapter"]
     FW["**SapphireGuard.ModelHarness.Framework**\nabstractions + loop"]
 
     SA --> INF
     SA --> ANT
     SA --> MCP
     SA --> PER
+    SA --> OLL
     SA --> FW
     INF --> FW
     ANT --> FW
     MCP --> FW
     PER --> FW
+    OLL --> FW
 ```
 
 - **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, five built-in
@@ -79,6 +82,12 @@ flowchart TD
   `{dir}/{taskId}/{timestamp}_{id}.json`. A custom `StepJsonConverter` handles the polymorphic
   `Step` hierarchy without annotating the domain model. Wire up with
   `services.AddFileCheckpointStore(directory)`. Depends on Framework only.
+- **`SapphireGuard.ModelHarness.Infrastructure.Ollama`** — Ollama adapter:
+  `OllamaModelClient` maps framework messages and tool definitions to the OllamaSharp API.
+  Handles Ollama's requirement that all tool calls from one model turn be grouped into a single
+  assistant message, whereas the framework's trajectory emits them as interleaved
+  `ToolUse`/`Tool` pairs. Wire up with `services.AddOllamaModelClient(options)`. Depends on
+  Framework only.
 - **`SapphireGuard.ModelHarness.SampleAgent`** — console app showing how a domain agent wires
   the framework via `Microsoft.Extensions.DependencyInjection`.
 

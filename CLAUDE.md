@@ -27,9 +27,10 @@ Add an API key first:
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |
 | `Infrastructure.Persistence` | Checkpoint/resume (`FileCheckpointStore`, `StepJsonConverter`). Depends on Framework only |
+| `Infrastructure.Ollama` | Ollama adapter (`OllamaModelClient`) via OllamaSharp v5. Depends on Framework only |
 | `SampleAgent` | Composition root — shows how to wire everything via DI |
 
-Dependency direction is strict and unidirectional: SampleAgent → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp → Framework.
+Dependency direction is strict and unidirectional: SampleAgent → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp / Infrastructure.Ollama → Framework.
 
 ## Core patterns
 
@@ -98,4 +99,4 @@ Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelCl
 
 ## Roadmap status
 
-See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, Anthropic adapter, MCP adapter, DI composition, context management (memory + tool selection), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: additional model providers (OpenAI etc.), human-in-the-loop.
+See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, Anthropic adapter, MCP adapter, Ollama adapter, DI composition, context management (memory + tool selection), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: additional model providers (OpenAI etc.), human-in-the-loop.

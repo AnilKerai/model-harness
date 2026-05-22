@@ -76,8 +76,11 @@ where the implementation would live.
   (all tools, unchanged). Replace with a relevance-ranking implementation.
 
 ### Model providers
-- [ ] **Additional model provider adapters** — only Anthropic is implemented. OpenAI, Azure OpenAI,
-  Google Gemini, and local models (Ollama) are natural next targets.
+- [x] **Ollama adapter** — `OllamaModelClient` via OllamaSharp v5; handles Ollama's tool call
+  grouping requirement (all calls from one model turn in a single assistant message) with a
+  stateful flush pass over the trajectory. Cost is always zero (local inference).
+  _Lives in `SapphireGuard.ModelHarness.Infrastructure.Ollama`._
+- [ ] **Additional model provider adapters** — OpenAI, Azure OpenAI, Google Gemini.
   _Seam: `IModelClient`; new project per provider (e.g. `SapphireGuard.ModelHarness.Infrastructure.OpenAI`)._
 
 ### Human-in-the-loop

@@ -3,6 +3,7 @@ using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
+using SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
 using SapphireGuard.ModelHarness.Framework.Tracing;
@@ -52,6 +53,20 @@ void ConfigureBase(IServiceCollection services)
     services.AddSingleton<ITool, CalculatorTool>();
 }
 
+// ── Build scenario list (core + optional Ollama) ─────────────────────────────
+
+var allScenarios = new List<Scenario>(ScenarioLibrary.All);
+
+var ollamaModelId = config["Ollama:ModelId"];
+if (!string.IsNullOrWhiteSpace(ollamaModelId))
+{
+    allScenarios.Add(ScenarioLibrary.BuildOllamaScenario(new OllamaClientOptions
+    {
+        BaseUrl = config["Ollama:BaseUrl"] ?? "http://localhost:11434",
+        ModelId = ollamaModelId
+    }));
+}
+
 // ── Run all scenarios ─────────────────────────────────────────────────────────
 
 var runner = new ScenarioRunner(SystemPrompt, ConfigureBase);
@@ -61,12 +76,12 @@ using var cts = new CancellationTokenSource();
 //   dotnet run --project ... -- pii-detection
 var filter = args.Length > 0 ? args[0] : null;
 var scenarios = filter is null
-    ? ScenarioLibrary.All
-    : ScenarioLibrary.All.Where(s => s.Name == filter).ToList();
+    ? allScenarios
+    : allScenarios.Where(s => s.Name == filter).ToList();
 
 if (scenarios.Count == 0)
 {
-    Console.WriteLine($"No scenario named '{filter}'. Available: {string.Join(", ", ScenarioLibrary.All.Select(s => s.Name))}");
+    Console.WriteLine($"No scenario named '{filter}'. Available: {string.Join(", ", allScenarios.Select(s => s.Name))}");
     return;
 }
 

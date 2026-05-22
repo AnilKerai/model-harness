@@ -4,6 +4,8 @@ using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Infrastructure.Ollama;
+using SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Persistence;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.SampleAgent.Sensors;
@@ -84,6 +86,18 @@ public static class ScenarioLibrary
         // ── 6. Checkpoint / resume ────────────────────────────────────────────
         BuildCheckpointResumeScenario(),
     ];
+
+    public static Scenario BuildOllamaScenario(OllamaClientOptions options) =>
+        new(
+            Name: "ollama-tool-call",
+            Description: "Runs a tool-calling task through a local Ollama model. " +
+                         "Demonstrates ToolUse/Tool message grouping for Ollama's single-assistant-message format.",
+            TaskText: "What is 56 multiplied by 13?",
+            ConfigureSensors: services =>
+            {
+                services.AddOllamaModelClient(options);
+                services.AddSingleton<ISensor, StuckDetector>();
+            });
 
     private static Scenario BuildCheckpointResumeScenario()
     {
