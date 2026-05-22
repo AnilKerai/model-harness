@@ -76,6 +76,8 @@ flowchart TD
     OLL --> FW
 ```
 
+![Architecture](architecture.svg)
+
 - **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, five built-in
   guides, and `IServiceCollection` extension methods. Only external dependency
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
