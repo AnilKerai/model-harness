@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.State;
@@ -14,6 +15,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Model;
 ///   <item>Subsequent turns: return a terminal apology — keeps the loop bounded if mis-driven.</item>
 /// </list>
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class FakeModelClient : IModelClient
 {
     private int _turn;

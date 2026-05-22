@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
@@ -9,6 +10,7 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// that ranks by relevance, applies policy, or limits tool count; the default is
 /// <see cref="PassthroughToolSelector"/> (all tools, unchanged).
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class ToolSelectorGuide(IToolSelector selector) : IGuide
 {
     public string Name => "tool-selector";

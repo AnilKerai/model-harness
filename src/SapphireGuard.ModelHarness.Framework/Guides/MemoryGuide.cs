@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.Memory;
 using SapphireGuard.ModelHarness.Framework.State;
 
@@ -9,6 +10,7 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// Replace <see cref="IMemoryStore"/> with a vector store, knowledge graph, or any
 /// retrieval system; the default is <see cref="NullMemoryStore"/> (no-op).
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class MemoryGuide(IMemoryStore store, int maxSnippets = 5) : IGuide
 {
     public string Name => "memory";

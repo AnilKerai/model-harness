@@ -1,7 +1,7 @@
 using SapphireGuard.ModelHarness.Framework.State;
 using BudgetNs = SapphireGuard.ModelHarness.Framework.Budget;
 
-namespace SapphireGuard.ModelHarness.Framework.Tests.Fakes;
+namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 
 public sealed class AlwaysOkBudgetEnforcer : BudgetNs.IBudgetEnforcer
 {

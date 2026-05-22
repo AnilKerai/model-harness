@@ -1,7 +1,7 @@
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 
-namespace SapphireGuard.ModelHarness.Framework.Tests.Fakes;
+namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 
 /// <summary>Blocks N times then passes on all subsequent checks.</summary>
 public sealed class CountdownSensor : ISensor

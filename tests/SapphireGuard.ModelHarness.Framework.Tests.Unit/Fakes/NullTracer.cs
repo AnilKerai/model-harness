@@ -3,7 +3,7 @@ using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Framework.Tracing;
 
-namespace SapphireGuard.ModelHarness.Framework.Tests.Fakes;
+namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 
 public sealed class NullTracer : ITracer
 {

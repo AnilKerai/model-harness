@@ -1,6 +1,6 @@
 using SapphireGuard.ModelHarness.Framework.Tools;
 
-namespace SapphireGuard.ModelHarness.Framework.Tests.Fakes;
+namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 
 public sealed class StubToolRegistry : IToolRegistry
 {

@@ -3,11 +3,11 @@ using SapphireGuard.ModelHarness.Framework.Loop;
 using BudgetNs = SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
-using SapphireGuard.ModelHarness.Framework.Tests.Fakes;
+using SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using Xunit;
 
-namespace SapphireGuard.ModelHarness.Framework.Tests.Loop;
+namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Loop;
 
 public sealed class HarnessLoopTests
 {

@@ -7,7 +7,7 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 using Xunit;
 using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
 
-namespace SapphireGuard.ModelHarness.Framework.Tests.Guides;
+namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Guides;
 
 public sealed class TrajectoryGuideTests
 {

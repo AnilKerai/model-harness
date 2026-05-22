@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.Framework.Tools;
@@ -6,6 +7,7 @@ namespace SapphireGuard.ModelHarness.Framework.Tools;
 /// Returns all tools unchanged. Replace with an <see cref="IToolSelector"/>
 /// implementation that filters or reranks based on task context.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class PassthroughToolSelector : IToolSelector
 {
     public Task<IReadOnlyList<ITool>> SelectAsync(IReadOnlyList<ITool> tools, AgentState state, CancellationToken ct) =>

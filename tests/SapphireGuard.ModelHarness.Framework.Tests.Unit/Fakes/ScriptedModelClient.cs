@@ -2,7 +2,7 @@ using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
-namespace SapphireGuard.ModelHarness.Framework.Tests.Fakes;
+namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 
 /// <summary>
 /// Returns pre-canned responses in order. Throws if the caller asks for more

@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 
 /// <summary>Returns the supplied <c>text</c> argument unchanged.</summary>
+[ExcludeFromCodeCoverage]
 public sealed class EchoTool : ITool
 {
     private static readonly JsonElement Schema = JsonDocument.Parse(

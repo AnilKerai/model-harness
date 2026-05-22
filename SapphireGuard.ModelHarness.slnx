@@ -6,6 +6,6 @@
     <Project Path="src/SapphireGuard.ModelHarness.SampleAgent/SapphireGuard.ModelHarness.SampleAgent.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/SapphireGuard.ModelHarness.Framework.Tests/SapphireGuard.ModelHarness.Framework.Tests.csproj" />
+    <Project Path="tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/SapphireGuard.ModelHarness.Framework.Tests.Unit.csproj" />
   </Folder>
 </Solution>

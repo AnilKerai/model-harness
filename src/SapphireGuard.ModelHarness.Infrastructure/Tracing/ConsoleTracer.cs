@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
@@ -7,6 +8,7 @@ using SapphireGuard.ModelHarness.Framework.Tracing;
 namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 
 /// <summary>Writes one JSON line per event to stdout. Cheap, structured, greppable.</summary>
+[ExcludeFromCodeCoverage]
 public sealed class ConsoleTracer : ITracer
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = false };
