@@ -38,24 +38,18 @@ flattened trajectory.
 
 Four projects with a strict dependency direction:
 
-```
-┌────────────────────────────┐
-│  SapphireGuard.ModelHarness.SampleAgent  │──────────────────────────────────────────────────────┐
-│  (composition root, DI)    │──────────────────────────────────┐                   │
-└────────────────────────────┘                                  │                   │
-           │                                                    ▼                   │
-           │                              ┌──────────────────────────────────────┐  │
-           │                              │  SapphireGuard.ModelHarness.Infrastructure         │  │
-           │                              │  (FakeModelClient, Polly decorator,  │  │
-           │                              │   ConsoleTracer, tools)              │  │
-           │                              └──────────────────────────────────────┘  │
-           │                                                    │                   │
-           ▼                                                    ▼                   ▼
-┌─────────────────────────────────────┐     ┌───────────────────────────────────────┐
-│  SapphireGuard.ModelHarness.Infrastructure        │     │  SapphireGuard.ModelHarness.Framework               │
-│  .Anthropic                         │────▶│  (abstractions + loop)                │
-│  (ClaudeModelClient, SDK adapter)   │     └───────────────────────────────────────┘
-└─────────────────────────────────────┘
+```mermaid
+flowchart TD
+    SA["**SapphireGuard.ModelHarness.SampleAgent**\ncomposition root, DI"]
+    INF["**SapphireGuard.ModelHarness.Infrastructure**\nFakeModelClient, Polly decorator, ConsoleTracer, tools"]
+    ANT["**SapphireGuard.ModelHarness.Infrastructure.Anthropic**\nClaudeModelClient, SDK adapter"]
+    FW["**SapphireGuard.ModelHarness.Framework**\nabstractions + loop"]
+
+    SA --> INF
+    SA --> ANT
+    SA --> FW
+    INF --> FW
+    ANT --> FW
 ```
 
 - **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, four built-in
