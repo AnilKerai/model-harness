@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ModelHarness.Framework/ModelHarness.Framework.csproj" />
+    <Project Path="src/ModelHarness.Infrastructure.Anthropic/ModelHarness.Infrastructure.Anthropic.csproj" />
+    <Project Path="src/ModelHarness.Infrastructure/ModelHarness.Infrastructure.csproj" />
+    <Project Path="src/ModelHarness.SampleAgent/ModelHarness.SampleAgent.csproj" />
+  </Folder>
+</Solution>

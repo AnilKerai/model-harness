@@ -7,7 +7,7 @@ architecture. The walking skeleton runs end-to-end against a scripted
 ## Run it
 
 ```bash
-dotnet run --project src/AgentHarness.SampleAgent
+dotnet run --project src/ModelHarness.SampleAgent
 ```
 
 JSON trace events stream to stdout, followed by the final outcome and a
@@ -21,19 +21,19 @@ Three projects with a strict dependency direction:
 
 ```
 ┌──────────────────────────┐     ┌───────────────────────────────┐     ┌──────────────────────────┐
-│  AgentHarness.SampleAgent │────▶│  AgentHarness.Infrastructure  │────▶│  AgentHarness.Framework  │
+│  ModelHarness.SampleAgent │────▶│  ModelHarness.Infrastructure  │────▶│  ModelHarness.Framework  │
 │   (composition root, DI)  │     │   (concrete adapters, Polly)  │     │  (abstractions + loop)   │
 │                           │─────────────────────────────────────────▶│                          │
 └──────────────────────────┘     └───────────────────────────────┘     └──────────────────────────┘
 ```
 
-- **`AgentHarness.Framework`** — abstractions, the core loop, four built-in
+- **`ModelHarness.Framework`** — abstractions, the core loop, four built-in
   guides, and `IServiceCollection` extension methods. Only external dependency
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
-- **`AgentHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
+- **`ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
   `PollyResilientModelClient`, `ConsoleTracer`, `InMemoryToolRegistry`,
   `EchoTool`, `CalculatorTool`. Depends on Framework + Polly v8.
-- **`AgentHarness.SampleAgent`** — console app showing how a domain agent wires
+- **`ModelHarness.SampleAgent`** — console app showing how a domain agent wires
   the framework via `Microsoft.Extensions.DependencyInjection`.
 
 ---
@@ -300,12 +300,12 @@ Two patterns per **single-instance** abstraction:
 `AddSingleton` (not `TryAdd`). Opt-out by not calling the default. Custom guides
 append with `AddGuide<T>()`.
 
-`AddAgentHarness(systemPrompt)` aggregates everything. You still need to register
+`AddModelHarness(systemPrompt)` aggregates everything. You still need to register
 `IModelClient`, `IToolRegistry`, `ITracer`, and your `ITool` / `ISensor` instances.
 
 ```csharp
 services
-    .AddAgentHarness(systemPrompt)
+    .AddModelHarness(systemPrompt)
     .AddTracer<ConsoleTracer>()
     .AddToolRegistry<InMemoryToolRegistry>()
     .AddModelClient(_ => new PollyResilientModelClient(new MyModelClient()));
