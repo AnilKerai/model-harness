@@ -46,11 +46,11 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
             switch (step)
             {
                 case ModelCallStep mc:
-                    // If this response was immediately blocked by a PostModelCall sensor, suppress
-                    // the text — the model must not see its own blocked content on the next turn
-                    // (e.g. PII that was detected and stopped). The SensorInterventionStep that
-                    // follows will tell the model why it was blocked without repeating the content.
-                    if (!string.IsNullOrEmpty(mc.Response.Text) && !IsBlockedAtPostModelCall(trajectory, i))
+                    // If a PostModelCall sensor intervened on this response, suppress the text —
+                    // the model must not see its own flagged content on the next turn (e.g. PII).
+                    // The SensorInterventionStep that follows tells the model why without repeating
+                    // the content.
+                    if (!string.IsNullOrEmpty(mc.Response.Text) && !IsIntervenedAtPostModelCall(trajectory, i))
                         messages.Add(new Message(MessageRole.Assistant, mc.Response.Text));
                     break;
 
@@ -76,7 +76,7 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
 
     // Scans forward from a ModelCallStep to see if it was immediately blocked at PostModelCall.
     // Stops at the first non-intervention step (which would be the next model call or tool call).
-    private static bool IsBlockedAtPostModelCall(IReadOnlyList<Step> trajectory, int modelCallIndex)
+    private static bool IsIntervenedAtPostModelCall(IReadOnlyList<Step> trajectory, int modelCallIndex)
     {
         for (var i = modelCallIndex + 1; i < trajectory.Count; i++)
         {

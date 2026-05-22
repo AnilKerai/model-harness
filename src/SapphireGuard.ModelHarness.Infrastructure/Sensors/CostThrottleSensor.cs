@@ -23,7 +23,7 @@ public sealed class CostThrottleSensor(decimal softLimitUsd) : ISensor
             .Sum(s => s.Cost);
 
         if (spent >= softLimitUsd)
-            return Task.FromResult(SensorResult.Block(
+            return Task.FromResult(SensorResult.Intervene(
                 $"Task spend ${spent:F4} has reached the ${softLimitUsd:F4} soft limit. " +
                 "Produce your final answer now using only what you already know."));
 

@@ -132,7 +132,7 @@ public sealed class HarnessLoopTests
     // ── PreModelCall sensor ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunAsync_PreModelCallBlocked_SkipsModelCallAndLoops()
+    public async Task RunAsync_PreModelCallIntervened_SkipsModelCallAndLoops()
     {
         // Block once — model is not called that turn, intervention recorded,
         // loop goes back and on the second iteration the sensor passes.
@@ -153,7 +153,7 @@ public sealed class HarnessLoopTests
     // ── PostModelCall sensor ──────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunAsync_PostModelCallBlockedOnEndTurn_BlockedResponseNotReturnedAsFinalAnswer()
+    public async Task RunAsync_PostModelCallIntervened_OnEndTurn_IntervenedResponseNotReturnedAsFinalAnswer()
     {
         // The critical PII scenario: first response contains sensitive content
         // and is blocked. The model is given another chance and responds cleanly.
@@ -175,7 +175,7 @@ public sealed class HarnessLoopTests
     }
 
     [Fact]
-    public async Task RunAsync_PostModelCallBlockedOnToolUse_ToolCallsNotDispatched()
+    public async Task RunAsync_PostModelCallIntervened_OnToolUse_ToolCallsNotDispatched()
     {
         // Sensor blocks a ToolUse response — tool must not execute.
         var toolCall = MakeToolCall("dangerous-tool");
@@ -196,7 +196,7 @@ public sealed class HarnessLoopTests
     // ── PreReturn sensor ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunAsync_PreReturnBlocked_LoopsAndAllowsModelToReplan()
+    public async Task RunAsync_PreReturnIntervened_LoopsAndAllowsModelToReplan()
     {
         var sensor = new CountdownSensor(HookPoint.PreReturn, blockCount: 1, reason: "not ready");
         var client = new ScriptedModelClient(
@@ -217,7 +217,7 @@ public sealed class HarnessLoopTests
     // ── PreToolCall sensor ────────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunAsync_PreToolCallBlocked_ToolNotDispatchedAndErrorResultCreated()
+    public async Task RunAsync_PreToolCallIntervened_ToolNotDispatchedAndErrorResultCreated()
     {
         var toolCall = MakeToolCall("blocked-tool");
         var toolRegistry = new StubToolRegistry();
@@ -243,7 +243,7 @@ public sealed class HarnessLoopTests
     // ── PostToolCall sensor ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunAsync_PostToolCallBlocked_InterventionRecordedAndModelReseesContext()
+    public async Task RunAsync_PostToolCallIntervened_InterventionRecordedAndModelReseesContext()
     {
         // PostToolCall block is advisory — the tool result is already in the
         // trajectory and the model will see both the result and the intervention.
@@ -266,7 +266,7 @@ public sealed class HarnessLoopTests
     }
 
     [Fact]
-    public async Task RunAsync_PreModelCallBlockedPersistently_ForcesFinaliseTurnAndReturnsDone()
+    public async Task RunAsync_PreModelCallIntervenedPersistently_ForcesFinaliseTurnAndReturnsDone()
     {
         // A sensor that always blocks at PreModelCall (e.g. CostThrottleSensor once the
         // threshold is hit) must NOT loop forever. The loop must force one finalise call

@@ -25,7 +25,7 @@ public sealed class CountdownSensor : ISensor
         if (_blocksRemaining > 0)
         {
             _blocksRemaining--;
-            return Task.FromResult(SensorResult.Block(_reason));
+            return Task.FromResult(SensorResult.Intervene(_reason));
         }
         return Task.FromResult(SensorResult.Pass);
     }
@@ -47,7 +47,7 @@ public sealed class AlwaysBlockSensor : ISensor
     }
 
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
-        => Task.FromResult(SensorResult.Block(_reason));
+        => Task.FromResult(SensorResult.Intervene(_reason));
 }
 
 /// <summary>Always passes. Useful as an explicit no-op in sensor lists.</summary>

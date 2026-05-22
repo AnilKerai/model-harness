@@ -90,7 +90,7 @@ public sealed class TrajectoryGuideTests
     // ── PostModelCall blocking — the core correctness case ────────────────────
 
     [Fact]
-    public async Task Contribute_ModelStepBlockedAtPostModelCall_SuppressesResponseText()
+    public async Task Contribute_ModelStepIntervenedAtPostModelCall_SuppressesResponseText()
     {
         // The critical invariant: a blocked PostModelCall response must NOT appear
         // in the model's next context. The intervention note still appears so the
@@ -106,7 +106,7 @@ public sealed class TrajectoryGuideTests
     }
 
     [Fact]
-    public async Task Contribute_ModelStepBlockedAtPostModelCall_MultipleSensors_SuppressesResponseText()
+    public async Task Contribute_ModelStepIntervenedAtPostModelCall_MultipleSensors_SuppressesResponseText()
     {
         var state = EmptyState()
             .AppendStep(ModelStep("bad content"))
@@ -120,7 +120,7 @@ public sealed class TrajectoryGuideTests
     }
 
     [Fact]
-    public async Task Contribute_ModelStepNotBlocked_RendersResponseTextNormally()
+    public async Task Contribute_ModelStepNotIntervened_RendersResponseTextNormally()
     {
         // A PreReturn block follows, but that should NOT suppress the model text —
         // only PostModelCall blocks suppress.

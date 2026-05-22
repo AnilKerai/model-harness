@@ -35,7 +35,7 @@ public sealed class StuckDetector(int repeatThreshold = 3) : ISensor
             consecutive++;
             if (consecutive >= repeatThreshold)
             {
-                return Task.FromResult(SensorResult.Block(
+                return Task.FromResult(SensorResult.Intervene(
                     $"Tool '{current.Call.ToolName}' was invoked {consecutive} times in a row with identical arguments. Try a different approach."));
             }
         }

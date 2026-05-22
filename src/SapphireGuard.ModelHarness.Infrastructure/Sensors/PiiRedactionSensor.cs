@@ -38,7 +38,7 @@ public sealed class PiiRedactionSensor : ISensor
         foreach (var (label, pattern) in Patterns)
         {
             if (pattern.IsMatch(text))
-                return Task.FromResult(SensorResult.Block(
+                return Task.FromResult(SensorResult.Intervene(
                     $"Response contains possible PII ({label}). Restate your answer without including any personal data."));
         }
 

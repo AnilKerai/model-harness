@@ -51,7 +51,7 @@ public sealed class ConsoleTracer : ITracer
             ts = DateTimeOffset.UtcNow,
             hookPoint = hookPoint.ToString(),
             sensor = sensorName,
-            block = result.IsBlock,
+            intervene = result.IsIntervene,
             reason = result.Reason
         });
 

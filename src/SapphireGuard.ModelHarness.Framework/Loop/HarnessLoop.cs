@@ -128,7 +128,7 @@ public sealed class HarnessLoop(
         foreach (var (sensor, result) in results)
         {
             tracer.LogSensorResult(state.TaskId, hookPoint, sensor.Name, result);
-            if (result.IsBlock)
+            if (result.IsIntervene)
             {
                 blocked = true;
                 next = next.AppendStep(new SensorInterventionStep(
