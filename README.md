@@ -400,6 +400,34 @@ hierarchy.
 
 ---
 
+## FAQ
+
+### Why is budget enforcement a separate code path rather than a `PreModelCall` sensor?
+
+Three reasons, each independent:
+
+**1. Different outcome semantics.** Budget exhaustion returns `AgentOutcome { Status = PartialResult }`, signalling the agent was cut off before it could finish. A sensor block at `PreModelCall` returns `Done`, signalling the agent reached a stopping point. Those mean different things to a caller — `PartialResult` is "we ran out of resources", `Done` is "a policy said stop here and the model wrapped up cleanly". If budget enforcement went through the sensor path, both cases would return `Done` and callers would lose the ability to distinguish them.
+
+**2. Ordering — budget is checked before sensors run.** The loop does `budget check → sensors`, in that order. If budget enforcement were a sensor it would run in parallel with other sensors, which could do work (memory queries, validation calls) before the budget check fires. When the budget is already gone, running sensors at all is wasteful. The explicit check short-circuits everything before any sensor touches the state.
+
+**3. Unconditional vs. pluggable.** Sensors are opt-in — you compose them per agent, and a minimal agent can register none. The budget enforcer is always wired in by `AddModelHarness`; it is a framework guarantee, not a composition choice. If cost throttling were the only enforcement mechanism, a misconfigured agent with no sensors would have no hard ceiling.
+
+### If ordering matters, shouldn't cost throttling and rate limiting also be explicit checks rather than sensors?
+
+The ordering argument is strong against making budget enforcement a sensor; it is much weaker the other way around. Cost throttle and rate limit sensors are typically the cheapest operations in the `PreModelCall` batch (summing decimals from the trajectory) — there is no meaningful wasted work before they fire.
+
+More importantly, pulling them into the explicit sequential path would require the loop to know about them by name, breaking composability. You might want zero, one, or multiple cost policies with different thresholds. Sensors handle that cleanly because they are opt-in and stackable; first-class checks are not.
+
+The asymmetry is intentional: budget enforcer → first-class because it is an unconditional framework guarantee; cost throttle / rate limit → sensors because they are optional deployment policies.
+
+### Does stateful vs. stateless come into this?
+
+Everything in the current implementation is stateless in the relevant sense — sensors derive their inputs entirely from `AgentState` and the triggering `Step`, both passed in. No mutable state is held between checks.
+
+However, if you needed a genuinely stateful sensor — one accumulating observations *across* tasks (e.g. "this agent has spent $5 across all runs today") — injecting a shared counter or external store as a constructor dependency is the natural approach. The sensor owns that external wiring; the loop stays clean. This actually reinforces the case for sensors over first-class checks: a global rate limiter baked into the loop would force the loop itself to take a dependency on whatever cross-task state store backs it.
+
+---
+
 ## Glossary
 
 | Term | Definition                                                                                                                                                                                                 |
