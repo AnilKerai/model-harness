@@ -499,6 +499,16 @@ More importantly, pulling them into the explicit sequential path would require t
 
 The asymmetry is intentional: budget enforcer → first-class because it is an unconditional framework guarantee with a fixed shape; cost throttle / rate limit → sensors because they are optional, per-agent policies that vary in threshold, number, and kind.
 
+### Why doesn't the harness implement human-in-the-loop?
+
+Because HITL is a **system design concern**, not a **model control concern** — and the harness only owns the latter.
+
+The harness controls the model: it shapes what the model perceives (guides), observes and constrains what it does (sensors), enforces resource limits (budget), and records everything (trajectory). That is its complete job.
+
+HITL is about what happens *outside* the model loop: how a question is surfaced to a human, over what channel, how long you wait, and how the response is routed back. That is entirely dependent on the surrounding system — a CLI tool, a Slack bot, a web app, and an async queue-based pipeline all have fundamentally different answers. The harness cannot make that decision without becoming an application framework.
+
+The right boundary: the harness provides an `AskHumanTool` backed by an `IHumanChannel` seam. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is the user's implementation. The harness ships a `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
+
 ---
 
 ## Glossary
