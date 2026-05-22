@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework.Sensors;
-using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
+using SapphireGuard.ModelHarness.SampleAgent.Sensors;
 
 namespace SapphireGuard.ModelHarness.SampleAgent.Scenarios;
 
@@ -45,7 +45,19 @@ public static class ScenarioLibrary
                 services.AddSingleton<ISensor, StuckDetector>();
             }),
 
-        // ── 4. Tool result sanity ─────────────────────────────────────────────
+        // ── 4. Tool call reasonableness ───────────────────────────────────────
+        new Scenario(
+            Name: "tool-call-reasonableness",
+            Description: "Model is given a task that invites division by zero. " +
+                         "ToolCallReasonablenessSensor should block the call before it dispatches.",
+            TaskText: "What is 100 divided by 0?",
+            ConfigureSensors: services =>
+            {
+                services.AddSingleton<ISensor, ToolCallReasonablenessSensor>();
+                services.AddSingleton<ISensor, StuckDetector>();
+            }),
+
+        // ── 5. Tool result sanity ─────────────────────────────────────────────
         new Scenario(
             Name: "tool-result-sanity",
             Description: "A business-rule validator rejects calculator results above 1000. " +
