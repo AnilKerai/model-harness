@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.State;
@@ -57,11 +56,9 @@ AgentConsoleWriter.PrintHeader(
     "checkpoint-resume",
     "Runs the task with FileCheckpointStore, then resumes from the latest checkpoint — proving at-least-once resume semantics.");
 
-var firstOutcome = await firstProvider.GetRequiredService<HarnessLoop>()
-    .RunAsync(AgentState.NewTask(
-        taskText: "What is 56 multiplied by 13?",
-        budget: new Budget { MaxTurns = 3, MaxContextTokens = 100_000, MaxCostUsd = 1.00m, MaxWallClock = TimeSpan.FromSeconds(60) }),
-        CancellationToken.None);
+var firstOutcome = await firstProvider.GetRequiredService<Agent>()
+    .RunAsync("What is 56 multiplied by 13?",
+        budget: new Budget { MaxTurns = 3, MaxContextTokens = 100_000, MaxCostUsd = 1.00m, MaxWallClock = TimeSpan.FromSeconds(60) });
 
 AgentConsoleWriter.PrintOutcome(firstOutcome);
 
@@ -97,8 +94,8 @@ resumeServices
 
 await using var resumeProvider = resumeServices.BuildServiceProvider();
 
-var resumeOutcome = await resumeProvider.GetRequiredService<HarnessLoop>()
-    .RunAsync(resumedState, CancellationToken.None);
+var resumeOutcome = await resumeProvider.GetRequiredService<Agent>()
+    .RunAsync(resumedState);
 
 Console.WriteLine($"Resume status       : {resumeOutcome.Status}");
 Console.WriteLine($"Resume answer       : {resumeOutcome.FinalAnswer ?? "(none)"}");

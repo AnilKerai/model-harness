@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.Sensors;
-using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
@@ -50,11 +48,8 @@ else
 
 await using var provider = services.BuildServiceProvider();
 
-var outcome = await provider.GetRequiredService<HarnessLoop>()
-    .RunAsync(AgentState.NewTask(
-        taskText: "What is 124 multiplied by 37?",
-        budget: new Budget { MaxTurns = 8, MaxContextTokens = 100_000, MaxCostUsd = 1.00m, MaxWallClock = TimeSpan.FromSeconds(60) }),
-        CancellationToken.None);
+var outcome = await provider.GetRequiredService<Agent>()
+    .RunAsync("What is 124 multiplied by 37?");
 
 AgentConsoleWriter.PrintHeader("cost-throttle", "Soft spend cap of $0.0005 — CostThrottleSensor should fire before the second model call.");
 AgentConsoleWriter.PrintOutcome(outcome);

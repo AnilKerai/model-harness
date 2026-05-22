@@ -17,6 +17,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddModelHarness(this IServiceCollection services, string systemPrompt) =>
         services
+            .AddAgent()
             .AddHarnessLoop()
             .AddBudgetEnforcerDefault()
             .AddGuideRunnerDefault()
@@ -101,6 +102,12 @@ public static class DependencyInjection
         services.Replace(ServiceDescriptor.Singleton(factory));
 
     // ── Internal wiring ──────────────────────────────────────────────────────
+
+    private static IServiceCollection AddAgent(this IServiceCollection services)
+    {
+        services.TryAddSingleton<Agent>();
+        return services;
+    }
 
     private static IServiceCollection AddHarnessLoop(this IServiceCollection services)
     {

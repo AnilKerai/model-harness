@@ -1,0 +1,22 @@
+using SapphireGuard.ModelHarness.Framework.Loop;
+using SapphireGuard.ModelHarness.Framework.State;
+using AgentBudget = global::SapphireGuard.ModelHarness.Framework.State.Budget;
+
+namespace SapphireGuard.ModelHarness.Framework;
+
+public sealed class Agent(HarnessLoop loop)
+{
+    private static readonly AgentBudget DefaultBudget = new()
+    {
+        MaxTurns = 10,
+        MaxContextTokens = 100_000,
+        MaxCostUsd = 1.00m,
+        MaxWallClock = TimeSpan.FromMinutes(2)
+    };
+
+    public Task<AgentOutcome> RunAsync(string taskText, AgentBudget? budget = null, CancellationToken ct = default) =>
+        loop.RunAsync(AgentState.NewTask(taskText, budget ?? DefaultBudget), ct);
+
+    public Task<AgentOutcome> RunAsync(AgentState state, CancellationToken ct = default) =>
+        loop.RunAsync(state, ct);
+}
