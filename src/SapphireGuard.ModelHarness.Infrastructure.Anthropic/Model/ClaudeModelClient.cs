@@ -88,6 +88,10 @@ public sealed class ClaudeModelClient : IModelClient
             {
                 pendingBlocks.Add(new ContentBlockParam(ParseToolResult(msg.Content)));
             }
+            else if (msg.Role == MessageRole.Assistant && msg.Content.StartsWith("[tool_call ", StringComparison.Ordinal))
+            {
+                pendingBlocks.Add(new ContentBlockParam(ParseToolUse(msg.Content)));
+            }
             else
             {
                 pendingBlocks.Add(new ContentBlockParam(new TextBlockParam { Text = msg.Content }));
@@ -112,6 +116,36 @@ public sealed class ClaudeModelClient : IModelClient
         {
             result.Add(new MessageParam { Role = role, Content = new MessageParamContent([.. blocks]) });
         }
+    }
+
+    private static ToolUseBlockParam ParseToolUse(string content)
+    {
+        // Content format written by TrajectoryGuide:
+        // "[tool_call name={name} id={callId}] {argsJson}"
+        string name = "";
+        string callId = "";
+        string argsJson = "{}";
+
+        if (content.StartsWith("[tool_call ", StringComparison.Ordinal))
+        {
+            var closeBracket = content.IndexOf(']');
+            if (closeBracket > 0)
+            {
+                var meta = content[1..closeBracket];
+                argsJson = content[(closeBracket + 1)..].TrimStart();
+
+                foreach (var part in meta.Split(' '))
+                {
+                    if (part.StartsWith("name=", StringComparison.Ordinal))
+                        name = part[5..];
+                    if (part.StartsWith("id=", StringComparison.Ordinal))
+                        callId = part[3..];
+                }
+            }
+        }
+
+        var input = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argsJson) ?? [];
+        return new ToolUseBlockParam { ID = callId, Name = name, Input = input };
     }
 
     private static ToolResultBlockParam ParseToolResult(string content)
