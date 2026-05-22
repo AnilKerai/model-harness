@@ -134,9 +134,10 @@ which tools to expose.
 
 ### The Sensor pattern — observing and intervening
 
-A **Sensor** observes the loop at declared hookpoints and can block a transition
-by returning `SensorResult.Intervene(reason)`. Sensors run in **parallel** at each
-hookpoint — they observe independently and do not share state.
+A **Sensor** observes the loop at declared hookpoints and can raise a concern
+by returning `SensorResult.Intervene(reason)`. The loop's response to that concern
+depends on the hookpoint — sensors do not control flow directly. Sensors run in
+**parallel** at each hookpoint — they observe independently and do not share state.
 
 ```mermaid
 flowchart TD
@@ -157,7 +158,7 @@ The five hookpoints, their typical use, and what the loop does when a sensor int
 | HookPoint | Fires | Typical use | On intervention |
 |---|---|---|---|
 | `PreModelCall` | Before building context and calling the model | Rate limiting, cost throttling | **Force-finalises immediately** — calls model once with tools disabled so it can answer from what it already knows, then returns `Done`. Looping would produce identical state (no model call happened), causing an infinite loop. |
-| `PostModelCall` | After the model responds, before acting on it | PII detection, output filtering | **Loops back** — the model gets another turn. Crucially, the blocked response text is **suppressed from the next context**: `TrajectoryGuide` omits it so the model cannot re-see flagged content. The intervention note still appears so the model knows why it was stopped. |
+| `PostModelCall` | After the model responds, before acting on it | PII detection, output filtering | **Loops back** — the model gets another turn. Crucially, the flagged response text is **suppressed from the next context**: `TrajectoryGuide` omits it so the model cannot re-see flagged content. The intervention note still appears so the model knows why it was flagged. |
 | `PreToolCall` | Before each tool is dispatched | Policy enforcement, authorisation | **Tool is never dispatched** — a `ToolCallStep` with `IsError = true` is recorded so the model sees a clean error result and can replan. |
 | `PostToolCall` | After each tool result is received | Result validation, audit logging | **Advisory only** — the tool has already run and its result is already in the trajectory. The intervention is recorded as a system note; the model can still reason on the result. Use `PreToolCall` if you need to prevent execution. |
 | `PreReturn` | Before returning a final answer to the caller | Answer quality checks | **Loops back** — the model retries. Unlike PostModelCall, the prior answer *is* visible in context so the model can see what it said and correct it. |
@@ -169,8 +170,6 @@ An intervention does not terminate the run. The sensor's reason is wrapped in a
 notes mean and that they must be treated as directives — this is the feedforward complement
 to the sensor's feedback. Intervention records are separate from tool-call history so
 tool history stays clean.
-
-What the loop does with an intervention depends on the hookpoint:
 
 Implement `ISensor` to create a custom sensor:
 
