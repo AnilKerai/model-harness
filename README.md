@@ -419,7 +419,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | ---------- | ---- | ----- |
 | Checkpoint / resume | `AgentState` | Serialisation-ready; needs `[JsonPolymorphic]` source-gen for the `Step` hierarchy. New project: `Infrastructure.Persistence`. |
 | Human-in-the-loop | `HarnessLoop` + new `IHumanChannel` | `AgentStatus.AwaitingHuman` is reserved; no suspend/resume protocol yet. |
-| OpenTelemetry | `ITracer` | `ConsoleTracer` writes to stdout; no structured spans or metrics. New project: `Infrastructure.Telemetry`. |
+| OpenTelemetry | `ITracer` | `OpenTelemetryTracer` (in `Infrastructure.Telemetry`) emits spans and metrics via `System.Diagnostics.ActivitySource` / `Meter`. No OTel SDK dependency — wire up exporters in the host. |
 | Additional model providers | `IModelClient` | Only Anthropic is implemented. OpenAI, Azure OpenAI, Gemini, Ollama are natural targets; one new project per provider. |
 
 ---

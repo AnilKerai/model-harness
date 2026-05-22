@@ -86,7 +86,7 @@ where the implementation would live.
   _Seam: `HarnessLoop`, new `IHumanChannel` abstraction._
 
 ### Observability
-- [ ] **Structured logging / OpenTelemetry** — `ConsoleTracer` writes to stdout; no structured
-  spans, metrics, or log correlation. An `ITracer` adapter over `System.Diagnostics.Activity`
-  or OpenTelemetry SDK would let runs be observed in standard tooling.
-  _Seam: `ITracer`; new project `SapphireGuard.ModelHarness.Infrastructure.Telemetry`._
+- [x] **Structured logging / OpenTelemetry** — `OpenTelemetryTracer` emits spans via
+  `System.Diagnostics.ActivitySource` and metrics via `System.Diagnostics.Metrics.Meter`.
+  No OTel SDK dependency — wire up exporters in the host.
+  _Project: `SapphireGuard.ModelHarness.Infrastructure.Telemetry`._
