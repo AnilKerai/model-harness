@@ -42,16 +42,20 @@ public sealed class HarnessLoop(
                     return await FinaliseOnBudgetAsync(state, budgetCheck.Reason!, ct);
                 }
 
-                state = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
+                bool blocked;
+                (state, blocked) = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
+                if (blocked) continue;
 
                 var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct);
                 state = newState;
 
-                state = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct);
+                (state, blocked) = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct);
+                if (blocked) continue;
 
                 if (response.ToolCalls.Count == 0)
                 {
-                    state = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct);
+                    (state, blocked) = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct);
+                    if (blocked) continue;
 
                     var done = state with { Status = AgentStatus.Done };
                     tracer.Complete(done.TaskId, AgentStatus.Done, failureReason: null);
@@ -109,15 +113,17 @@ public sealed class HarnessLoop(
         }
     }
 
-    private async Task<AgentState> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
+    private async Task<(AgentState State, bool Blocked)> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
     {
         var results = await sensorRunner.RunAsync(hookPoint, state, triggeringStep, ct);
         var next = state;
+        var blocked = false;
         foreach (var (sensor, result) in results)
         {
             tracer.LogSensorResult(state.TaskId, hookPoint, sensor.Name, result);
             if (result.IsBlock)
             {
+                blocked = true;
                 next = next.AppendStep(new SensorInterventionStep(
                     Id: Guid.NewGuid(),
                     Timestamp: DateTimeOffset.UtcNow,
@@ -127,7 +133,7 @@ public sealed class HarnessLoop(
                     TriggeringStep: triggeringStep));
             }
         }
-        return next;
+        return (next, blocked);
     }
 
     private async Task<(AgentState State, ModelResponse Response)> CallModelAsync(AgentState state, bool forceFinalise, CancellationToken ct)
@@ -167,8 +173,8 @@ public sealed class HarnessLoop(
             Call: call,
             Result: new ToolResult(call.CallId, "(pending)"));
 
-        var afterPre = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct);
-        if (afterPre.Trajectory.Count > state.Trajectory.Count)
+        var (afterPre, preBlocked) = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct);
+        if (preBlocked)
         {
             var lastIntervention = afterPre.Trajectory.OfType<SensorInterventionStep>().Last();
             var blockedResult = new ToolResult(call.CallId,
@@ -194,7 +200,8 @@ public sealed class HarnessLoop(
             Result: result);
 
         var afterExec = afterPre.AppendStep(executed);
-        return await RunSensorsAsync(afterExec, HookPoint.PostToolCall, executed, ct);
+        var (afterPost, _) = await RunSensorsAsync(afterExec, HookPoint.PostToolCall, executed, ct);
+        return afterPost;
     }
 
     private async Task<AgentOutcome> FinaliseOnBudgetAsync(AgentState state, string reason, CancellationToken ct)
