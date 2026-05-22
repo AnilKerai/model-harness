@@ -265,6 +265,25 @@ public sealed class HarnessLoopTests
         Assert.Single(outcome.FinalState.Trajectory.OfType<ToolCallStep>());
     }
 
+    [Fact]
+    public async Task RunAsync_PreModelCallBlockedPersistently_ForcesFinaliseTurnAndReturnsDone()
+    {
+        // A sensor that always blocks at PreModelCall (e.g. CostThrottleSensor once the
+        // threshold is hit) must NOT loop forever. The loop must force one finalise call
+        // with tools disabled so the model can answer from context, then return Done.
+        var sensor = new AlwaysBlockSensor(HookPoint.PreModelCall, reason: "soft limit hit");
+        var client = new ScriptedModelClient(EndTurnResponse("here is my best answer"));
+
+        var harness = BuildHarness(client, sensors: [sensor]);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var outcome = await harness.RunAsync(NewState(), cts.Token);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal("here is my best answer", outcome.FinalAnswer);
+        Assert.Equal(1, client.CallCount); // exactly one forced-finalise call
+    }
+
     // ── Cancellation and exceptions ───────────────────────────────────────────
 
     [Fact]
@@ -325,21 +344,23 @@ public sealed class HarnessLoopTests
     [Fact]
     public async Task RunAsync_MultipleBlocksAcrossHookpoints_AllInterventionsRecorded()
     {
-        var preModelSensor = new CountdownSensor(HookPoint.PreModelCall, blockCount: 1, name: "pre-model");
+        // PreModelCall blocks force-finalise immediately (no loop), so we test two
+        // hookpoints that both loop: PostModelCall and PreReturn.
+        var postModelSensor = new CountdownSensor(HookPoint.PostModelCall, blockCount: 1, name: "post-model");
         var preReturnSensor = new CountdownSensor(HookPoint.PreReturn, blockCount: 1, name: "pre-return");
 
         var client = new ScriptedModelClient(
-            EndTurnResponse("attempt 1"), // PreModel blocks → not reached on first pass
+            EndTurnResponse("attempt 1"), // PostModelCall blocks this
             EndTurnResponse("attempt 2"), // PreReturn blocks this
             EndTurnResponse("final"));    // passes
 
-        var harness = BuildHarness(client, sensors: [preModelSensor, preReturnSensor]);
+        var harness = BuildHarness(client, sensors: [postModelSensor, preReturnSensor]);
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
 
         Assert.Equal(AgentStatus.Done, outcome.Status);
         var interventions = outcome.FinalState.Trajectory.OfType<SensorInterventionStep>().ToList();
         Assert.Equal(2, interventions.Count);
-        Assert.Contains(interventions, s => s.SensorName == "pre-model");
+        Assert.Contains(interventions, s => s.SensorName == "post-model");
         Assert.Contains(interventions, s => s.SensorName == "pre-return");
     }
 }

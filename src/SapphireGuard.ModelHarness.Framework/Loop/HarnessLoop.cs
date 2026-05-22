@@ -44,7 +44,14 @@ public sealed class HarnessLoop(
 
                 bool blocked;
                 (state, blocked) = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
-                if (blocked) continue;
+                if (blocked)
+                {
+                    // Looping back would produce an identical state (no model call
+                    // happened to change the trajectory), causing an infinite loop.
+                    // Force one finalise turn instead so the model can answer with
+                    // what it already knows, then return Done.
+                    return await FinaliseOnSensorBlockAsync(state, ct);
+                }
 
                 var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct);
                 state = newState;
@@ -202,6 +209,20 @@ public sealed class HarnessLoop(
         var afterExec = afterPre.AppendStep(executed);
         var (afterPost, _) = await RunSensorsAsync(afterExec, HookPoint.PostToolCall, executed, ct);
         return afterPost;
+    }
+
+    private async Task<AgentOutcome> FinaliseOnSensorBlockAsync(AgentState state, CancellationToken ct)
+    {
+        var (finalState, response) = await CallModelAsync(state, forceFinalise: true, ct);
+        var done = finalState with { Status = AgentStatus.Done };
+        tracer.Complete(done.TaskId, AgentStatus.Done, failureReason: null);
+        return new AgentOutcome
+        {
+            TaskId = done.TaskId,
+            Status = AgentStatus.Done,
+            FinalAnswer = response.Text,
+            FinalState = done
+        };
     }
 
     private async Task<AgentOutcome> FinaliseOnBudgetAsync(AgentState state, string reason, CancellationToken ct)

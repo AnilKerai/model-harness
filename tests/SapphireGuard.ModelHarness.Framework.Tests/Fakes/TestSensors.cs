@@ -31,6 +31,25 @@ public sealed class CountdownSensor : ISensor
     }
 }
 
+/// <summary>Always blocks — simulates a persistent condition like a cost threshold.</summary>
+public sealed class AlwaysBlockSensor : ISensor
+{
+    private readonly string _reason;
+
+    public string Name { get; }
+    public IReadOnlySet<HookPoint> HookPoints { get; }
+
+    public AlwaysBlockSensor(HookPoint hookPoint, string name = "always-block", string reason = "always blocked")
+    {
+        HookPoints = new HashSet<HookPoint> { hookPoint };
+        Name = name;
+        _reason = reason;
+    }
+
+    public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
+        => Task.FromResult(SensorResult.Block(_reason));
+}
+
 /// <summary>Always passes. Useful as an explicit no-op in sensor lists.</summary>
 public sealed class AlwaysPassSensor : ISensor
 {
