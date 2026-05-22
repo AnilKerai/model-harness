@@ -1,5 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
+using SapphireGuard.ModelHarness.Framework;
+using SapphireGuard.ModelHarness.Framework.Loop;
+using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
+using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Infrastructure.Persistence;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.SampleAgent.Sensors;
 
@@ -75,5 +80,81 @@ public static class ScenarioLibrary
                                 : null
                     }));
             }),
+
+        // ── 6. Checkpoint / resume ────────────────────────────────────────────
+        BuildCheckpointResumeScenario(),
     ];
+
+    private static Scenario BuildCheckpointResumeScenario()
+    {
+        var checkpointDir = Path.Combine(Path.GetTempPath(), "model-harness-checkpoints");
+
+        return new Scenario(
+            Name: "checkpoint-resume",
+            Description: "Runs a task with FileCheckpointStore enabled, then loads the final " +
+                         "checkpoint and feeds it to a second harness run — proving that a " +
+                         "resumed agent produces the same answer from a serialised state.",
+            TaskText: "What is 56 multiplied by 13?",
+            Budget: new Budget
+            {
+                MaxTurns = 3,
+                MaxContextTokens = 100_000,
+                MaxCostUsd = 1.00m,
+                MaxWallClock = TimeSpan.FromSeconds(60)
+            },
+            ConfigureSensors: services =>
+                services.AddFileCheckpointStore(checkpointDir),
+            PostRun: async (firstOutcome, firstProvider, ct) =>
+            {
+                var store = firstProvider.GetRequiredService<ICheckpointStore>();
+                var taskId = firstOutcome.TaskId;
+
+                var files = Directory.GetFiles(
+                    Path.Combine(checkpointDir, taskId), "*.json",
+                    SearchOption.TopDirectoryOnly);
+
+                Console.WriteLine();
+                Console.WriteLine($"Checkpoints written : {files.Length} file(s) → {Path.Combine(checkpointDir, taskId)}");
+
+                var latest = await store.LoadLatestAsync(taskId, ct);
+                if (latest is null)
+                {
+                    Console.WriteLine("ERROR: no checkpoint found after run.");
+                    return;
+                }
+
+                Console.WriteLine($"Latest checkpoint   : turn={latest.TurnNumber}, " +
+                                  $"trajectory steps={latest.State.Trajectory.Count}");
+                Console.WriteLine();
+                Console.WriteLine("── Resuming from checkpoint ────────────────────────────────────");
+
+                // Resume: resume the task using the last checkpointed state.
+                // Use a fresh harness (simulating a process restart) with the same
+                // checkpoint store so resumed checkpoints are also durably saved.
+                var resumedState = latest.State with
+                {
+                    Status = AgentStatus.Running,
+                    Budget = firstOutcome.FinalState.Budget
+                };
+
+                var resumeServices = new ServiceCollection();
+                resumeServices.AddModelHarness("You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.");
+                resumeServices.AddFileCheckpointStore(checkpointDir);
+
+                // Reuse the same model client and tool registry from the original provider.
+                var sharedModelClient = firstProvider.GetRequiredService<Framework.Model.IModelClient>();
+                var sharedToolRegistry = firstProvider.GetRequiredService<Framework.Tools.IToolRegistry>();
+                var sharedTracer = firstProvider.GetRequiredService<Framework.Tracing.ITracer>();
+                resumeServices.AddModelClient(_ => sharedModelClient);
+                resumeServices.AddToolRegistry(_ => sharedToolRegistry);
+                resumeServices.AddTracer(_ => sharedTracer);
+
+                await using var resumeProvider = resumeServices.BuildServiceProvider();
+                var resumeHarness = resumeProvider.GetRequiredService<HarnessLoop>();
+                var resumeOutcome = await resumeHarness.RunAsync(resumedState, ct);
+
+                Console.WriteLine($"Resume status       : {resumeOutcome.Status}");
+                Console.WriteLine($"Resume answer       : {resumeOutcome.FinalAnswer ?? "(none)"}");
+            });
+    }
 }

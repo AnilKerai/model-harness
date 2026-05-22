@@ -37,6 +37,9 @@ public sealed class ScenarioRunner(
         var outcome = await harness.RunAsync(state, ct);
 
         PrintOutcome(outcome);
+
+        if (scenario.PostRun is not null)
+            await scenario.PostRun(outcome, provider, ct);
     }
 
     private static void PrintHeader(Scenario scenario)

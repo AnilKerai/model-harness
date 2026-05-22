@@ -2,6 +2,7 @@ using System.Diagnostics;
 using SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Context;
 using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -22,12 +23,15 @@ public sealed class HarnessLoop(
     IContextBuilder contextBuilder,
     ISensorRunner sensorRunner,
     IBudgetEnforcer budgetEnforcer,
-    ITracer tracer)
+    ITracer tracer,
+    ICheckpointStore checkpointStore)
 {
     public async Task<AgentOutcome> RunAsync(AgentState initial, CancellationToken ct)
     {
         var state = initial;
         var startedAt = DateTimeOffset.UtcNow;
+        var runId = Guid.NewGuid().ToString("n");
+        var turn = 0;
         tracer.StartTrace(state.TaskId, state.TaskText);
 
         try
@@ -35,6 +39,15 @@ public sealed class HarnessLoop(
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
+
+                await checkpointStore.SaveAsync(new Checkpoint
+                {
+                    CheckpointId = Guid.NewGuid().ToString("n"),
+                    RunId = runId,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    TurnNumber = turn++,
+                    State = state
+                }, ct);
 
                 var budgetCheck = budgetEnforcer.Check(state, startedAt);
                 if (budgetCheck.IsExhausted)

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.SampleAgent.Scenarios;
@@ -11,4 +12,5 @@ public sealed record Scenario(
     string Description,
     string TaskText,
     Budget? Budget = null,
-    Action<IServiceCollection>? ConfigureSensors = null);
+    Action<IServiceCollection>? ConfigureSensors = null,
+    Func<AgentOutcome, IServiceProvider, CancellationToken, Task>? PostRun = null);

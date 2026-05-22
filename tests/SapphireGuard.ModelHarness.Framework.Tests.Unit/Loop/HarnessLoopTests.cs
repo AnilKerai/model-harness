@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using BudgetNs = SapphireGuard.ModelHarness.Framework.Budget;
+using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
@@ -26,7 +27,8 @@ public sealed class HarnessLoopTests
             contextBuilder: new StubContextBuilder(),
             sensorRunner: sensorRunner,
             budgetEnforcer: budgetEnforcer ?? new AlwaysOkBudgetEnforcer(),
-            tracer: new NullTracer());
+            tracer: new NullTracer(),
+            checkpointStore: new NullCheckpointStore());
     }
 
     private static AgentState NewState(string task = "test task") =>
@@ -313,7 +315,8 @@ public sealed class HarnessLoopTests
             contextBuilder: new StubContextBuilder(),
             sensorRunner: sensorRunner,
             budgetEnforcer: new AlwaysOkBudgetEnforcer(),
-            tracer: new NullTracer());
+            tracer: new NullTracer(),
+            checkpointStore: new NullCheckpointStore());
 
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
 

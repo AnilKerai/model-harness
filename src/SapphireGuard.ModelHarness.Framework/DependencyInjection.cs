@@ -4,6 +4,7 @@ using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.Memory;
 using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Framework.Tracing;
@@ -22,6 +23,7 @@ public static class DependencyInjection
             .AddContextBuilderDefault()
             .AddMemoryStoreDefault()
             .AddToolSelectorDefault()
+            .AddCheckpointStoreDefault()
             .AddSystemPromptGuide(systemPrompt)
             .AddHarnessInstructionsGuideDefault()
             .AddTrajectoryGuideDefault()
@@ -77,6 +79,13 @@ public static class DependencyInjection
 
 
 
+    public static IServiceCollection AddCheckpointStore<TImpl>(this IServiceCollection services)
+        where TImpl : class, ICheckpointStore =>
+        services.Replace(ServiceDescriptor.Singleton<ICheckpointStore, TImpl>());
+
+    public static IServiceCollection AddCheckpointStore(this IServiceCollection services, Func<IServiceProvider, ICheckpointStore> factory) =>
+        services.Replace(ServiceDescriptor.Singleton(factory));
+
     public static IServiceCollection AddMemoryStore<TImpl>(this IServiceCollection services)
         where TImpl : class, IMemoryStore =>
         services.Replace(ServiceDescriptor.Singleton<IMemoryStore, TImpl>());
@@ -122,6 +131,12 @@ public static class DependencyInjection
     {
         services.TryAddSingleton<ISensorRunner>(sp =>
             new DefaultSensorRunner(sp.GetRequiredService<IEnumerable<ISensor>>()));
+        return services;
+    }
+
+    private static IServiceCollection AddCheckpointStoreDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<ICheckpointStore, NullCheckpointStore>();
         return services;
     }
 
