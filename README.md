@@ -416,15 +416,9 @@ Three reasons, each independent:
 
 The ordering argument is strong against making budget enforcement a sensor; it is much weaker the other way around. Cost throttle and rate limit sensors are typically the cheapest operations in the `PreModelCall` batch (summing decimals from the trajectory) — there is no meaningful wasted work before they fire.
 
-More importantly, pulling them into the explicit sequential path would require the loop to know about them by name, breaking composability. You might want zero, one, or multiple cost policies with different thresholds. Sensors handle that cleanly because they are opt-in and stackable; first-class checks are not.
+More importantly, pulling them into the explicit sequential path would require the loop to know about them by name, and every agent would get the same thresholds. Keeping them as sensors means each agent can register its own configuration — a background summarisation agent might tolerate a $0.50 soft cap, while a customer-facing agent runs on $0.05. You can also stack multiple policies (a per-task cost cap alongside a per-minute rate limit) without the loop knowing anything about either. First-class checks cannot do this cleanly.
 
-The asymmetry is intentional: budget enforcer → first-class because it is an unconditional framework guarantee; cost throttle / rate limit → sensors because they are optional deployment policies.
-
-### Does stateful vs. stateless come into this?
-
-Everything in the current implementation is stateless in the relevant sense — sensors derive their inputs entirely from `AgentState` and the triggering `Step`, both passed in. No mutable state is held between checks.
-
-However, if you needed a genuinely stateful sensor — one accumulating observations *across* tasks (e.g. "this agent has spent $5 across all runs today") — injecting a shared counter or external store as a constructor dependency is the natural approach. The sensor owns that external wiring; the loop stays clean. This actually reinforces the case for sensors over first-class checks: a global rate limiter baked into the loop would force the loop itself to take a dependency on whatever cross-task state store backs it.
+The asymmetry is intentional: budget enforcer → first-class because it is an unconditional framework guarantee with a fixed shape; cost throttle / rate limit → sensors because they are optional, per-agent policies that vary in threshold, number, and kind.
 
 ---
 
