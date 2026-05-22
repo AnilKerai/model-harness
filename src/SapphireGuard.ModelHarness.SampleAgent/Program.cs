@@ -1,5 +1,5 @@
 using System.Globalization;
-using SapphireGuard.ModelHarness.Framework.DependencyInjection;
+using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;

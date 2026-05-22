@@ -9,7 +9,7 @@ using SapphireGuard.ModelHarness.Framework.Tracing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace SapphireGuard.ModelHarness.Framework.DependencyInjection;
+namespace SapphireGuard.ModelHarness.Framework;
 
 /// <summary>
 /// Composition helpers for wiring the harness into <see cref="IServiceCollection"/>.
@@ -28,7 +28,7 @@ namespace SapphireGuard.ModelHarness.Framework.DependencyInjection;
 /// an <see cref="ITracer"/>, and any <see cref="ITool"/> / <see cref="ISensor"/> /
 /// custom <see cref="IGuide"/> instances.
 /// </summary>
-public static class ModelHarnessServiceCollectionExtensions
+public static class DependencyInjection
 {
     /// <summary>
     /// Registers the loop and all framework-provided defaults. Defaults use
