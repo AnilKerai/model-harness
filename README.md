@@ -371,7 +371,7 @@ append with `AddGuide<T>()`.
 ```csharp
 services
     .AddModelHarness(systemPrompt)
-    .AddTracer<ConsoleTracer>()
+    .AddTracer(_ => new CompositeTracer(new ConsoleTracer(), new OpenTelemetryTracer()))
     .AddToolRegistry<InMemoryToolRegistry>()
     .AddModelClient(_ => new PollyResilientModelClient(new MyModelClient()));
 
@@ -405,6 +405,7 @@ These are things every agent needs, regardless of domain. The framework provides
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints |
 | Tool dispatch | `IToolRegistry` |
 | Model transport | `IModelClient` |
+| Tracing and metrics | `ITracer` / `CompositeTracer` | `ConsoleTracer` + `OpenTelemetryTracer` wired by default via `CompositeTracer`. `OpenTelemetryTracer` emits spans and metrics via `System.Diagnostics.ActivitySource` / `Meter` — no OTel SDK dependency; wire up exporters in the host. |
 
 Infrastructure projects (`Infrastructure`, `Infrastructure.Anthropic`, `Infrastructure.Mcp`) ship concrete implementations of these seams. They are conveniences — a user could write their own — but they are implementations of harness-level abstractions and belong in this repo.
 
@@ -426,7 +427,6 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | ---------- | ---- | ----- |
 | Checkpoint / resume | `AgentState` | Serialisation-ready; needs `[JsonPolymorphic]` source-gen for the `Step` hierarchy. New project: `Infrastructure.Persistence`. |
 | Human-in-the-loop | `HarnessLoop` + new `IHumanChannel` | `AgentStatus.AwaitingHuman` is reserved; no suspend/resume protocol yet. |
-| OpenTelemetry | `ITracer` | `OpenTelemetryTracer` (in `Infrastructure`) emits spans and metrics via `System.Diagnostics.ActivitySource` / `Meter`. No OTel SDK dependency — wire up exporters in the host. Use `CompositeTracer` to run multiple tracers simultaneously. |
 | Additional model providers | `IModelClient` | Only Anthropic is implemented. OpenAI, Azure OpenAI, Gemini, Ollama are natural targets; one new project per provider. |
 
 ---
