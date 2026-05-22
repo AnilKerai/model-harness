@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SapphireGuard.Framework/SapphireGuard.Framework.csproj" />
+    <Project Path="src/SapphireGuard.Infrastructure.Anthropic/SapphireGuard.Infrastructure.Anthropic.csproj" />
+    <Project Path="src/SapphireGuard.Infrastructure/SapphireGuard.Infrastructure.csproj" />
+    <Project Path="src/SapphireGuard.SampleAgent/SapphireGuard.SampleAgent.csproj" />
+  </Folder>
+</Solution>
