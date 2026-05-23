@@ -7,7 +7,7 @@ namespace SapphireGuard.ModelHarness.Framework.Context;
 
 /// <summary>
 /// Runs the guide pipeline then assembles the populated <see cref="ContextDraft"/>
-/// into a prompt: system message (prompt + tool catalogue + memories),
+/// into a prompt: system message (prompt + memories + guide-rendered sections),
 /// trajectory messages, then the task as a final user message.
 /// </summary>
 public sealed class DefaultContextBuilder(IGuideRunner guideRunner) : IContextBuilder
@@ -45,14 +45,10 @@ public sealed class DefaultContextBuilder(IGuideRunner guideRunner) : IContextBu
             }
         }
 
-        if (draft.AvailableTools.Count > 0)
+        foreach (var section in draft.SystemSections)
         {
             sb.AppendLine();
-            sb.AppendLine("# Available tools");
-            foreach (var t in draft.AvailableTools)
-            {
-                sb.Append("- ").Append(t.Name).Append(": ").AppendLine(t.Description);
-            }
+            sb.AppendLine(section);
         }
 
         return sb.ToString();

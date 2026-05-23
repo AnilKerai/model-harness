@@ -27,4 +27,11 @@ public sealed class ContextDraft
     /// any guide can append additional framing messages here.
     /// </summary>
     public List<Message> TrajectoryMessages { get; } = [];
+
+    /// <summary>
+    /// Pre-rendered system-prompt sections (e.g. tool catalogue, skills catalogue)
+    /// appended after the system prompt and memory. Lets guides own their own
+    /// rendering instead of the context builder hard-coding each section.
+    /// </summary>
+    public List<string> SystemSections { get; } = [];
 }

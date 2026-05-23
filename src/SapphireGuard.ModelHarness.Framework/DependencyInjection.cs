@@ -6,6 +6,7 @@ using SapphireGuard.ModelHarness.Framework.Memory;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
+using SapphireGuard.ModelHarness.Framework.Skills;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Framework.Tracing;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,7 @@ public static class DependencyInjection
             .AddGuideRunnerDefault()
             .AddContextBuilderDefault()
             .AddMemoryStoreDefault()
+            .AddSkillStoreDefault()
             .AddToolSelectorDefault()
             .AddCheckpointStoreDefault()
             .AddSystemPromptGuide(systemPrompt)
@@ -30,6 +32,8 @@ public static class DependencyInjection
             .AddTrajectoryGuideDefault()
             .AddMemoryGuideDefault()
             .AddToolSelectorGuideDefault()
+            .AddToolCatalogueGuideDefault()
+            .AddSkillsGuideDefault()
             .AddSensorRunnerDefault();
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -101,6 +105,13 @@ public static class DependencyInjection
     public static IServiceCollection AddToolSelector(this IServiceCollection services, Func<IServiceProvider, IToolSelector> factory) =>
         services.Replace(ServiceDescriptor.Singleton(factory));
 
+    public static IServiceCollection AddSkillStore<TImpl>(this IServiceCollection services)
+        where TImpl : class, ISkillStore =>
+        services.Replace(ServiceDescriptor.Singleton<ISkillStore, TImpl>());
+
+    public static IServiceCollection AddSkillStore(this IServiceCollection services, Func<IServiceProvider, ISkillStore> factory) =>
+        services.Replace(ServiceDescriptor.Singleton(factory));
+
     // ── Internal wiring ──────────────────────────────────────────────────────
 
     private static IServiceCollection AddAgent(this IServiceCollection services)
@@ -159,6 +170,12 @@ public static class DependencyInjection
         return services;
     }
 
+    private static IServiceCollection AddSkillStoreDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<ISkillStore, NullSkillStore>();
+        return services;
+    }
+
     private static IServiceCollection AddSystemPromptGuide(this IServiceCollection services, string systemPrompt)
     {
         services.AddSingleton<IGuide>(_ => new SystemPromptGuide(systemPrompt));
@@ -176,4 +193,10 @@ public static class DependencyInjection
 
     private static IServiceCollection AddToolSelectorGuideDefault(this IServiceCollection services) =>
         services.AddGuide<ToolSelectorGuide>();
+
+    private static IServiceCollection AddToolCatalogueGuideDefault(this IServiceCollection services) =>
+        services.AddGuide<ToolCatalogueGuide>();
+
+    private static IServiceCollection AddSkillsGuideDefault(this IServiceCollection services) =>
+        services.AddGuide<SkillsGuide>();
 }

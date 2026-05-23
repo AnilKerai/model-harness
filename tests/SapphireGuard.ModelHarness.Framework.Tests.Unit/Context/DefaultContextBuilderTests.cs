@@ -19,7 +19,8 @@ public sealed class DefaultContextBuilderTests
     private static DefaultContextBuilder BuilderWith(
         string systemPrompt = "You are helpful.",
         IReadOnlyList<string>? memories = null,
-        IReadOnlyList<ITool>? tools = null)
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<string>? systemSections = null)
     {
         var draft = new ContextDraft
         {
@@ -28,6 +29,8 @@ public sealed class DefaultContextBuilderTests
         };
         if (memories != null)
             draft.MemorySnippets.AddRange(memories);
+        if (systemSections != null)
+            draft.SystemSections.AddRange(systemSections);
 
         var runner = new FixedDraftGuideRunner(draft);
         return new DefaultContextBuilder(runner);
@@ -76,24 +79,25 @@ public sealed class DefaultContextBuilderTests
     }
 
     [Fact]
-    public async Task BuildAsync_AvailableToolsListedInSystemMessage()
+    public async Task BuildAsync_SystemSectionsAppearInSystemMessage()
     {
-        var tool = new StubTool("calc", "Does maths");
-        var builder = BuilderWith(tools: [tool]);
+        var builder = BuilderWith(systemSections: ["# Available tools\n- calc: Does maths", "# Available skills\n- deploy — shipping"]);
         var result = await builder.BuildAsync(State(), [], CancellationToken.None);
 
         var system = result.Messages[0].Content;
-        Assert.Contains("calc", system);
-        Assert.Contains("Does maths", system);
+        Assert.Contains("Available tools", system);
+        Assert.Contains("calc: Does maths", system);
+        Assert.Contains("Available skills", system);
     }
 
     [Fact]
-    public async Task BuildAsync_NoTools_SystemMessageHasNoToolsSection()
+    public async Task BuildAsync_NoSystemSections_OnlyPromptAndTaskPresent()
     {
-        var builder = BuilderWith(tools: []);
+        var builder = BuilderWith(systemSections: []);
         var result = await builder.BuildAsync(State(), [], CancellationToken.None);
 
         Assert.DoesNotContain("Available tools", result.Messages[0].Content);
+        Assert.DoesNotContain("Available skills", result.Messages[0].Content);
     }
 
     [Fact]
