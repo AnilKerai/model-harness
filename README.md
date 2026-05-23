@@ -330,6 +330,32 @@ is reserved for tools or sub-agents that violate budget from underneath the loop
 
 ## Extending the framework
 
+### Minimal setup
+
+`AddModelHarness` is the entry point. Wire a model client, tool registry, tracer, and at
+least one tool — then resolve `Agent` and run:
+
+```csharp
+var services = new ServiceCollection();
+
+services.AddModelHarness("You are a helpful assistant.");
+services
+    .AddClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })
+    .AddToolRegistry<InMemoryToolRegistry>()
+    .AddTracer(_ => new ConsoleTracer());
+
+services.AddSingleton<ITool, CalculatorTool>();
+
+await using var provider = services.BuildServiceProvider();
+
+var outcome = await provider.GetRequiredService<Agent>()
+    .RunAsync("What is 6 times 7?");
+
+Console.WriteLine(outcome.FinalAnswer);
+```
+
+Everything below is opt-in.
+
 ### Add a tool
 
 ```csharp
@@ -346,19 +372,12 @@ public sealed class MyTool : ITool
 services.AddSingleton<ITool, MyTool>();
 ```
 
-For tools that call external services — HTTP APIs, databases, A2A sub-agents — opt into
-resilience with `AddResilientTool<T>()`:
+For tools that call external services (HTTP APIs, databases, A2A sub-agents), add Polly
+retry + circuit-breaking:
 
 ```csharp
-// Wraps MyApiTool with Polly retry + circuit breaker (same policy as ResilientModelClientDecorator)
 services.AddResilientTool<MyApiTool>();
-
-// Non-resilient tools register as normal
-services.AddSingleton<ITool, CalculatorTool>();
 ```
-
-`ResilientTool` decorates at the `ITool` level (not the registry level) so Polly can intercept
-real exceptions before `InMemoryToolRegistry.DispatchAsync` converts them to `IsError` results.
 
 ### Add a sensor
 
@@ -366,8 +385,8 @@ real exceptions before `InMemoryToolRegistry.DispatchAsync` converts them to `Is
 services.AddSingleton<ISensor, MySensor>();
 ```
 
-`DefaultSensorRunner` picks it up automatically and runs it in parallel with
-other sensors registered at the same hookpoint.
+`DefaultSensorRunner` picks it up automatically and runs it in parallel with other sensors
+at the same hookpoint. See the sensor pattern section above for how to implement `ISensor`.
 
 ### Add a guide
 
@@ -375,44 +394,27 @@ other sensors registered at the same hookpoint.
 services.AddGuide<MyGuide>(); // runs after the seven built-in guides
 ```
 
-### Enable checkpoint / resume
+See the guide pattern section above for how to implement `IGuide`.
 
-`HarnessLoop` auto-saves a `Checkpoint` at the start of each turn when an
-`ICheckpointStore` is registered. The default is `NullCheckpointStore` (no-op).
-Register `FileCheckpointStore` to write checkpoints to disk:
+### Checkpoint / resume
 
 ```csharp
 services.AddFileCheckpointStore("/var/checkpoints");
 ```
 
-Each checkpoint captures the fully-completed prior turn — `AgentState` plus an
-envelope (`CheckpointId`, `RunId`, `TurnNumber`, `CreatedAt`). To resume after
-a crash, load the latest checkpoint and pass its state back to a fresh harness:
+The loop saves a checkpoint at the start of each turn. To resume after a crash:
 
 ```csharp
-var store = new FileCheckpointStore("/var/checkpoints");
-var checkpoint = await store.LoadLatestAsync(taskId);
+var store = provider.GetRequiredService<ICheckpointStore>();
+var latest = await store.LoadLatestAsync(taskId, ct);
 
-var resumedState = checkpoint!.State with { Status = AgentStatus.Running };
-var outcome = await harness.RunAsync(resumedState, ct);
+var outcome = await provider.GetRequiredService<Agent>()
+    .RunAsync(latest!.State with { Status = AgentStatus.Running });
 ```
 
-The loop replays from the start of the interrupted turn (at-least-once
-semantics — idempotent tools are safe; tools with side effects should be
-designed accordingly).
+Implement `ICheckpointStore` to target blob storage, a database, or any other backend.
 
-Implement `ICheckpointStore` to target blob storage, a database, or any other
-backend:
-
-```csharp
-services.AddCheckpointStore(_ => new MyBlobCheckpointStore(connectionString));
-```
-
-### Enable human-in-the-loop
-
-`AskHumanTool` lets the model signal that it needs human input. Register it with
-an `IHumanChannel` implementation — the channel decides how the question is
-surfaced and how the response is collected:
+### Human-in-the-loop
 
 ```csharp
 // Development — blocks on stdin
@@ -422,94 +424,28 @@ services.AddAskHumanTool<ConsoleHumanChannel>();
 services.AddAskHumanTool(_ => new SlackHumanChannel(slackClient, channelId));
 ```
 
-`IHumanChannel` has one method: `AskAsync(question, ct) → string`. Everything
-about *how* a human is reached is the caller's concern; the harness just
-dispatches the tool call and feeds the response back to the model.
+When the model calls `ask_human`, the harness routes it through `IHumanChannel.AskAsync`
+and feeds the response back. See the harness concerns section for where this boundary sits.
 
-### Swap the model client
-
-`IModelClient` only sees `ToolDefinition` records — it never touches `ITool`.
-Implement it, translate `ToolDefinition.InputSchema` (`JsonElement`) into your
-provider's tool-def format, and replace the registration:
-
-```csharp
-// Anthropic (wrap with resilience decorator for retry + circuit-breaking in production)
-services.AddModelClient(_ => new ResilientModelClientDecorator(
-    new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" })));
-
-// Anthropic (simple — no resilience decorator)
-services.AddClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" });
-
-// Ollama (local — no resilience needed)
-services.AddOllamaModelClient(new OllamaClientOptions { ModelId = "qwen2.5:7b" });
-
-// Custom
-services.AddModelClient(_ => new PollyResilientModelClient(new MyProviderClient(apiKey)));
-```
-
-### Resilience — the decorator pattern
-
-`Infrastructure.Resilience` ships two decorators that add retry and circuit-breaking
-without either wrapped class knowing about it. This is the **decorator pattern**: a
-class that implements an interface by delegating to another implementation of the same
-interface, adding behaviour around it.
-
-**Model client** — `ResilientModelClientDecorator` wraps any `IModelClient`:
-
-```
-ResilientModelClientDecorator   ← adds retry + circuit breaker
-        │
-        └─▶ ClaudeModelClient           ← does the actual Anthropic API call
-                 (or FakeModelClient, or any other IModelClient)
-```
-
-Because resilience lives in the decorator rather than in `ClaudeModelClient` itself,
-it applies automatically to any provider — swap the inner client and you get the same
-retry behaviour for free.
-
-**Tools** — `ResilientTool` wraps any `ITool`:
-
-```
-ResilientTool        ← adds retry + circuit breaker
-        │
-        └─▶ MyApiTool        ← does the actual HTTP / DB / A2A call
-```
-
-Opt in per tool — a calculator tool has no transient faults; a REST-calling or A2A
-tool does. Register with `AddResilientTool<T>()` (see "Add a tool" above).
-
-Both decorators apply the same two policies:
-
-- **Retry** — on a network error or timeout, waits 200 ms then tries again,
-  doubling the wait each time, up to 3 retries.
-- **Circuit breaker** — if more than 50% of recent calls fail, stops trying
-  immediately for 15 seconds rather than hammering a broken endpoint. Lets one
-  call through after the break to check if the service has recovered.
-
-### Composition pattern
-
-Two patterns per **single-instance** abstraction:
-
-- `AddXxx<TImpl>()` / `AddXxx(factory)` — explicit override, uses `Replace`.
-- `AddXxxDefault()` — framework default via `TryAdd`; any prior explicit registration wins.
-
-**Guides are a collection**, so the pattern differs: `AddXxxGuideDefault()` uses plain
-`AddSingleton` (not `TryAdd`). Opt-out by not calling the default. Custom guides
-append with `AddGuide<T>()`.
-
-`AddModelHarness(systemPrompt)` aggregates everything. You still need to register
-`IModelClient`, `IToolRegistry`, `ITracer`, and your `ITool` / `ISensor` instances.
+### Skills (procedural memory)
 
 ```csharp
 services
-    .AddModelHarness(systemPrompt)
-    .AddTracer(_ => new CompositeTracer(new ConsoleTracer(), new OpenTelemetryTracer()))
-    .AddToolRegistry<InMemoryToolRegistry>()
-    .AddModelClient(_ => new PollyResilientModelClient(new MyModelClient()));
+    .AddFileSkillStore("~/.skills")
+    .AddSkillTools();
+```
 
-services.AddSingleton<ITool, MyTool>();
-services.AddSingleton<ISensor, MySensor>();
-services.AddGuide<MyCustomGuide>(); // optional
+`SkillsGuide` already runs by default — it just shows nothing until a store is plugged in.
+See the skills section above for how this works end-to-end.
+
+### Swap the model client
+
+```csharp
+// Anthropic
+services.AddClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" });
+
+// Ollama (local)
+services.AddOllamaModelClient(new OllamaClientOptions { ModelId = "qwen2.5:7b" });
 ```
 
 ---
