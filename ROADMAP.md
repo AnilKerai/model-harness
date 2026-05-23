@@ -11,6 +11,7 @@ where the implementation would live.
 - [x] Budget exhaustion as control flow (not exception) — one final model call, `PartialResult` outcome
 - [x] `AgentState` — immutable run-time state; `AppendStep` via `with`-expressions
 - [x] `AgentOutcome` — terminal result with status, final answer, and full trajectory
+- [ ] `IOutcomeEvaluator` — pluggable task-success / reward signal at the end of a run. Today `AgentStatus.Done` only means "the model stopped calling tools", not "the task was solved correctly"; a terminal evaluator (ground-truth oracle, LLM-as-judge, etc.) would give `AgentOutcome` an honest success label. Valuable on its own merits (evals, tests, SLAs) and the prerequisite signal for any cross-episode learning loop built *on top of* the harness (run → judge → remember). The harness owns the seam and the success label; the learning/training loop stays an external concern
 
 ### Guide pattern
 - [x] `IGuide` / `IGuideRunner` / `ContextDraft` — sequential pipeline that shapes what the model sees
