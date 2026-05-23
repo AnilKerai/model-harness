@@ -558,6 +558,7 @@ These are things every agent needs, regardless of domain. The framework provides
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
 | Tool dispatch | `IToolRegistry` | ✅ |
 | Procedural-memory plumbing — listing, loading & persisting skills | `SkillsGuide` / `ISkillStore` / `skill_manage` + `skill_view` | ✅ |
+| Human-in-the-loop plumbing — signalling a question & dispatching to a channel | `AskHumanTool` / `IHumanChannel` | ✅ |
 | Model transport | `IModelClient` | ✅ |
 | Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
 | Checkpoint / resume | `ICheckpointStore` / `FileCheckpointStore` | ✅ |
