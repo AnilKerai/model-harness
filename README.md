@@ -292,7 +292,7 @@ neutral seams behind.
 
 | Decision | Why |
 |---|---|
-| **Skills are documents, not callable code** | A skill is text injected into the prompt ("procedural memory"), not a new function the agent registers. This needs no mutable tool registry and no loop changes — the simplest design that works — and it mirrors how production systems (e.g. Nous Research's Hermes) keep skills as data that *influences prompts but never modifies runtime code*. |
+| **Skills are documents, not callable code** | A skill is text injected into the prompt ("procedural memory"), not a new function the agent registers. This needs no mutable tool registry and no loop changes — the simplest design that works — and it keeps skills as data that *influences prompts but never modifies runtime code*. |
 | **The model creates skills by calling a tool** | Capture is *agent-initiated*: `skill_manage` is an ordinary `ITool` the model chooses to call. *When* to save a skill is a learning policy (application logic); baking it into `HarnessLoop` would put a learning algorithm inside neutral plumbing. The harness provides the seam; the model drives. |
 | **Read side on by default, write side opt-in** | `SkillsGuide` + `ISkillStore` register with `AddModelHarness`, defaulted to `NullSkillStore` — which returns no skills, so the guide emits nothing and you pay zero tokens until you plug in a store. The tools and a real store are opt-in Infrastructure, exactly like `AskHumanTool`. |
 | **Progressive disclosure** | The catalogue (name + when-to-use) is cheap and always present; full procedures load only when the model asks via `skill_view`, so token cost stays bounded as the library grows. |
@@ -608,27 +608,32 @@ HITL is about what happens *outside* the model loop: how a question is surfaced 
 
 The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is entirely the user's implementation. The harness ships `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
 
-### Should a harness even have a skills system — isn't learning out of scope?
+### Should a harness even have a skills system — isn't "learning" out of scope?
 
-The harness does **not** do the learning; it provides the seams that make learning
-possible, and those seams earn their place on their own merits.
+The harness doesn't do the learning. It just provides a few simple building blocks,
+and the model uses them.
 
-The distinction that resolves it: a harness runs **one episode** (a single task,
-start to finish); learning is inherently **cross-episode** (getting better over many
-runs). Putting a cross-episode learning algorithm inside a per-episode object is a
-category error — it is the outer loop leaking into the inner loop. So the harness
-owns only what happens *inside* an episode and *at its edges*: surface the skill
-catalogue (a guide), let the model save or load a skill (a tool), persist it (a
-store). The actual learning loop — deciding when to capture, on what success signal,
-whether to ever distil skills into weights — lives in a separate project that uses
-the harness as a library.
+Here's the easiest way to think about it. The harness handles **one task at a time**.
+"Getting better over time" happens **across many tasks**. Those are two different
+jobs, so we keep them separate — the harness does the first, and anything that spans
+many runs is built on top of it.
 
-The litmus test for each seam was *"would this earn its place if I deleted the word
-'learning' from the project?"* A skill store and a `skill_view` tool are just
-retrieval; a `skill_manage` tool is just the model writing a note; the trajectory is
-just an audit log. All useful without any learning ambition. The moment a *reflection
-prompt* or a *training trigger* appeared inside `HarnessLoop`, that line would be
-crossed — so neither does.
+All the harness adds is three small, ordinary things:
+
+- a place to store skills (`ISkillStore`),
+- a tool the model can call to save or load a skill (`skill_manage` / `skill_view`),
+- a guide that lists the saved skills so the model knows they exist (`SkillsGuide`).
+
+None of these are special "learning" machinery. A store is just storage; the tools
+are just the model reading and writing notes; the guide just shows a list. The
+harness never decides *when* to save a skill or whether the agent is "improving" —
+the model makes those calls, and any smarter logic (like automatically saving a
+skill after a success) lives in your own code, not in `HarnessLoop`.
+
+A handy test we used on every piece: *"would this still be useful if we deleted the
+word 'learning'?"* Each one passed — they're all useful plumbing on their own. The
+day a learning algorithm has to live inside the loop itself is the day we've gone
+too far, so we don't.
 
 ---
 
