@@ -8,13 +8,13 @@
 
 ```bash
 dotnet build SapphireGuard.ModelHarness.slnx
-dotnet run --project src/SapphireGuard.ModelHarness.SampleAgent
+dotnet run --project samples/HappyPath
 ```
 
-Add an API key first:
+Add an API key first (per-sample; samples fall back to `FakeModelClient` when absent):
 
 ```json
-// src/SapphireGuard.ModelHarness.SampleAgent/appsettings.local.json
+// samples/HappyPath/appsettings.local.json
 { "Anthropic": { "ApiKey": "sk-ant-..." } }
 ```
 
@@ -23,15 +23,15 @@ Add an API key first:
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete adapters: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Depends on Framework only |
+| `Infrastructure` | Concrete adapters: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Skills (procedural memory): `FileSkillStore`, `SkillManageTool`, `SkillViewTool`. Depends on Framework only |
 | `Infrastructure.Resilience` | `ResilientModelClientDecorator` — wraps any `IModelClient` with Polly retry + circuit breaker. Depends on Framework + Polly v8 |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |
 | `Infrastructure.Persistence` | Checkpoint/resume (`FileCheckpointStore`, `StepJsonConverter`). Depends on Framework only |
 | `Infrastructure.Ollama` | Ollama adapter (`OllamaModelClient`) via OllamaSharp v5. Depends on Framework only |
-| `SampleAgent` | Composition root — shows how to wire everything via DI |
+| `samples/*` | One console project per scenario — composition roots showing how to wire everything via DI |
 
-Dependency direction is strict and unidirectional: SampleAgent → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp / Infrastructure.Ollama / Infrastructure.Resilience → Framework.
+Dependency direction is strict and unidirectional: samples/* → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp / Infrastructure.Ollama / Infrastructure.Resilience → Framework.
 
 ## Core patterns
 
@@ -39,7 +39,7 @@ Dependency direction is strict and unidirectional: SampleAgent → Infrastructur
 Turn-by-turn state machine: check budget → sensors (PreModelCall) → build context via guides → call model → sensors (PostModelCall) → dispatch tools → sensors (Pre/PostToolCall) → repeat. Budget exhaustion is control flow, not an exception — one final model call with tools disabled, then `PartialResult`.
 
 ### Guide pattern
-Guides run **sequentially** before each model call, each contributing to a shared `ContextDraft`. Built-ins: `SystemPromptGuide`, `HarnessInstructionsGuide` (appends harness conventions to system prompt), `TrajectoryGuide` (with token-aware compaction), `MemoryGuide` (queries `IMemoryStore`), `ToolSelectorGuide` (delegates to `IToolSelector`). Add custom guides with `services.AddGuide<T>()`.
+Guides run **sequentially** before each model call, each contributing to a shared `ContextDraft`. Built-ins: `SystemPromptGuide`, `HarnessInstructionsGuide` (appends harness conventions to system prompt), `TrajectoryGuide` (with token-aware compaction), `MemoryGuide` (queries `IMemoryStore`), `ToolSelectorGuide` (delegates to `IToolSelector`), `ToolCatalogueGuide` (renders the tool catalogue into `ContextDraft.SystemSections`), `SkillsGuide` (renders the skill catalogue from `ISkillStore`). Add custom guides with `services.AddGuide<T>()`.
 
 ### Sensor pattern
 Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Intervene(reason)` appends a `SensorInterventionStep` to the trajectory, which `TrajectoryGuide` renders as a `[HARNESS OBSERVATION — ...]` system note on the next turn. `HarnessInstructionsGuide` primes the model in the system prompt to treat these notes as directives — feedforward and feedback working together.
@@ -61,6 +61,7 @@ Sensors observe and report a concern; the loop decides what "intervening" means 
 | Model transport | `IModelClient` | `ClaudeModelClient` (Anthropic) / `FakeModelClient` |
 | Tool registry | `IToolRegistry` | `InMemoryToolRegistry` |
 | Memory retrieval | `IMemoryStore` | `NullMemoryStore` (no-op) |
+| Skill storage | `ISkillStore` | `NullSkillStore` (no-op) |
 | Tool filtering | `IToolSelector` | `PassthroughToolSelector` |
 | Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` |
 | Tracing | `ITracer` | `CompositeTracer(ConsoleTracer, OpenTelemetryTracer)` |
@@ -100,4 +101,4 @@ Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelCl
 
 ## Roadmap status
 
-See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, `AskHumanTool` + `IHumanChannel` (HITL seam), Anthropic adapter, MCP adapter, Ollama adapter, DI composition, context management (memory + tool selection), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: additional model providers (OpenAI etc.).
+See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, `AskHumanTool` + `IHumanChannel` (HITL seam), Anthropic adapter, MCP adapter, Ollama adapter, DI composition, context management (memory + tool selection), skills / procedural memory (`ISkillStore` + `SkillsGuide` + skill tools, `ToolCatalogueGuide`), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: `IOutcomeEvaluator` (task-success signal), skill auto-harvest, additional model providers (OpenAI etc.).

@@ -67,6 +67,15 @@ where the implementation would live.
 - [x] `AddAskHumanTool<TChannel>()` / factory overload DI extension in `Infrastructure`
 - [x] Decision: HITL is a **system design concern**, not a harness concern — the harness provides the seam (`IHumanChannel`) and signals intent (`AskHumanTool`); how a human is reached is entirely the user's implementation
 
+### Skills (procedural memory)
+- [x] `ISkillStore` / `Skill` / `SkillSummary` / `NullSkillStore` — seam in `Framework.Skills`; default is a no-op so the read side ships on with zero overhead
+- [x] `SkillsGuide` — surfaces the skill catalogue (name + when-to-use) into context via progressive disclosure; emits nothing when no skills exist
+- [x] `ToolCatalogueGuide` — tool-catalogue rendering extracted out of `DefaultContextBuilder` into a guide via `ContextDraft.SystemSections`; all system-prompt sections are now guide-driven (the builder just concatenates)
+- [x] `FileSkillStore` — persists skills as `SKILL.md` (frontmatter + markdown body, minimal hand-rolled parser, no YAML dependency); `AddFileSkillStore(dir)`
+- [x] `SkillManageTool` (`skill_manage`) — model-initiated save/delete of procedural memory; `SkillViewTool` (`skill_view`) — loads a full skill body on demand; `AddSkillTools()`
+- [x] `samples/SkillLearning` — scripted, no-API-key demo: run 1 captures a skill, run 2 loads it from disk via `SkillsGuide` and reuses it
+- [ ] Auto-harvest — suggest or capture a skill automatically after a successful run (depends on the `IOutcomeEvaluator` success signal above); capture stays agent-initiated by default
+
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
 - [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
