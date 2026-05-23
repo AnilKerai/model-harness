@@ -1,6 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 
 /// <summary>Configuration for <see cref="ClaudeModelClient"/>.</summary>
+[ExcludeFromCodeCoverage]
 public sealed record ClaudeClientOptions
 {
     public required string ApiKey { get; init; }

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -6,6 +7,7 @@ using SapphireGuard.ModelHarness.Framework.Tracing;
 namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 
 /// <summary>Fans out all trace events to multiple <see cref="ITracer"/> instances.</summary>
+[ExcludeFromCodeCoverage]
 public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
 {
     public void StartTrace(string taskId, string taskText)

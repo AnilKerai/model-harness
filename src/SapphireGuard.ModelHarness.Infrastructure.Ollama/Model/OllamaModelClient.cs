@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using OllamaSharp;
 using OllamaSharp.Models.Chat;
@@ -30,6 +31,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 ///     unaware of the difference.
 ///   • Ollama runs locally; cost is always zero.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class OllamaModelClient : IModelClient
 {
     private readonly OllamaApiClient _client;

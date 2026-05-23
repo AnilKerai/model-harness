@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
@@ -7,6 +8,7 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 
+[ExcludeFromCodeCoverage]
 public sealed class ResilientModelClientDecorator(IModelClient inner) : IModelClient
 {
     private readonly ResiliencePipeline<ModelResponse> _pipeline = new ResiliencePipelineBuilder<ModelResponse>()

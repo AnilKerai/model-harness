@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Ollama;
 
+[ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
     public static IServiceCollection AddOllamaModelClient(

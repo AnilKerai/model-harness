@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
@@ -13,6 +14,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 /// System.Diagnostics.Metrics.Meter — the standard .NET observability hooks.
 /// Wire up your OTel exporters in the host; this class has no OTel SDK dependency.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class OpenTelemetryTracer : ITracer, IDisposable
 {
     public const string ActivitySourceName = "SapphireGuard.ModelHarness";

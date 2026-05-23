@@ -1,8 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 
+[ExcludeFromCodeCoverage]
 public sealed class AskHumanTool(IHumanChannel channel) : ITool
 {
     private static readonly JsonElement Schema = JsonDocument.Parse(

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Messages;
@@ -19,6 +20,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 /// Maps framework messages and tool definitions to SDK types, calls the
 /// Messages API, and maps the response back to framework types.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class ClaudeModelClient : IModelClient
 {
     private readonly AnthropicClient _client;

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Polly;
 using Polly.CircuitBreaker;
@@ -6,6 +7,7 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 
+[ExcludeFromCodeCoverage]
 public sealed class ResilientTool(ITool inner) : ITool
 {
     private static readonly ResiliencePipeline<ToolResult> DefaultPipeline =

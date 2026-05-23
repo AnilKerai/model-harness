@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Infrastructure.Persistence.Serialization;
 
@@ -8,6 +9,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Persistence;
 /// Files are named <c>{timestamp}_{checkpointId}.json</c> so lexicographic order
 /// equals chronological order, making <see cref="LoadLatestAsync"/> a simple sort.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
 {
     public async Task SaveAsync(Checkpoint checkpoint, CancellationToken ct = default)

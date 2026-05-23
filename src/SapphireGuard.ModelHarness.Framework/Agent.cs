@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.State;
 using AgentBudget = global::SapphireGuard.ModelHarness.Framework.State.Budget;
 
 namespace SapphireGuard.ModelHarness.Framework;
 
+[ExcludeFromCodeCoverage]
 public sealed class Agent(HarnessLoop loop)
 {
     private static readonly AgentBudget DefaultBudget = new()

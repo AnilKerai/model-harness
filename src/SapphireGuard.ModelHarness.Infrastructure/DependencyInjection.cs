@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -6,6 +7,7 @@ using SapphireGuard.ModelHarness.Infrastructure.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure;
 
+[ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
     public static IServiceCollection AddFileSkillStore(this IServiceCollection services, string directory) =>

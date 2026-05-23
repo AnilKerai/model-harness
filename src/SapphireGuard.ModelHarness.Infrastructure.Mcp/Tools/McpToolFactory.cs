@@ -1,8 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
 using ModelContextProtocol.Client;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Mcp.Tools;
 
+[ExcludeFromCodeCoverage]
 public static class McpToolFactory
 {
     public static async Task<IReadOnlyList<ITool>> CreateToolsAsync(

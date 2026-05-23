@@ -18,7 +18,10 @@ public sealed class StepJsonConverter : JsonConverter<Step>
         using var doc = JsonDocument.ParseValue(ref reader);
         var root = doc.RootElement;
 
-        var typeName = root.GetProperty(TypeProperty).GetString()
+        if (!root.TryGetProperty(TypeProperty, out var typeEl))
+            throw new JsonException("Missing $type discriminator on Step");
+
+        var typeName = typeEl.GetString()
             ?? throw new JsonException("Missing $type discriminator on Step");
 
         return typeName switch

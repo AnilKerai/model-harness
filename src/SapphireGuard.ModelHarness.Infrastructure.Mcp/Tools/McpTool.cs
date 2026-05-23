@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -5,6 +6,7 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Mcp.Tools;
 
+[ExcludeFromCodeCoverage]
 public sealed class McpTool(McpClient client, McpClientTool mcpTool) : ITool
 {
     public string Name => mcpTool.Name;

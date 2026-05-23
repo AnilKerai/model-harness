@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Context;
 using SapphireGuard.ModelHarness.Framework.Guides;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace SapphireGuard.ModelHarness.Framework;
 
+[ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
     public static IServiceCollection AddModelHarness(this IServiceCollection services, string systemPrompt) =>

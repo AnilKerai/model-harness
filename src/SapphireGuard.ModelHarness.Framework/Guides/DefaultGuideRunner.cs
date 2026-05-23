@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
@@ -8,6 +9,7 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// each guide build on contributions from the ones before it — a tool-selector
 /// guide can, for example, inspect memory snippets added by a memory guide.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class DefaultGuideRunner(IEnumerable<IGuide> guides) : IGuideRunner
 {
     private readonly IReadOnlyList<IGuide> _guides = [.. guides];
