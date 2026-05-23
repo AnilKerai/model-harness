@@ -247,12 +247,14 @@ Model re-plans without that tool
 
 ## Skills — procedural memory (getting better over time)
 
-A **skill** is a reusable procedure the agent captures from past work and reuses
-later, so it accumulates know-how across runs instead of re-deriving it every time.
-This is the *in-context* (non-parametric) form of learning: nothing in the model's
-weights changes — what changes is *what the agent is shown*. Skills are built
-entirely from the two patterns above — a **guide** for the read side, a **tool** for
-the write side — so **`HarnessLoop` is unaware skills exist**.
+A **skill** is a write-up of how to do something, saved after the agent works it out
+once so it can reuse it next time instead of figuring it out again. The agent builds
+up a small library of these over time. Nothing about the model itself changes — the
+only thing that changes is what we show it.
+
+Skills reuse the two patterns above: a **guide** shows the agent which skills exist,
+and a **tool** lets it save and load them. The loop (`HarnessLoop`) doesn't even know
+skills exist.
 
 ```mermaid
 flowchart LR
@@ -265,11 +267,15 @@ flowchart LR
     SV --> STORE
 ```
 
-Every turn, `SkillsGuide` lists the available skills cheaply (name + when-to-use
-only). When the model picks one it calls `skill_view` to load the full procedure;
-when it solves something worth keeping it calls `skill_manage` to save it.
-`FileSkillStore` persists each skill as a `SKILL.md` file, so skills survive across
-runs and processes.
+How it works, in one turn:
+
+1. `SkillsGuide` shows the agent a short list of saved skills — just the name and
+   when to use each one (cheap, so it can sit in every prompt).
+2. If the agent wants one, it calls `skill_view` to read the full write-up.
+3. When the agent solves something worth keeping, it calls `skill_manage` to save it.
+
+`FileSkillStore` writes each skill to a `SKILL.md` file on disk, so skills stick
+around between runs.
 
 ```csharp
 // The read side ships on by default (no-op until a store is plugged in).
@@ -279,36 +285,31 @@ services
     .AddSkillTools();                // registers skill_manage + skill_view
 ```
 
-See `samples/SkillLearning` for a runnable, no-API-key demo: run 1 captures a skill,
-run 2 loads it from disk and reuses it — a shorter trajectory, proving the learning
-carried across runs.
+See `samples/SkillLearning` for a runnable, no-API-key demo: run 1 saves a skill, and
+run 2 loads it from disk and reuses it.
 
 ### Why it's built this way
 
-A harness runs **one episode**; learning happens **across episodes**. So the
-cross-episode learning loop sits *on top of* the harness, never inside it. Every
-choice below keeps the *learning policy* out of the framework and leaves only
-neutral seams behind.
+The guiding rule: the harness handles **one task** (one "episode"); getting better
+over many tasks is a separate job that lives *on top of* the harness, not inside it.
+Every choice below keeps that learning logic out of the framework.
 
 | Decision | Why |
 |---|---|
-| **Skills are documents, not callable code** | A skill is text injected into the prompt ("procedural memory"), not a new function the agent registers. This needs no mutable tool registry and no loop changes — the simplest design that works — and it keeps skills as data that *influences prompts but never modifies runtime code*. |
-| **The model creates skills by calling a tool** | Capture is *agent-initiated*: `skill_manage` is an ordinary `ITool` the model chooses to call. *When* to save a skill is a learning policy (application logic); baking it into `HarnessLoop` would put a learning algorithm inside neutral plumbing. The harness provides the seam; the model drives. |
-| **Read side on by default, write side opt-in** | `SkillsGuide` + `ISkillStore` register with `AddModelHarness`, defaulted to `NullSkillStore` — which returns no skills, so the guide emits nothing and you pay zero tokens until you plug in a store. The tools and a real store are opt-in Infrastructure, exactly like `AskHumanTool`. |
-| **Progressive disclosure** | The catalogue (name + when-to-use) is cheap and always present; full procedures load only when the model asks via `skill_view`, so token cost stays bounded as the library grows. |
-| **A dedicated `ISkillStore`, not `IMemoryStore`** | Procedural skills (named, versioned, with a body) are a different shape from episodic memory snippets; keeping them separate lets each evolve independently. |
+| **Skills are notes, not code** | A skill is just text we drop into the prompt — not a new function the agent installs. Nothing in the loop has to change, and the agent can't break itself by writing bad code. |
+| **The agent saves skills by calling a tool** | Saving a skill is the agent's own decision (it calls `skill_manage`), not something the loop forces. *When* to save is the kind of choice that belongs in your app, not buried in the framework. |
+| **On by default, but free until used** | The read side is always wired in, but the default store is empty — so the guide shows nothing and costs nothing until you plug in a real store. The tools and a real store are opt-in, like `AskHumanTool`. |
+| **Show a short list, load on demand** | Every prompt carries only the skill names and when-to-use lines (cheap). The full write-up loads only when the agent asks for it, so cost stays low even with lots of skills. |
+| **Its own store, separate from memory** | Skills (named, with a body) are a different shape from memory snippets, so they get their own `ISkillStore` and the two can change independently. |
 
-The boundary, plainly: **the harness owns the seam and the per-episode mechanism**
-— surface the catalogue, dispatch the tool, persist the file. **It does not own the
-learning loop** — whether to auto-capture skills, on what signal, or whether to ever
-distil them into weights. Those stay user/external concerns. (A future
-`IOutcomeEvaluator` success signal would enable optional *auto-harvest* — see the
-roadmap — but capture stays agent-initiated by default.)
+In short: **the harness stores, lists, and hands over skills. It does not decide when
+to create them or whether the agent is "improving"** — that's left to you. (A future
+success signal could let the agent save skills automatically — see the roadmap — but
+even then the agent stays in charge of saving.)
 
-As a side effect, extracting the skill catalogue into `SkillsGuide` also moved the
-**tool** catalogue out of `DefaultContextBuilder` into `ToolCatalogueGuide`: every
-system-prompt section is now produced by a guide writing to `ContextDraft.SystemSections`,
-and the builder just concatenates. Context shaping is now uniformly guide-driven.
+One nice side effect: doing the skills list as a guide let us move the **tool** list
+into a guide too (`ToolCatalogueGuide`). Now every part of the prompt is built by a
+guide, and the builder just glues the pieces together.
 
 ---
 
@@ -644,6 +645,7 @@ too far, so we don't.
 | **Agent** | An Agent = Model + Harness. A loop-driven process that takes a natural-language task, uses tools and a model to produce a result, and records every step it takes. |
 | **Harness** | The scaffolding that wraps a model: loop, guides, sensors, and budget. The harness is a model control concern — it does not own application or system design decisions. |
 | **Turn** | One iteration of the loop: build context → call model → act on response. Each turn appends one or more `Step`s to the trajectory. |
+| **Episode** | One full run of the agent on a single task — from the first turn to the final `AgentOutcome`. An episode is usually several turns. "Across episodes" means across many separate runs (e.g. reusing a skill saved in an earlier run). |
 | **Trajectory** | The append-only, ordered list of `Step`s on `AgentState`. It is the durable log of everything the agent has done and seen. Three step types: `ModelCallStep` (a model call and its response), `ToolCallStep` (a tool invocation and its result), `SensorInterventionStep` (a sensor concern and its reason). |
 | **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn — the trajectory is the log of those transitions. |
 | **AgentOutcome** | The terminal result of a run: final answer, status (`Done`, `PartialResult`, `Failed`), and the last `AgentState`. |
