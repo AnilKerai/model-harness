@@ -1,11 +1,23 @@
 using Microsoft.Extensions.DependencyInjection;
+using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Infrastructure.Skills;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure;
 
 public static class DependencyInjection
 {
+    public static IServiceCollection AddFileSkillStore(this IServiceCollection services, string directory) =>
+        services.AddSkillStore(_ => new FileSkillStore(directory));
+
+    public static IServiceCollection AddSkillTools(this IServiceCollection services)
+    {
+        services.AddSingleton<ITool, SkillManageTool>();
+        services.AddSingleton<ITool, SkillViewTool>();
+        return services;
+    }
+
     public static IServiceCollection AddAskHumanTool<TChannel>(this IServiceCollection services)
         where TChannel : class, IHumanChannel
     {
