@@ -8,13 +8,15 @@ architecture.
 > turns it into an agent. Calling it an "agent harness" would imply the harness
 > *is* the agent; "model harness" names what it actually is.
 
-The `SampleAgent` wires up `ClaudeModelClient` against the Anthropic API and
-`OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
+The samples under `samples/` wire up `ClaudeModelClient` against the Anthropic API
+and `OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
 provided for local development with no external dependencies.
 
 ## Run it
 
-Add your Anthropic API key to `src/SapphireGuard.ModelHarness.SampleAgent/appsettings.local.json`:
+Each scenario is its own console project under `samples/`. Add your Anthropic API
+key to the `appsettings.local.json` of the sample you want to run, e.g.
+`samples/HappyPath/appsettings.local.json`:
 
 ```json
 {
@@ -24,28 +26,25 @@ Add your Anthropic API key to `src/SapphireGuard.ModelHarness.SampleAgent/appset
 }
 ```
 
-To also run the Ollama scenario, add the Ollama model you want to use (the model
-must be pulled locally with `ollama pull <model>`):
+To run the Ollama scenario, add the Ollama model you want to use (the model
+must be pulled locally with `ollama pull <model>`) to
+`samples/OllamaToolCall/appsettings.local.json`:
 
 ```json
 {
-  "Anthropic": { "ApiKey": "sk-ant-..." },
   "Ollama": { "ModelId": "qwen2.5:7b" }
 }
 ```
 
-Then run:
+Then run any sample by its project path:
 
 ```bash
-dotnet run --project src/SapphireGuard.ModelHarness.SampleAgent
+dotnet run --project samples/HappyPath
+dotnet run --project samples/OllamaToolCall
 ```
 
 JSON trace events stream to stdout, followed by the final outcome and a
-flattened trajectory. To run a single scenario by name:
-
-```bash
-dotnet run --project src/SapphireGuard.ModelHarness.SampleAgent -- ollama-tool-call
-```
+flattened trajectory.
 
 ---
 
@@ -86,8 +85,10 @@ Seven projects with a strict dependency direction:
   assistant message, whereas the framework's trajectory emits them as interleaved
   `ToolUse`/`Tool` pairs. Wire up with `services.AddOllamaModelClient(options)`. Depends on
   Framework only.
-- **`SapphireGuard.ModelHarness.SampleAgent`** — console app showing how a domain agent wires
-  the framework via `Microsoft.Extensions.DependencyInjection`.
+- **`samples/*`** — one console project per scenario (HappyPath, PiiDetection, CostThrottle,
+  ToolCallReasonableness, ToolResultSanity, CheckpointResume, OllamaToolCall), each a
+  composition root showing how a domain agent wires the framework via
+  `Microsoft.Extensions.DependencyInjection`.
 
 ---
 
