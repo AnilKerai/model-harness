@@ -54,7 +54,7 @@ Seven projects with a strict dependency direction:
 
 ![Architecture](docs/architecture.svg)
 
-- **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, five built-in
+- **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, seven built-in
   guides, and `IServiceCollection` extension methods. Only external dependency
   is `Microsoft.Extensions.DependencyInjection.Abstractions`.
 - **`SapphireGuard.ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
@@ -64,7 +64,9 @@ Seven projects with a strict dependency direction:
   (PreModelCall, soft spend cap), `ToolResultSanityCheckSensor` (PostToolCall, validates
   result shape and custom per-tool rules), `StuckDetector` (PreToolCall, blocks repeated
   identical tool calls). Harness tools: `AskHumanTool` backed by `IHumanChannel`;
-  `ConsoleHumanChannel` for development. Depends on Framework only.
+  `ConsoleHumanChannel` for development. Skills (procedural memory): `FileSkillStore`
+  (persists `SKILL.md` files), and the `SkillManageTool` / `SkillViewTool` the model
+  uses to capture and load skills. Depends on Framework only.
 - **`SapphireGuard.ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
   `ClaudeModelClient` maps framework messages and tool definitions to the
   Anthropic Messages API and back. Depends on Framework only.
@@ -86,8 +88,8 @@ Seven projects with a strict dependency direction:
   `ToolUse`/`Tool` pairs. Wire up with `services.AddOllamaModelClient(options)`. Depends on
   Framework only.
 - **`samples/*`** — one console project per scenario (HappyPath, PiiDetection, CostThrottle,
-  ToolCallReasonableness, ToolResultSanity, CheckpointResume, OllamaToolCall), each a
-  composition root showing how a domain agent wires the framework via
+  ToolCallReasonableness, ToolResultSanity, CheckpointResume, OllamaToolCall, SkillLearning),
+  each a composition root showing how a domain agent wires the framework via
   `Microsoft.Extensions.DependencyInjection`.
 
 ---
@@ -114,7 +116,9 @@ flowchart LR
         G2 --> G3[TrajectoryGuide\nrenders history]
         G3 --> G4[MemoryGuide\nsurfaces snippets]
         G4 --> G5[ToolSelectorGuide\nfilters AvailableTools]
-        G5 --> GN[... custom guides]
+        G5 --> G6[ToolCatalogueGuide\nrenders tool catalogue]
+        G6 --> G7[SkillsGuide\nrenders skill catalogue]
+        G7 --> GN[... custom guides]
     end
 
     GN --> CB[DefaultContextBuilder\nassembles prompt]
@@ -130,6 +134,7 @@ writes into one or more of the draft's fields:
 | `TrajectoryMessages` | Rendered history — model turns, tool results, sensor notes |
 | `MemorySnippets` | Long-term knowledge surfaced from a retrieval system |
 | `AvailableTools` | Tool list for this turn — guides can filter or reorder |
+| `SystemSections` | Pre-rendered system-prompt sections (tool catalogue, skill catalogue) appended after the prompt |
 
 Implement `IGuide` to create a custom guide:
 
@@ -148,7 +153,7 @@ public sealed class MyGuide : IGuide
     }
 }
 
-services.AddGuide<MyGuide>(); // runs after the five built-in guides
+services.AddGuide<MyGuide>(); // runs after the seven built-in guides
 ```
 
 Guides run **sequentially** so each one can build on what the previous added —
@@ -237,6 +242,73 @@ Model sees: "[HARNESS OBSERVATION — my-sensor at PreToolCall] dangerous-tool i
         ▼
 Model re-plans without that tool
 ```
+
+---
+
+## Skills — procedural memory (getting better over time)
+
+A **skill** is a reusable procedure the agent captures from past work and reuses
+later, so it accumulates know-how across runs instead of re-deriving it every time.
+This is the *in-context* (non-parametric) form of learning: nothing in the model's
+weights changes — what changes is *what the agent is shown*. Skills are built
+entirely from the two patterns above — a **guide** for the read side, a **tool** for
+the write side — so **`HarnessLoop` is unaware skills exist**.
+
+```mermaid
+flowchart LR
+    STORE[(ISkillStore\nFileSkillStore persists SKILL.md)]
+    STORE --> SG[SkillsGuide\nrenders catalogue\nname + when-to-use]
+    SG --> CTX[Model sees the\nskill catalogue each turn]
+    CTX -. calls .-> SM[skill_manage\nsave / delete]
+    CTX -. calls .-> SV[skill_view\nload full body]
+    SM --> STORE
+    SV --> STORE
+```
+
+Every turn, `SkillsGuide` lists the available skills cheaply (name + when-to-use
+only). When the model picks one it calls `skill_view` to load the full procedure;
+when it solves something worth keeping it calls `skill_manage` to save it.
+`FileSkillStore` persists each skill as a `SKILL.md` file, so skills survive across
+runs and processes.
+
+```csharp
+// The read side ships on by default (no-op until a store is plugged in).
+// Opt into the write side and a real store:
+services
+    .AddFileSkillStore("~/.skills")  // persists SKILL.md files
+    .AddSkillTools();                // registers skill_manage + skill_view
+```
+
+See `samples/SkillLearning` for a runnable, no-API-key demo: run 1 captures a skill,
+run 2 loads it from disk and reuses it — a shorter trajectory, proving the learning
+carried across runs.
+
+### Why it's built this way
+
+A harness runs **one episode**; learning happens **across episodes**. So the
+cross-episode learning loop sits *on top of* the harness, never inside it. Every
+choice below keeps the *learning policy* out of the framework and leaves only
+neutral seams behind.
+
+| Decision | Why |
+|---|---|
+| **Skills are documents, not callable code** | A skill is text injected into the prompt ("procedural memory"), not a new function the agent registers. This needs no mutable tool registry and no loop changes — the simplest design that works — and it mirrors how production systems (e.g. Nous Research's Hermes) keep skills as data that *influences prompts but never modifies runtime code*. |
+| **The model creates skills by calling a tool** | Capture is *agent-initiated*: `skill_manage` is an ordinary `ITool` the model chooses to call. *When* to save a skill is a learning policy (application logic); baking it into `HarnessLoop` would put a learning algorithm inside neutral plumbing. The harness provides the seam; the model drives. |
+| **Read side on by default, write side opt-in** | `SkillsGuide` + `ISkillStore` register with `AddModelHarness`, defaulted to `NullSkillStore` — which returns no skills, so the guide emits nothing and you pay zero tokens until you plug in a store. The tools and a real store are opt-in Infrastructure, exactly like `AskHumanTool`. |
+| **Progressive disclosure** | The catalogue (name + when-to-use) is cheap and always present; full procedures load only when the model asks via `skill_view`, so token cost stays bounded as the library grows. |
+| **A dedicated `ISkillStore`, not `IMemoryStore`** | Procedural skills (named, versioned, with a body) are a different shape from episodic memory snippets; keeping them separate lets each evolve independently. |
+
+The boundary, plainly: **the harness owns the seam and the per-episode mechanism**
+— surface the catalogue, dispatch the tool, persist the file. **It does not own the
+learning loop** — whether to auto-capture skills, on what signal, or whether to ever
+distil them into weights. Those stay user/external concerns. (A future
+`IOutcomeEvaluator` success signal would enable optional *auto-harvest* — see the
+roadmap — but capture stays agent-initiated by default.)
+
+As a side effect, extracting the skill catalogue into `SkillsGuide` also moved the
+**tool** catalogue out of `DefaultContextBuilder` into `ToolCatalogueGuide`: every
+system-prompt section is now produced by a guide writing to `ContextDraft.SystemSections`,
+and the builder just concatenates. Context shaping is now uniformly guide-driven.
 
 ---
 
@@ -331,7 +403,7 @@ other sensors registered at the same hookpoint.
 ### Add a guide
 
 ```csharp
-services.AddGuide<MyGuide>(); // runs after the five built-in guides
+services.AddGuide<MyGuide>(); // runs after the seven built-in guides
 ```
 
 ### Enable checkpoint / resume
@@ -498,6 +570,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | ------- | ---- | ----- |
 | Sub-agents / A2A | `ITool` | A local sub-agent is an `ITool` whose `ExecuteAsync` runs another `HarnessLoop`. A remote one calls an A2A endpoint. The framework has no opinion on which — it just dispatches the tool call. |
 | Long-term memory | `IMemoryStore` → `MemoryGuide` | Replace `NullMemoryStore` with a vector store or knowledge graph. |
+| Procedural memory / skills | `ISkillStore` → `SkillsGuide` + `skill_manage` / `skill_view` | Replace `NullSkillStore` with `FileSkillStore` or a custom backend. The harness surfaces, loads, and persists skills; *when* to capture one is the model's call (agent-initiated). The cross-episode learning loop on top is the user's. |
 | Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. |
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
@@ -535,6 +608,28 @@ HITL is about what happens *outside* the model loop: how a question is surfaced 
 
 The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is entirely the user's implementation. The harness ships `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
 
+### Should a harness even have a skills system — isn't learning out of scope?
+
+The harness does **not** do the learning; it provides the seams that make learning
+possible, and those seams earn their place on their own merits.
+
+The distinction that resolves it: a harness runs **one episode** (a single task,
+start to finish); learning is inherently **cross-episode** (getting better over many
+runs). Putting a cross-episode learning algorithm inside a per-episode object is a
+category error — it is the outer loop leaking into the inner loop. So the harness
+owns only what happens *inside* an episode and *at its edges*: surface the skill
+catalogue (a guide), let the model save or load a skill (a tool), persist it (a
+store). The actual learning loop — deciding when to capture, on what success signal,
+whether to ever distil skills into weights — lives in a separate project that uses
+the harness as a library.
+
+The litmus test for each seam was *"would this earn its place if I deleted the word
+'learning' from the project?"* A skill store and a `skill_view` tool are just
+retrieval; a `skill_manage` tool is just the model writing a note; the trajectory is
+just an audit log. All useful without any learning ambition. The moment a *reflection
+prompt* or a *training trigger* appeared inside `HarnessLoop`, that line would be
+crossed — so neither does.
+
 ---
 
 ## Glossary
@@ -552,5 +647,6 @@ The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. Whe
 | **Sensor** | Observes the loop at declared hookpoints and can raise a concern. Sensors run in parallel; the loop's response to a concern depends on the hookpoint (see the hookpoint table). |
 | **HookPoint** | A lifecycle position where sensors fire: `PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`. |
 | **Tool** | Something the model can invoke by name. The harness dispatches the call; the model decides when and why to use it. |
+| **Skill** | A reusable procedure (procedural memory) the agent captures from past work and reuses later. Stored as data (a `SKILL.md` document) and surfaced into the prompt by `SkillsGuide`, never executed as code. Created by the model via `skill_manage`; loaded on demand via `skill_view`. |
 | **Model client** | The transport seam (`IModelClient`). Receives a message list and tool definitions; returns a response. Knows nothing about state, the loop, or tool implementations. |
 | **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
