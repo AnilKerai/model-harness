@@ -78,9 +78,11 @@ Seven projects with a strict dependency direction:
   `{dir}/{taskId}/{timestamp}_{id}.json`. A custom `StepJsonConverter` handles the polymorphic
   `Step` hierarchy without annotating the domain model. Wire up with
   `services.AddFileCheckpointStore(directory)`. Depends on Framework only.
-- **`SapphireGuard.ModelHarness.Infrastructure.Resilience`** — `ResilientModelClientDecorator`:
-  wraps any `IModelClient` with Polly retry (exponential back-off, 3 attempts) and circuit
-  breaker (50% failure ratio, 15 s break). Depends on Framework + Polly v8.
+- **`SapphireGuard.ModelHarness.Infrastructure.Resilience`** — resilience decorators:
+  `ResilientModelClientDecorator` wraps any `IModelClient`, and `ResilientTool` wraps any
+  `ITool`, both with the same Polly policy: exponential back-off retry (3 attempts) and
+  circuit breaker (50% failure ratio, 15 s break). Opt in per tool — a calculator needs no
+  retry; a REST-calling or A2A tool does. Depends on Framework + Polly v8.
 - **`SapphireGuard.ModelHarness.Infrastructure.Ollama`** — Ollama adapter:
   `OllamaModelClient` maps framework messages and tool definitions to the OllamaSharp API.
   Handles Ollama's requirement that all tool calls from one model turn be grouped into a single
@@ -392,6 +394,20 @@ public sealed class MyTool : ITool
 services.AddSingleton<ITool, MyTool>();
 ```
 
+For tools that call external services — HTTP APIs, databases, A2A sub-agents — opt into
+resilience with `AddResilientTool<T>()`:
+
+```csharp
+// Wraps MyApiTool with Polly retry + circuit breaker (same policy as ResilientModelClientDecorator)
+services.AddResilientTool<MyApiTool>();
+
+// Non-resilient tools register as normal
+services.AddSingleton<ITool, CalculatorTool>();
+```
+
+`ResilientTool` decorates at the `ITool` level (not the registry level) so Polly can intercept
+real exceptions before `InMemoryToolRegistry.DispatchAsync` converts them to `IsError` results.
+
 ### Add a sensor
 
 ```csharp
@@ -481,10 +497,12 @@ services.AddModelClient(_ => new PollyResilientModelClient(new MyProviderClient(
 
 ### Resilience — the decorator pattern
 
-`PollyResilientModelClient` wraps any `IModelClient` and adds retry and
-circuit-breaking without the wrapped client knowing anything about it. This is
-the **decorator pattern**: a class that implements an interface by delegating to
-another implementation of the same interface, adding behaviour around it.
+`Infrastructure.Resilience` ships two decorators that add retry and circuit-breaking
+without either wrapped class knowing about it. This is the **decorator pattern**: a
+class that implements an interface by delegating to another implementation of the same
+interface, adding behaviour around it.
+
+**Model client** — `ResilientModelClientDecorator` wraps any `IModelClient`:
 
 ```
 ResilientModelClientDecorator   ← adds retry + circuit breaker
@@ -493,13 +511,22 @@ ResilientModelClientDecorator   ← adds retry + circuit breaker
                  (or FakeModelClient, or any other IModelClient)
 ```
 
-Because resilience lives in the decorator rather than in `ClaudeModelClient`
-itself, it applies automatically to any provider — swap the inner client and
-you get the same retry behaviour for free. It also keeps each class focused on
-one job: `ClaudeModelClient` handles the Anthropic API, `PollyResilientModelClient`
-handles failure.
+Because resilience lives in the decorator rather than in `ClaudeModelClient` itself,
+it applies automatically to any provider — swap the inner client and you get the same
+retry behaviour for free.
 
-The two behaviours it adds:
+**Tools** — `ResilientTool` wraps any `ITool`:
+
+```
+ResilientTool        ← adds retry + circuit breaker
+        │
+        └─▶ MyApiTool        ← does the actual HTTP / DB / A2A call
+```
+
+Opt in per tool — a calculator tool has no transient faults; a REST-calling or A2A
+tool does. Register with `AddResilientTool<T>()` (see "Add a tool" above).
+
+Both decorators apply the same two policies:
 
 - **Retry** — on a network error or timeout, waits 200 ms then tries again,
   doubling the wait each time, up to 3 retries.
