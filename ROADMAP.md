@@ -11,7 +11,6 @@ where the implementation would live.
 - [x] Budget exhaustion as control flow (not exception) — one final model call, `PartialResult` outcome
 - [x] `AgentState` — immutable run-time state; `AppendStep` via `with`-expressions
 - [x] `AgentOutcome` — terminal result with status, final answer, and full trajectory
-- [ ] `IOutcomeEvaluator` — pluggable task-success / reward signal at the end of a run. Today `AgentStatus.Done` only means "the model stopped calling tools", not "the task was solved correctly"; a terminal evaluator (ground-truth oracle, LLM-as-judge, etc.) would give `AgentOutcome` an honest success label. Valuable on its own merits (evals, tests, SLAs) and the prerequisite signal for any cross-episode learning loop built *on top of* the harness (run → judge → remember). The harness owns the seam and the success label; the learning/training loop stays an external concern
 
 ### Guide pattern
 - [x] `IGuide` / `IGuideRunner` / `ContextDraft` — sequential pipeline that shapes what the model sees
@@ -74,8 +73,29 @@ where the implementation would live.
 - [x] `FileSkillStore` — persists skills as `SKILL.md` (frontmatter + markdown body, minimal hand-rolled parser, no YAML dependency); `AddFileSkillStore(dir)`
 - [x] `SkillManageTool` (`skill_manage`) — model-initiated save/delete of procedural memory; `SkillViewTool` (`skill_view`) — loads a full skill body on demand; `AddSkillTools()`
 - [x] `samples/SkillLearning` — scripted, no-API-key demo: run 1 captures a skill, run 2 loads it from disk via `SkillsGuide` and reuses it
-- [ ] Auto-harvest — suggest or capture a skill automatically after a successful run (depends on the `IOutcomeEvaluator` success signal above); capture stays agent-initiated by default
 
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
 - [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
+
+---
+
+### Deliberately out of scope — lives above the harness
+
+These are **cross-episode** concerns. A harness runs **one episode**; anything that
+spans many runs belongs in a separate layer that consumes the harness as a library —
+which it already serves everything needed: the final answer, the full trajectory, and
+the mechanical `AgentStatus`.
+
+- **Outcome / success evaluation** (an `IOutcomeEvaluator`-style "was the run correct?"
+  judge). Deciding correctness is a domain judgment the harness cannot make. Decisive
+  test: a verdict, by design, *cannot influence the run* (record, never react), so it
+  has **no causal role in the loop** — unlike every seam the loop does invoke
+  (`IMemoryStore`, `ISkillStore`, `IHumanChannel`, `IModelClient`), each of which feeds
+  the next turn. Judging belongs to whatever consumes `AgentOutcome`. (Runtime quality
+  checks that *do* affect the run are already a `PreReturn` sensor.)
+- **Skill auto-harvest** — saving a skill automatically after a successful run depends
+  on that success signal and *reacts* to it; both live in the external layer. In the
+  harness, skill capture stays model-initiated via `skill_manage`.
+- **The learning / training loop** — reflection, trajectory filtering, fine-tuning,
+  distillation. The harness is the trajectory *producer*; the trainer is separate.
