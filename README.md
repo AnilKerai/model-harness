@@ -252,9 +252,9 @@ once so it can reuse it next time instead of figuring it out again. The agent bu
 up a small library of these over time. Nothing about the model itself changes — the
 only thing that changes is what we show it.
 
-Skills reuse the two patterns above: a **guide** shows the agent which skills exist,
-and a **tool** lets it save and load them. The loop (`HarnessLoop`) doesn't even know
-skills exist.
+Skills reuse the two patterns above: a **guide** shows the model which skills exist,
+and a **tool** lets the model save and load them. The harness just facilitates — the
+loop (`HarnessLoop`) doesn't even know skills exist.
 
 ```mermaid
 flowchart LR
@@ -269,10 +269,10 @@ flowchart LR
 
 How it works, in one turn:
 
-1. `SkillsGuide` shows the agent a short list of saved skills — just the name and
+1. `SkillsGuide` shows the model a short list of saved skills — just the name and
    when to use each one (cheap, so it can sit in every prompt).
-2. If the agent wants one, it calls `skill_view` to read the full write-up.
-3. When the agent solves something worth keeping, it calls `skill_manage` to save it.
+2. If the model wants one, it calls `skill_view` to read the full write-up.
+3. When there's something worth keeping, the model calls `skill_manage` to save it.
 
 `FileSkillStore` writes each skill to a `SKILL.md` file on disk, so skills stick
 around between runs.
@@ -296,16 +296,16 @@ Every choice below keeps that learning logic out of the framework.
 
 | Decision | Why |
 |---|---|
-| **Skills are notes, not code** | A skill is just text we drop into the prompt — not a new function the agent installs. Nothing in the loop has to change, and the agent can't break itself by writing bad code. |
-| **The agent saves skills by calling a tool** | Saving a skill is the agent's own decision (it calls `skill_manage`), not something the loop forces. *When* to save is the kind of choice that belongs in your app, not buried in the framework. |
+| **Skills are notes, not code** | A skill is just text we drop into the prompt — not a new function that gets installed into the running agent. Nothing in the loop has to change, and a bad skill can't break anything — it's only text. |
+| **The model decides to save — the harness just facilitates** | Remember *agent = model + harness*: it's the **model** that chooses to call `skill_manage`, and the harness simply dispatches the call and writes the file. The loop never forces a save or decides one is due. If you later want to automate that (e.g. save after a success), that's a layer you add on top — not something baked into the framework. |
 | **On by default, but free until used** | The read side is always wired in, but the default store is empty — so the guide shows nothing and costs nothing until you plug in a real store. The tools and a real store are opt-in, like `AskHumanTool`. |
-| **Show a short list, load on demand** | Every prompt carries only the skill names and when-to-use lines (cheap). The full write-up loads only when the agent asks for it, so cost stays low even with lots of skills. |
+| **Show a short list, load on demand** | Every prompt carries only the skill names and when-to-use lines (cheap). The full write-up loads only when the model asks for it, so cost stays low even with lots of skills. |
 | **Its own store, separate from memory** | Skills (named, with a body) are a different shape from memory snippets, so they get their own `ISkillStore` and the two can change independently. |
 
-In short: **the harness stores, lists, and hands over skills. It does not decide when
-to create them or whether the agent is "improving"** — that's left to you. (A future
-success signal could let the agent save skills automatically — see the roadmap — but
-even then the agent stays in charge of saving.)
+In short: **the harness stores, lists, and hands skills to the model. It never decides
+when to save one, or whether the agent is "improving"** — the model makes that call.
+Building anything smarter on top (like automatically saving after a success — see the
+roadmap) is a layer you add, not part of the framework.
 
 One nice side effect: doing the skills list as a guide let us move the **tool** list
 into a guide too (`ToolCatalogueGuide`). Now every part of the prompt is built by a
@@ -571,7 +571,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | ------- | ---- | ----- |
 | Sub-agents / A2A | `ITool` | A local sub-agent is an `ITool` whose `ExecuteAsync` runs another `HarnessLoop`. A remote one calls an A2A endpoint. The framework has no opinion on which — it just dispatches the tool call. |
 | Long-term memory | `IMemoryStore` → `MemoryGuide` | Replace `NullMemoryStore` with a vector store or knowledge graph. |
-| Procedural memory / skills | `ISkillStore` → `SkillsGuide` + `skill_manage` / `skill_view` | Replace `NullSkillStore` with `FileSkillStore` or a custom backend. The harness surfaces, loads, and persists skills; *when* to capture one is the model's call (agent-initiated). The cross-episode learning loop on top is the user's. |
+| Procedural memory / skills | `ISkillStore` → `SkillsGuide` + `skill_manage` / `skill_view` | Replace `NullSkillStore` with `FileSkillStore` or a custom backend. The harness surfaces, loads, and persists skills; the **model** decides *when* to save one (the harness just dispatches the call). Any cross-episode automation on top is the user's. |
 | Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. |
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
