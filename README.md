@@ -557,6 +557,7 @@ These are things every agent needs, regardless of domain. The framework provides
 | Trajectory rendering and compaction | `TrajectoryGuide` | ✅ |
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
 | Tool dispatch | `IToolRegistry` | ✅ |
+| Procedural-memory plumbing — listing, loading & persisting skills | `SkillsGuide` / `ISkillStore` / `skill_manage` + `skill_view` | ✅ |
 | Model transport | `IModelClient` | ✅ |
 | Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
 | Checkpoint / resume | `ICheckpointStore` / `FileCheckpointStore` | ✅ |
@@ -630,11 +631,6 @@ are just the model reading and writing notes; the guide just shows a list. The
 harness never decides *when* to save a skill or whether the agent is "improving" —
 the model makes those calls, and any smarter logic (like automatically saving a
 skill after a success) lives in your own code, not in `HarnessLoop`.
-
-A handy test we used on every piece: *"would this still be useful if we deleted the
-word 'learning'?"* Each one passed — they're all useful plumbing on their own. The
-day a learning algorithm has to live inside the loop itself is the day we've gone
-too far, so we don't.
 
 ---
 
