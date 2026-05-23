@@ -48,54 +48,6 @@ flattened trajectory.
 
 ---
 
-## Architecture
-
-Seven projects with a strict dependency direction:
-
-![Architecture](docs/architecture.svg)
-
-- **`SapphireGuard.ModelHarness.Framework`** — abstractions, the core loop, seven built-in
-  guides, and `IServiceCollection` extension methods. Only external dependency
-  is `Microsoft.Extensions.DependencyInjection.Abstractions`.
-- **`SapphireGuard.ModelHarness.Infrastructure`** — concrete adapters: `FakeModelClient`,
-  `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`,
-  `EchoTool`, `CalculatorTool`. Production sensors: `PiiRedactionSensor`
-  (PostModelCall, scans for email/phone/card/NI/SSN patterns), `CostThrottleSensor`
-  (PreModelCall, soft spend cap), `ToolResultSanityCheckSensor` (PostToolCall, validates
-  result shape and custom per-tool rules), `StuckDetector` (PreToolCall, blocks repeated
-  identical tool calls). Harness tools: `AskHumanTool` backed by `IHumanChannel`;
-  `ConsoleHumanChannel` for development. Skills (procedural memory): `FileSkillStore`
-  (persists `SKILL.md` files), and the `SkillManageTool` / `SkillViewTool` the model
-  uses to capture and load skills. Depends on Framework only.
-- **`SapphireGuard.ModelHarness.Infrastructure.Anthropic`** — Anthropic SDK adapter:
-  `ClaudeModelClient` maps framework messages and tool definitions to the
-  Anthropic Messages API and back. Depends on Framework only.
-- **`SapphireGuard.ModelHarness.Infrastructure.Mcp`** — MCP adapter: `McpTool` wraps an
-  `McpClientTool` as `ITool`; `McpToolFactory` lists tools from an MCP server and returns
-  them as `IReadOnlyList<ITool>` ready to register. Depends on Framework + ModelContextProtocol.
-- **`SapphireGuard.ModelHarness.Infrastructure.Persistence`** — checkpoint/resume:
-  `FileCheckpointStore` persists each `AgentState` as a JSON file under
-  `{dir}/{taskId}/{timestamp}_{id}.json`. A custom `StepJsonConverter` handles the polymorphic
-  `Step` hierarchy without annotating the domain model. Wire up with
-  `services.AddFileCheckpointStore(directory)`. Depends on Framework only.
-- **`SapphireGuard.ModelHarness.Infrastructure.Resilience`** — resilience decorators:
-  `ResilientModelClientDecorator` wraps any `IModelClient`, and `ResilientTool` wraps any
-  `ITool`, both with the same Polly policy: exponential back-off retry (3 attempts) and
-  circuit breaker (50% failure ratio, 15 s break). Opt in per tool — a calculator needs no
-  retry; a REST-calling or A2A tool does. Depends on Framework + Polly v8.
-- **`SapphireGuard.ModelHarness.Infrastructure.Ollama`** — Ollama adapter:
-  `OllamaModelClient` maps framework messages and tool definitions to the OllamaSharp API.
-  Handles Ollama's requirement that all tool calls from one model turn be grouped into a single
-  assistant message, whereas the framework's trajectory emits them as interleaved
-  `ToolUse`/`Tool` pairs. Wire up with `services.AddOllamaModelClient(options)`. Depends on
-  Framework only.
-- **`samples/*`** — one console project per scenario (HappyPath, PiiDetection, CostThrottle,
-  ToolCallReasonableness, ToolResultSanity, CheckpointResume, OllamaToolCall, SkillLearning),
-  each a composition root showing how a domain agent wires the framework via
-  `Microsoft.Extensions.DependencyInjection`.
-
----
-
 ## Core patterns
 
 The framework is built around two composable patterns that together give
@@ -562,12 +514,6 @@ services.AddGuide<MyCustomGuide>(); // optional
 
 ---
 
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for what's done and what's still to implement.
-
----
-
 ## Harness concerns vs. user concerns
 
 Understanding what the framework owns and what it deliberately leaves to the user is key to extending it correctly.
@@ -608,60 +554,6 @@ These are things that vary by agent, deployment, or domain. The framework provid
 
 ---
 
-## FAQ
-
-### Why is budget enforcement a separate code path rather than a `PreModelCall` sensor?
-
-Three reasons, each independent:
-
-**1. Different outcome semantics.** Budget exhaustion returns `AgentOutcome { Status = PartialResult }`, signalling the agent was cut off before it could finish. A sensor block at `PreModelCall` returns `Done`, signalling the agent reached a stopping point. Those mean different things to a caller — `PartialResult` is "we ran out of resources", `Done` is "a policy said stop here and the model wrapped up cleanly". If budget enforcement went through the sensor path, both cases would return `Done` and callers would lose the ability to distinguish them.
-
-**2. Ordering — budget is checked before sensors run.** The loop does `budget check → sensors`, in that order. If budget enforcement were a sensor it would run in parallel with other sensors, which could do work (memory queries, validation calls) before the budget check fires. When the budget is already gone, running sensors at all is wasteful. The explicit check short-circuits everything before any sensor touches the state.
-
-**3. Unconditional vs. pluggable.** Sensors are opt-in — you compose them per agent, and a minimal agent can register none. The budget enforcer is always wired in by `AddModelHarness`; it is a framework guarantee, not a composition choice. If cost throttling were the only enforcement mechanism, a misconfigured agent with no sensors would have no hard ceiling.
-
-### If ordering matters, shouldn't cost throttling and rate limiting also be explicit checks rather than sensors?
-
-The ordering argument is strong against making budget enforcement a sensor; it is much weaker the other way around. Cost throttle and rate limit sensors are typically the cheapest operations in the `PreModelCall` batch (summing decimals from the trajectory) — there is no meaningful wasted work before they fire.
-
-More importantly, pulling them into the explicit sequential path would require the loop to know about them by name, and every agent would get the same thresholds. Keeping them as sensors means each agent can register its own configuration — a background summarisation agent might tolerate a $0.50 soft cap, while a customer-facing agent runs on $0.05. You can also stack multiple policies (a per-task cost cap alongside a per-minute rate limit) without the loop knowing anything about either. First-class checks cannot do this cleanly.
-
-The asymmetry is intentional: budget enforcer → first-class because it is an unconditional framework guarantee with a fixed shape; cost throttle / rate limit → sensors because they are optional, per-agent policies that vary in threshold, number, and kind.
-
-### Why is human-in-the-loop a user concern rather than a harness concern?
-
-Because HITL is a **system design concern**, not a **model control concern** — and the harness only owns the latter.
-
-The harness controls the model: it shapes what the model perceives (guides), observes and constrains what it does (sensors), enforces resource limits (budget), and records everything (trajectory). That is its complete job.
-
-HITL is about what happens *outside* the model loop: how a question is surfaced to a human, over what channel, how long you wait, and how the response is routed back. A CLI tool, a Slack bot, a web app, and an async queue-based pipeline all have fundamentally different answers. The harness cannot make that decision without becoming an application framework.
-
-The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is entirely the user's implementation. The harness ships `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
-
-### Should a harness even have a skills system — isn't "learning" out of scope?
-
-The harness doesn't do the learning. It just provides a few simple building blocks,
-and the model uses them.
-
-Here's the easiest way to think about it. The harness handles **one task at a time**.
-"Getting better over time" happens **across many tasks**. Those are two different
-jobs, so we keep them separate — the harness does the first, and anything that spans
-many runs is built on top of it.
-
-All the harness adds is three small, ordinary things:
-
-- a place to store skills (`ISkillStore`),
-- a tool the model can call to save or load a skill (`skill_manage` / `skill_view`),
-- a guide that lists the saved skills so the model knows they exist (`SkillsGuide`).
-
-None of these are special "learning" machinery. A store is just storage; the tools
-are just the model reading and writing notes; the guide just shows a list. The
-harness never decides *when* to save a skill or whether the agent is "improving" —
-the model makes those calls, and any smarter logic (like automatically saving a
-skill after a success) lives in your own code, not in `HarnessLoop`.
-
----
-
 ## Glossary
 
 | Term | Definition |
@@ -681,3 +573,10 @@ skill after a success) lives in your own code, not in `HarnessLoop`.
 | **Skill** | A reusable procedure (procedural memory) the agent captures from past work and reuses later. Stored as data (a `SKILL.md` document) and surfaced into the prompt by `SkillsGuide`, never executed as code. Created by the model via `skill_manage`; loaded on demand via `skill_view`. |
 | **Model client** | The transport seam (`IModelClient`). Receives a message list and tool definitions; returns a response. Knows nothing about state, the loop, or tool implementations. |
 | **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
+
+---
+
+## References
+
+- [ROADMAP.md](ROADMAP.md) — what's done and what's still to implement
+- [FAQ.md](FAQ.md) — design decision FAQs
