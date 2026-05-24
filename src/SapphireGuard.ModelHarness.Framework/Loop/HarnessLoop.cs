@@ -3,6 +3,7 @@ using SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Context;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Persistence;
+using SapphireGuard.ModelHarness.Framework.RateLimiting;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -23,6 +24,7 @@ public sealed class HarnessLoop(
     IContextBuilder contextBuilder,
     ISensorRunner sensorRunner,
     IBudgetEnforcer budgetEnforcer,
+    IRateLimiter rateLimiter,
     ITracer tracer,
     ICheckpointStore checkpointStore)
 {
@@ -53,8 +55,17 @@ public sealed class HarnessLoop(
 
                 var budgetCheck = budgetEnforcer.Check(state, startedAt);
                 if (budgetCheck.IsExhausted)
-                {
                     return await FinaliseOnBudgetAsync(state, budgetCheck.Reason!, ct);
+
+                var rateLimitCheck = await rateLimiter.CheckAsync(state, ct);
+                if (rateLimitCheck.IsLimited)
+                {
+                    var delay = rateLimitCheck.RetryAfter ?? TimeSpan.FromSeconds(10);
+                    if (DateTimeOffset.UtcNow + delay > startedAt + state.Budget.MaxWallClock)
+                        return await FinaliseOnBudgetAsync(state,
+                            $"Rate limit wait ({delay.TotalSeconds:0}s) would exceed MaxWallClock.", ct);
+                    await Task.Delay(delay, ct);
+                    continue;
                 }
 
                 // PreModelCall sensors annotate the trajectory; the model call proceeds

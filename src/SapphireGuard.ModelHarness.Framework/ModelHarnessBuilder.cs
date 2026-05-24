@@ -7,6 +7,7 @@ using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Memory;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Persistence;
+using SapphireGuard.ModelHarness.Framework.RateLimiting;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Skills;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -22,6 +23,7 @@ namespace SapphireGuard.ModelHarness.Framework;
 public sealed class ModelHarnessBuilder(IServiceCollection services)
 {
     private readonly List<Func<IServiceProvider, ITracer>> _tracers = [];
+    private readonly List<Func<IServiceProvider, IRateLimiter>> _rateLimiters = [];
 
     /// <summary>
     /// Direct access to the underlying <see cref="IServiceCollection"/> for registrations
@@ -217,6 +219,27 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
         return this;
     }
 
+    /// <summary>
+    /// Adds a rate limiter by type. Multiple calls are additive and automatically composed
+    /// into a <see cref="CompositeRateLimiter"/> at resolution time.
+    /// </summary>
+    public ModelHarnessBuilder WithRateLimiter<TImpl>() where TImpl : class, IRateLimiter
+    {
+        Services.TryAddSingleton<TImpl>();
+        _rateLimiters.Add(sp => sp.GetRequiredService<TImpl>());
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a rate limiter via factory. Multiple calls are additive and automatically
+    /// composed into a <see cref="CompositeRateLimiter"/> at resolution time.
+    /// </summary>
+    public ModelHarnessBuilder WithRateLimiter(Func<IServiceProvider, IRateLimiter> factory)
+    {
+        _rateLimiters.Add(factory);
+        return this;
+    }
+
     internal void ApplyTracers()
     {
         if (_tracers.Count == 0) return;
@@ -224,5 +247,14 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
         Services.Replace(ServiceDescriptor.Singleton<ITracer>(sp => _tracers.Count == 1
             ? _tracers[0](sp)
             : new CompositeTracer(_tracers.Select(f => f(sp)).ToArray())));
+    }
+
+    internal void ApplyRateLimiters()
+    {
+        if (_rateLimiters.Count == 0) return;
+
+        Services.Replace(ServiceDescriptor.Singleton<IRateLimiter>(sp => _rateLimiters.Count == 1
+            ? _rateLimiters[0](sp)
+            : new CompositeRateLimiter(_rateLimiters.Select(f => f(sp)).ToArray())));
     }
 }

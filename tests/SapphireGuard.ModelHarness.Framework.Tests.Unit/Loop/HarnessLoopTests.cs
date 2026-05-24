@@ -2,6 +2,7 @@ using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using BudgetNs = SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Persistence;
+using SapphireGuard.ModelHarness.Framework.RateLimiting;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
@@ -27,6 +28,7 @@ public sealed class HarnessLoopTests
             contextBuilder: new StubContextBuilder(),
             sensorRunner: sensorRunner,
             budgetEnforcer: budgetEnforcer ?? new AlwaysOkBudgetEnforcer(),
+            rateLimiter: new NullRateLimiter(),
             tracer: new NullTracer(),
             checkpointStore: new NullCheckpointStore());
     }
@@ -297,6 +299,7 @@ public sealed class HarnessLoopTests
             contextBuilder: new StubContextBuilder(),
             sensorRunner: sensorRunner,
             budgetEnforcer: new AlwaysOkBudgetEnforcer(),
+            rateLimiter: new NullRateLimiter(),
             tracer: new NullTracer(),
             checkpointStore: new NullCheckpointStore());
 

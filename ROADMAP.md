@@ -9,7 +9,7 @@ where the implementation would live.
 - [x] `HarnessLoop` — turn-by-turn orchestration (build context → call model → act on response)
 - [x] `IBudgetEnforcer` / `DefaultBudgetEnforcer` — hard limits on turns, tokens, cost, and wall clock
 - [x] Budget exhaustion as control flow (not exception) — one final model call, `PartialResult` outcome
-- [ ] `IRateLimiter` — sits alongside `IBudgetEnforcer` in the pre-model-call check; blocks (delays or rejects) when calls-per-minute or tokens-per-minute thresholds are hit; not a sensor (sensors cannot delay) and not a budget concern (rate limits are provider-enforced windows, not cumulative spend); candidate design mirrors `IBudgetEnforcer` with its own `RateLimitCheck` result and `AddRateLimiter<T>()` DI extension
+- [x] `IRateLimiter` — sits alongside `IBudgetEnforcer` in the pre-model-call check; delays when calls-per-minute or tokens-per-minute thresholds are hit; not a sensor (sensors cannot delay) and not a budget concern (rate limits are provider-enforced windows, not cumulative spend); `RateLimitCheck` result; `WithRateLimiter` DI extension (additive, auto-composed into `CompositeRateLimiter`); `CallsPerMinuteRateLimiter` and `TokensPerMinuteRateLimiter` in Infrastructure; wait exceeding `MaxWallClock` falls through to budget-exhaustion path
 - [x] `AgentState` — immutable run-time state; `AppendStep` via `with`-expressions
 - [x] `AgentOutcome` — terminal result with status, final answer, and full trajectory
 

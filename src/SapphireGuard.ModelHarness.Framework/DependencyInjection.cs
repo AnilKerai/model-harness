@@ -5,6 +5,7 @@ using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.Memory;
 using SapphireGuard.ModelHarness.Framework.Persistence;
+using SapphireGuard.ModelHarness.Framework.RateLimiting;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Skills;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -27,6 +28,7 @@ public static class DependencyInjection
             .AddAgent()
             .AddHarnessLoop()
             .AddBudgetEnforcerDefault()
+            .AddRateLimiterDefault()
             .AddGuideRunnerDefault()
             .AddContextBuilderDefault()
             .AddMemoryStoreDefault()
@@ -46,6 +48,7 @@ public static class DependencyInjection
         var builder = new ModelHarnessBuilder(services);
         configure(builder);
         builder.ApplyTracers();
+        builder.ApplyRateLimiters();
         return services;
     }
 
@@ -66,6 +69,12 @@ public static class DependencyInjection
     private static IServiceCollection AddBudgetEnforcerDefault(this IServiceCollection services)
     {
         services.TryAddSingleton<IBudgetEnforcer, DefaultBudgetEnforcer>();
+        return services;
+    }
+
+    private static IServiceCollection AddRateLimiterDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IRateLimiter, NullRateLimiter>();
         return services;
     }
 
