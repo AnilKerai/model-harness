@@ -75,6 +75,12 @@ where the implementation would live.
 - [x] `samples/SkillLearning` — scripted, no-API-key demo: run 1 captures a skill, run 2 loads it from disk via `SkillsGuide` and reuses it
 - [ ] User-defined skills — `CompositeSkillStore` aggregates an agent store (writable; `SaveAsync`/`DeleteAsync` route here) and one or more user stores (read-only by routing); agent version shadows a same-named user skill and reveals it again on delete; DI helpers `AddAgentSkillStore(dir)` + `AddUserSkillStore(dir)` (chainable, order-independent); no changes to `ISkillStore`, `SkillManageTool`, `SkillViewTool`, or `SkillsGuide` — composite is transparent to all consumers; intended to land as part of the fluent builder work
 
+### Robustness
+- [ ] Sensor intervention guard — `HarnessLoop` has no hard limit on consecutive sensor interventions per turn; if a sensor blocks at `PostModelCall` and the model immediately re-produces the same violation, the loop runs indefinitely; add a `maxConsecutiveInterventions` counter and force-finalise with a clear reason if exceeded
+- [ ] Exception telemetry on tool failure — tool crashes are caught and surfaced as `AgentOutcome { FailureReason = ex.Message }`, discarding the original exception type and stack; at minimum the exception should be emitted via `ITracer` before being swallowed, so production runs are diagnosable
+- [ ] Memory retrieval signal — `MemoryGuide` always queries `IMemoryStore` with `state.TaskText`; on long runs the last few model messages or a recent-trajectory summary are better retrieval signals; expose a pluggable `IMemoryQueryBuilder` seam (default: current behaviour)
+- [ ] DI smoke tests — builder methods and `DependencyInjection.cs` files are `[ExcludeFromCodeCoverage]`; a single end-to-end smoke test per sample project (resolve the container, run one turn against `FakeModelClient`) would catch wiring regressions without testing implementation detail
+
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
 - [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
