@@ -238,13 +238,29 @@ How it works, in one turn:
 `FileSkillStore` writes each skill to a `SKILL.md` file on disk, so skills stick
 around between runs.
 
+Two stores, two use-cases:
+
 ```csharp
-// The read side ships on by default (no-op until a store is plugged in).
-// Opt into the write side and a real store:
-services
-    .AddFileSkillStore("~/.skills")  // persists SKILL.md files
-    .AddSkillTools();                // registers skill_manage + skill_view
+// Agent learning — the model saves skills it works out for itself.
+// skill_manage (save/delete) and skill_view (load) are registered automatically.
+builder.WithAgentSkillStore("~/.skills/learned")
+
+// User-defined skills — pre-authored SKILL.md files the model can read but not overwrite.
+// skill_view (load) is registered automatically; skill_manage is not.
+builder.WithUserSkillStore("~/.skills/builtin")
+
+// Both together — the agent can read everything and save to its own store only.
+builder
+    .WithAgentSkillStore("~/.skills/learned")
+    .WithUserSkillStore("~/.skills/builtin")
 ```
+
+The skill tools (`skill_view`, `skill_manage`) are registered automatically alongside the
+store — there is no separate tool wiring step. The right tools for the right store are
+always in place.
+
+`FileSkillStore` persists each skill as a `SKILL.md` file (YAML frontmatter + markdown
+body), so skills survive between runs.
 
 See `samples/SkillLearning` for a runnable, no-API-key demo: run 1 saves a skill, and
 run 2 loads it from disk and reuses it.
@@ -498,12 +514,22 @@ and feeds the response back. See the harness concerns section for where this bou
 ### Skills (procedural memory)
 
 ```csharp
+// Agent learning only
+builder.WithAgentSkillStore("~/.skills/learned")
+
+// User-defined skills only (read-only from the agent's perspective)
+builder.WithUserSkillStore("~/.skills/builtin")
+
+// Both
 builder
-    .WithFileSkillStore("~/.skills")
-    .WithSkillTools()
+    .WithAgentSkillStore("~/.skills/learned")
+    .WithUserSkillStore("~/.skills/builtin")
 ```
 
-`SkillsGuide` already runs by default — it just shows nothing until a store is plugged in.
+The skill tools (`skill_view` and, where appropriate, `skill_manage`) are registered
+automatically — no separate `.WithSkillTools()` call needed. `SkillsGuide` already runs
+by default and shows nothing until a store is plugged in.
+
 See the skills section above for how this works end-to-end.
 
 ### Swap the model client
@@ -582,7 +608,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | **Sensor** | Observes the loop at declared hookpoints and can raise a concern. Sensors run in parallel; the loop's response to a concern depends on the hookpoint (see the hookpoint table). |
 | **HookPoint** | A lifecycle position where sensors fire: `PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`. |
 | **Tool** | Something the model can invoke by name. The harness dispatches the call; the model decides when and why to use it. |
-| **Skill** | A reusable procedure (procedural memory) the agent captures from past work and reuses later. Stored as data (a `SKILL.md` document) and surfaced into the prompt by `SkillsGuide`, never executed as code. Created by the model via `skill_manage`; loaded on demand via `skill_view`. |
+| **Skill** | A reusable procedure (procedural memory) stored as a `SKILL.md` document and surfaced into the prompt by `SkillsGuide`, never executed as code. Two kinds: *agent skills* are captured by the model at runtime via `skill_manage` and loaded on demand via `skill_view`; *user-defined skills* are pre-authored by the harness author and are read-only from the agent's perspective. |
 | **Model client** | The transport seam (`IModelClient`). Receives a message list and tool definitions; returns a response. Knows nothing about state, the loop, or tool implementations. |
 | **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
 
