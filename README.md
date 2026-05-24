@@ -302,6 +302,42 @@ roadmap) is a layer you add, not part of the framework.
 
 ---
 
+## AI-powered sensors *(Experimental)*
+
+Sensors are normally pure, in-process checks — regex, heuristics, rule evaluation. For
+some concerns (tone, relevance drift, nuanced policy) a rule-based check is not expressive
+enough. An AI-powered sensor addresses this by calling a **separate, lightweight model**
+to evaluate the agent's output.
+
+> This is an experimental pattern. Introducing a model call inside a sensor moves away
+> from the principle that harness guarantees should be enforceable without depending on
+> another model's judgement. Use this only for checks that genuinely cannot be expressed
+> as rules, and treat the sensor's verdict as a best-effort signal rather than a hard
+> constraint.
+
+The key design points:
+
+- The sensor's model client is **separate from the agent's** — typically a smaller, cheaper
+  model (Haiku-class) that is fast enough not to meaningfully affect turn latency.
+- The sensor takes `IModelClient` via constructor and is wired via the factory overload of
+  `WithSensor` — no framework changes are required.
+- Sensors must **fail open**: if the model call throws or returns unparseable output, return
+  `SensorResult.Pass` so a transient failure never blocks every agent response.
+
+```csharp
+builder.WithSensor(sp => new ToneSensor(
+    new ClaudeModelClient(new ClaudeClientOptions
+    {
+        ApiKey = apiKey,
+        ModelId = "claude-haiku-4-5-20251001"   // dedicated sensor model
+    })));
+```
+
+See `samples/AiToneSensor` for a runnable example: the agent is prompted to respond rudely,
+and the tone sensor (Haiku) catches it and forces a professional retry.
+
+---
+
 ## The loop (`HarnessLoop`)
 
 ```mermaid
