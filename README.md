@@ -206,61 +206,60 @@ Model re-plans without that tool
 
 ---
 
-## Skills — procedural memory (getting better over time) - Experimental 
+## Skills and learning (getting better over time) - Experimental
 
-A **skill** is a write-up of how to do something, saved after the agent works it out
-once so it can reuse it next time instead of figuring it out again. The agent builds
-up a small library of these over time. Nothing about the model itself changes — the
-only thing that changes is what we show it.
+**Skills** are markdown documents (`SKILL.md`) that give an agent instructions for a
+specific domain — the [agentskills.io](https://agentskills.io) format. They are just
+text dropped into the prompt, never executed as code.
 
-Skills reuse the two patterns above: a **guide** shows the model which skills exist,
-and a **tool** lets the model save and load them. The harness just facilitates — the
-loop (`HarnessLoop`) doesn't even know skills exist.
+**Learning** is the ability for an agent to write its own skills at runtime — capturing
+a procedure it worked out so it can reuse it next time instead of figuring it out again.
+Nothing about the model itself changes; the only thing that changes is what we show it.
+
+Both reuse the same two patterns: a **guide** surfaces which skills exist, and **tools**
+let the model load and (when learning is enabled) save them. The loop has no knowledge
+of either.
 
 ```mermaid
 flowchart LR
-    STORE[(ISkillStore\nFileSkillStore persists SKILL.md)]
-    STORE --> SG[SkillsGuide\nrenders catalogue\nname + when-to-use]
+    SKILLS[(Skills store\npre-authored SKILL.md files)]
+    LEARNING[(Learning store\nagent-saved SKILL.md files)]
+    SKILLS --> SG[SkillsGuide\nrenders catalogue\nname + when-to-use]
+    LEARNING --> SG
     SG --> CTX[Model sees the\nskill catalogue each turn]
-    CTX -. calls .-> SM[skill_manage\nsave / delete]
     CTX -. calls .-> SV[skill_view\nload full body]
-    SM --> STORE
-    SV --> STORE
+    CTX -. calls .-> SM[skill_manage\nsave / delete]
+    SV --> SKILLS
+    SV --> LEARNING
+    SM --> LEARNING
 ```
 
 How it works, in one turn:
 
-1. `SkillsGuide` shows the model a short list of saved skills — just the name and
-   when to use each one (cheap, so it can sit in every prompt).
+1. `SkillsGuide` shows the model a short catalogue — just the name and when-to-use
+   line for each skill (cheap, so it sits in every prompt).
 2. If the model wants one, it calls `skill_view` to read the full write-up.
-3. When there's something worth keeping, the model calls `skill_manage` to save it.
-
-`FileSkillStore` writes each skill to a `SKILL.md` file on disk, so skills stick
-around between runs.
-
-Two stores, two use-cases:
+3. When learning is enabled and there's something worth keeping, the model calls
+   `skill_manage` to save it for next time.
 
 ```csharp
-// Agent learning — the model saves skills it works out for itself.
-// skill_manage (save/delete) and skill_view (load) are registered automatically.
-builder.WithAgentSkillStore("~/.skills/learned")
+// Pre-authored skills the agent can read but not modify.
+builder.WithSkills("~/.skills/builtin")
 
-// User-defined skills — pre-authored SKILL.md files the model can read but not overwrite.
-// skill_view (load) is registered automatically; skill_manage is not.
-builder.WithUserSkillStore("~/.skills/builtin")
+// Enable learning — the agent saves procedures it works out at runtime.
+builder.WithLearning("~/.skills/learned")
 
-// Both together — the agent can read everything and save to its own store only.
+// Both — the agent reads from everywhere and saves only to its own store.
 builder
-    .WithAgentSkillStore("~/.skills/learned")
-    .WithUserSkillStore("~/.skills/builtin")
+    .WithSkills("~/.skills/builtin")
+    .WithLearning("~/.skills/learned")
 ```
 
-The skill tools (`skill_view`, `skill_manage`) are registered automatically alongside the
-store — there is no separate tool wiring step. The right tools for the right store are
-always in place.
+The right tools (`skill_view`, and `skill_manage` when learning is enabled) are
+registered automatically — there is no separate tool wiring step.
 
-`FileSkillStore` persists each skill as a `SKILL.md` file (YAML frontmatter + markdown
-body), so skills survive between runs.
+Each skill is persisted as a `SKILL.md` file (YAML frontmatter + markdown body),
+so they survive between runs.
 
 See `samples/SkillLearning` for a runnable, no-API-key demo: run 1 saves a skill, and
 run 2 loads it from disk and reuses it.
@@ -511,26 +510,26 @@ builder.WithAskHumanTool(_ => new SlackHumanChannel(slackClient, channelId))
 When the model calls `ask_human`, the harness routes it through `IHumanChannel.AskAsync`
 and feeds the response back. See the harness concerns section for where this boundary sits.
 
-### Skills (procedural memory)
+### Skills and learning
 
 ```csharp
-// Agent learning only
-builder.WithAgentSkillStore("~/.skills/learned")
+// Pre-authored skills only
+builder.WithSkills("~/.skills/builtin")
 
-// User-defined skills only (read-only from the agent's perspective)
-builder.WithUserSkillStore("~/.skills/builtin")
+// Learning only
+builder.WithLearning("~/.skills/learned")
 
 // Both
 builder
-    .WithAgentSkillStore("~/.skills/learned")
-    .WithUserSkillStore("~/.skills/builtin")
+    .WithSkills("~/.skills/builtin")
+    .WithLearning("~/.skills/learned")
 ```
 
-The skill tools (`skill_view` and, where appropriate, `skill_manage`) are registered
-automatically — no separate `.WithSkillTools()` call needed. `SkillsGuide` already runs
-by default and shows nothing until a store is plugged in.
+The right tools (`skill_view`, and `skill_manage` when learning is enabled) are
+registered automatically. `SkillsGuide` already runs by default and shows nothing
+until a store is plugged in.
 
-See the skills section above for how this works end-to-end.
+See the skills and learning section above for how this works end-to-end.
 
 ### Swap the model client
 
@@ -568,7 +567,8 @@ These are things every agent needs, regardless of domain. The framework provides
 | Trajectory rendering and compaction | `TrajectoryGuide` | ✅ |
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
 | Tool dispatch | `IToolRegistry` | ✅ |
-| Procedural-memory plumbing — listing, loading & persisting skills | `SkillsGuide` / `ISkillStore` / `skill_manage` + `skill_view` | ✅ |
+| Skills plumbing — listing and loading pre-authored skill documents | `SkillsGuide` / `ISkillStore` / `skill_view` | ✅ |
+| Learning plumbing — persisting agent-saved skills across episodes | `ISkillStore` / `skill_manage` | ✅ |
 | Human-in-the-loop plumbing — signalling a question & dispatching to a channel | `AskHumanTool` / `IHumanChannel` | ✅ |
 | Model transport | `IModelClient` | ✅ |
 | Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
@@ -584,7 +584,8 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | ------- | ---- | ----- |
 | Sub-agents / A2A | `ITool` | A local sub-agent is an `ITool` whose `ExecuteAsync` runs another `HarnessLoop`. A remote one calls an A2A endpoint. The framework has no opinion on which — it just dispatches the tool call. |
 | Long-term memory | `IMemoryStore` → `MemoryGuide` | Replace `NullMemoryStore` with a vector store or knowledge graph. |
-| Procedural memory / skills | `ISkillStore` → `SkillsGuide` + `skill_manage` / `skill_view` | Replace `NullSkillStore` with `FileSkillStore` or a custom backend. The harness surfaces, loads, and persists skills; the **model** decides *when* to save one (the harness just dispatches the call). Any cross-episode automation on top is the user's. |
+| Skills | `ISkillStore` → `SkillsGuide` + `skill_view` | Pre-authored `SKILL.md` instructions surfaced to the agent via `WithSkills(dir)`. The harness lists and loads them; the agent reads them. |
+| Learning | `ISkillStore` → `skill_manage` | Enable via `WithLearning(dir)`. The agent saves procedures it works out at runtime; the harness dispatches the call and persists the file. The **model** decides when to save — the harness never forces it. Any cross-episode automation is the user's concern. |
 | Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. |
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
@@ -608,7 +609,8 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | **Sensor** | Observes the loop at declared hookpoints and can raise a concern. Sensors run in parallel; the loop's response to a concern depends on the hookpoint (see the hookpoint table). |
 | **HookPoint** | A lifecycle position where sensors fire: `PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`. |
 | **Tool** | Something the model can invoke by name. The harness dispatches the call; the model decides when and why to use it. |
-| **Skill** | A reusable procedure (procedural memory) stored as a `SKILL.md` document and surfaced into the prompt by `SkillsGuide`, never executed as code. Two kinds: *agent skills* are captured by the model at runtime via `skill_manage` and loaded on demand via `skill_view`; *user-defined skills* are pre-authored by the harness author and are read-only from the agent's perspective. |
+| **Skill** | A `SKILL.md` document — YAML frontmatter plus a markdown body — that gives an agent instructions for a specific domain. The [agentskills.io](https://agentskills.io) format. Surfaced into the prompt by `SkillsGuide`; loaded on demand via `skill_view`. Never executed as code. Configure with `WithSkills(dir)`. |
+| **Learning** | The ability for an agent to write its own skills at runtime, capturing procedures it works out so they can be reused across episodes. Implemented via the same `SKILL.md` format. The model decides when to save via `skill_manage`; the harness just persists the file. Enable with `WithLearning(dir)`. |
 | **Model client** | The transport seam (`IModelClient`). Receives a message list and tool definitions; returns a response. Knows nothing about state, the loop, or tool implementations. |
 | **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
 

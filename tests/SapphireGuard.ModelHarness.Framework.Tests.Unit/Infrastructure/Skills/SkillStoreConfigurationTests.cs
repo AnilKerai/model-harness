@@ -11,8 +11,8 @@ namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Infrastructure.Skills;
 
 /// <summary>
 /// Verifies the four opt-in scenarios a harness author can configure via the fluent builder:
-///   1. Agent skills only (writable — learning)
-///   2. User-defined skills only (read-only instructions)
+///   1. Learning only (WithLearning — writable, agent accumulates knowledge at runtime)
+///   2. Skills only (WithSkills — pre-authored, read-only from the agent's perspective)
 ///   3. Both
 ///   4. Neither (no skill store methods called)
 /// Skill tools are auto-registered alongside the store — no separate wiring needed.
@@ -28,11 +28,11 @@ public sealed class SkillStoreConfigurationTests
     // ── Scenario 1: agent skills only ────────────────────────────────────────
 
     [Fact]
-    public void AgentOnly_RegistersStoreAndBothTools()
+    public void LearningOnly_RegistersStoreAndBothTools()
     {
         var builder = new ModelHarnessBuilder(new ServiceCollection());
 
-        builder.WithAgentSkillStore("~/skills/learned");
+        builder.WithLearning("~/skills/learned");
 
         Assert.Contains(builder.Services, d => d.ServiceType == typeof(ISkillStore));
         AssertHasTool<SkillViewTool>(builder);
@@ -42,11 +42,11 @@ public sealed class SkillStoreConfigurationTests
     // ── Scenario 2: user-defined skills only ─────────────────────────────────
 
     [Fact]
-    public void UserOnly_RegistersStoreAndViewToolOnly()
+    public void SkillsOnly_RegistersStoreAndViewToolOnly()
     {
         var builder = new ModelHarnessBuilder(new ServiceCollection());
 
-        builder.WithUserSkillStore("~/skills/builtin");
+        builder.WithSkills("~/skills/builtin");
 
         Assert.Contains(builder.Services, d => d.ServiceType == typeof(ISkillStore));
         AssertHasTool<SkillViewTool>(builder);
@@ -54,7 +54,7 @@ public sealed class SkillStoreConfigurationTests
     }
 
     [Fact]
-    public async Task UserOnly_CompositeWithNullAgent_UserSkillReadableWriteIsNoOp()
+    public async Task SkillsOnly_CompositeWithNullAgent_UserSkillReadableWriteIsNoOp()
     {
         var userStore = new InMemorySkillStoreWithSeed("guide");
         var store = new CompositeSkillStore(new NullSkillStore(), [userStore]);
@@ -75,8 +75,8 @@ public sealed class SkillStoreConfigurationTests
     {
         var builder = new ModelHarnessBuilder(new ServiceCollection());
 
-        builder.WithAgentSkillStore("~/skills/learned")
-               .WithUserSkillStore("~/skills/builtin");
+        builder.WithLearning("~/skills/learned")
+               .WithSkills("~/skills/builtin");
 
         Assert.Contains(builder.Services, d => d.ServiceType == typeof(ISkillStore));
         AssertHasTool<SkillViewTool>(builder);
@@ -88,9 +88,9 @@ public sealed class SkillStoreConfigurationTests
     {
         var builder = new ModelHarnessBuilder(new ServiceCollection());
 
-        builder.WithAgentSkillStore("~/skills/learned")
-               .WithUserSkillStore("~/skills/builtin")
-               .WithUserSkillStore("~/skills/shared");
+        builder.WithLearning("~/skills/learned")
+               .WithSkills("~/skills/builtin")
+               .WithSkills("~/skills/shared");
 
         Assert.Single(builder.Services, d => d.ServiceType == typeof(ISkillStore));
         Assert.Single(builder.Services, d => d.ServiceType == typeof(ITool) && d.ImplementationType == typeof(SkillViewTool));

@@ -3,7 +3,7 @@ using SapphireGuard.ModelHarness.Framework.Skills;
 namespace SapphireGuard.ModelHarness.Infrastructure.Skills;
 
 /// <summary>
-/// Mutable accumulator shared by <c>WithAgentSkillStore</c> and <c>WithUserSkillStore</c>
+/// Mutable accumulator shared by <c>WithLearning</c> and <c>WithSkills</c>
 /// during builder configuration. Resolved once at container build time to produce the
 /// correct <see cref="ISkillStore"/> implementation.
 /// </summary>

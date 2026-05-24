@@ -50,7 +50,7 @@ async Task<AgentOutcome> RunOnceAsync()
         .WithSystemPrompt(SystemPrompt)
         .WithConsoleTracer()
         .WithToolRegistry<InMemoryToolRegistry>()
-        .WithFileSkillStore(skillDir)
+        .WithLearning(skillDir)
         .WithModel(_ => new SkillScriptedModelClient()));
 
     await using var provider = services.BuildServiceProvider();

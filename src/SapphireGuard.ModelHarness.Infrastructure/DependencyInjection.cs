@@ -13,21 +13,24 @@ namespace SapphireGuard.ModelHarness.Infrastructure;
 [ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
-    public static ModelHarnessBuilder WithFileSkillStore(this ModelHarnessBuilder builder, string directory)
+    /// <summary>Configures a single skill store for both reading and writing. Use <see cref="WithLearning"/> and <see cref="WithSkills"/> for the two-store pattern.</summary>
+    public static ModelHarnessBuilder WithSkillStore(this ModelHarnessBuilder builder, string directory)
     {
         builder.WithSkillStore(_ => new FileSkillStore(directory));
         AddSkillTools(builder);
         return builder;
     }
 
-    public static ModelHarnessBuilder WithAgentSkillStore(this ModelHarnessBuilder builder, string directory)
+    /// <summary>Enables agent learning: a writable store where the agent saves procedures it works out at runtime. Registers skill_manage and skill_view automatically.</summary>
+    public static ModelHarnessBuilder WithLearning(this ModelHarnessBuilder builder, string directory)
     {
         GetOrAddSkillConfig(builder).AgentDirectory = directory;
         AddSkillTools(builder);
         return builder;
     }
 
-    public static ModelHarnessBuilder WithUserSkillStore(this ModelHarnessBuilder builder, string directory)
+    /// <summary>Provides pre-authored skills the agent can read but not modify. Registers skill_view automatically. Chain with <see cref="WithLearning"/> to enable both.</summary>
+    public static ModelHarnessBuilder WithSkills(this ModelHarnessBuilder builder, string directory)
     {
         GetOrAddSkillConfig(builder).UserDirectories.Add(directory);
         AddSkillViewTool(builder);
