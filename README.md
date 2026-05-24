@@ -663,6 +663,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
 | Human-in-the-loop | `IHumanChannel` → `AskHumanTool` | The harness provides the seam and a `ConsoleHumanChannel` for development. How a question is surfaced — stdin, Slack, webhook, queue — is a system design decision the harness cannot make. See the FAQ. |
+| Authenticated HTTP clients for tools | Standard .NET DI | Tools that call external APIs (including MCP servers backed by domain services) need authenticated `HttpClient` instances. The harness does not provide this because the authentication mechanism, token lifecycle, and target services are all deployment concerns. The correct pattern is to register a named `HttpClient` with a `DelegatingHandler` for token acquisition and refresh in the composition root, alongside `AddModelHarness`. Tools declare `IHttpClientFactory` as a constructor dependency and call `CreateClient("name")` — the factory and handler are resolved from the same DI container. This means all tools registered with the harness share the same token cache and renewal logic with no harness changes required. For MCP-backed tools specifically, authentication to the MCP server is a transport-layer concern that belongs in how `IMcpClient` connections are established, not in tool implementations. |
 
 ---
 
