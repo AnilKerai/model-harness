@@ -3,10 +3,9 @@
 A reusable model harness framework for .NET 10, structured around Clean / Onion
 architecture.
 
-> **Why "model harness"?** An *agent* is a model plus a harness — the harness
+> **Why "model harness"?** An *Agent* = Model + Harness — the harness
 > is the scaffolding (loop, guides, sensors, budget) that wraps a model and
-> turns it into an agent. Calling it an "agent harness" would imply the harness
-> *is* the agent; "model harness" names what it actually is.
+> turns it into an agent.
 
 The samples under `samples/` wire up `ClaudeModelClient` against the Anthropic API
 and `OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
@@ -199,7 +198,7 @@ Model re-plans without that tool
 
 ---
 
-## Skills — procedural memory (getting better over time)
+## Skills — procedural memory (getting better over time) - Experimental 
 
 A **skill** is a write-up of how to do something, saved after the agent works it out
 once so it can reuse it next time instead of figuring it out again. The agent builds
