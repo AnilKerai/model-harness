@@ -73,6 +73,7 @@ where the implementation would live.
 - [x] `FileSkillStore` — persists skills as `SKILL.md` (frontmatter + markdown body, minimal hand-rolled parser, no YAML dependency); `AddFileSkillStore(dir)`
 - [x] `SkillManageTool` (`skill_manage`) — model-initiated save/delete of procedural memory; `SkillViewTool` (`skill_view`) — loads a full skill body on demand; `AddSkillTools()`
 - [x] `samples/SkillLearning` — scripted, no-API-key demo: run 1 captures a skill, run 2 loads it from disk via `SkillsGuide` and reuses it
+- [ ] User-defined skills — `CompositeSkillStore` aggregates an agent store (writable; `SaveAsync`/`DeleteAsync` route here) and one or more user stores (read-only by routing); agent version shadows a same-named user skill and reveals it again on delete; DI helpers `AddAgentSkillStore(dir)` + `AddUserSkillStore(dir)` (chainable, order-independent); no changes to `ISkillStore`, `SkillManageTool`, `SkillViewTool`, or `SkillsGuide` — composite is transparent to all consumers; intended to land as part of the fluent builder work
 
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
