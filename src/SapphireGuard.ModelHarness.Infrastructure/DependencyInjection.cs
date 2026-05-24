@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -12,18 +13,24 @@ namespace SapphireGuard.ModelHarness.Infrastructure;
 [ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
-    public static ModelHarnessBuilder WithFileSkillStore(this ModelHarnessBuilder builder, string directory) =>
+    public static ModelHarnessBuilder WithFileSkillStore(this ModelHarnessBuilder builder, string directory)
+    {
         builder.WithSkillStore(_ => new FileSkillStore(directory));
+        AddSkillTools(builder);
+        return builder;
+    }
 
     public static ModelHarnessBuilder WithAgentSkillStore(this ModelHarnessBuilder builder, string directory)
     {
         GetOrAddSkillConfig(builder).AgentDirectory = directory;
+        AddSkillTools(builder);
         return builder;
     }
 
     public static ModelHarnessBuilder WithUserSkillStore(this ModelHarnessBuilder builder, string directory)
     {
         GetOrAddSkillConfig(builder).UserDirectories.Add(directory);
+        AddSkillViewTool(builder);
         return builder;
     }
 
@@ -40,12 +47,14 @@ public static class DependencyInjection
         return config;
     }
 
-    public static ModelHarnessBuilder WithSkillTools(this ModelHarnessBuilder builder)
+    private static void AddSkillTools(ModelHarnessBuilder builder)
     {
-        builder.Services.AddSingleton<ITool, SkillManageTool>();
-        builder.Services.AddSingleton<ITool, SkillViewTool>();
-        return builder;
+        AddSkillViewTool(builder);
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ITool, SkillManageTool>());
     }
+
+    private static void AddSkillViewTool(ModelHarnessBuilder builder) =>
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ITool, SkillViewTool>());
 
     public static ModelHarnessBuilder WithAskHumanTool<TChannel>(this ModelHarnessBuilder builder)
         where TChannel : class, IHumanChannel

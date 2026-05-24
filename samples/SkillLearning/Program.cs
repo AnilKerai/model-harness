@@ -43,7 +43,6 @@ async Task<AgentOutcome> RunOnceAsync()
         .WithConsoleTracer()
         .WithToolRegistry<InMemoryToolRegistry>()
         .WithFileSkillStore(skillDir)
-        .WithSkillTools()
         .WithModel(_ => new SkillScriptedModelClient()));
 
     await using var provider = services.BuildServiceProvider();
