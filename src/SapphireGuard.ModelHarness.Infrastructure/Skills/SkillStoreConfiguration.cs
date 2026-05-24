@@ -12,13 +12,16 @@ internal sealed class SkillStoreConfiguration
     public string? AgentDirectory { get; set; }
     public List<string> UserDirectories { get; } = [];
 
-    public ISkillStore Build() =>
-        AgentDirectory is null
-            ? throw new InvalidOperationException(
-                "Call WithAgentSkillStore before WithUserSkillStore.")
-            : UserDirectories.Count == 0
-                ? new FileSkillStore(AgentDirectory)
-                : new CompositeSkillStore(
-                    new FileSkillStore(AgentDirectory),
-                    UserDirectories.Select(d => (ISkillStore)new FileSkillStore(d)).ToList());
+    public ISkillStore Build()
+    {
+        ISkillStore agentStore = AgentDirectory is not null
+            ? new FileSkillStore(AgentDirectory)
+            : new NullSkillStore();
+
+        return UserDirectories.Count == 0
+            ? agentStore
+            : new CompositeSkillStore(
+                agentStore,
+                UserDirectories.Select(d => (ISkillStore)new FileSkillStore(d)).ToList());
+    }
 }
