@@ -134,10 +134,10 @@ public sealed class HarnessLoopTests
     // ── PreModelCall sensor ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task RunAsync_PreModelCallIntervened_SkipsModelCallAndLoops()
+    public async Task RunAsync_PreModelCallIntervened_InjectsNoteAndProceedsWithModelCall()
     {
-        // Block once — model is not called that turn, intervention recorded,
-        // loop goes back and on the second iteration the sensor passes.
+        // PreModelCall sensors inject a guidance note into the trajectory, then the
+        // model call proceeds on the same turn so the model can act on the note.
         var sensor = new CountdownSensor(HookPoint.PreModelCall, blockCount: 1, reason: "not now");
         var client = new ScriptedModelClient(EndTurnResponse("ok"));
 
@@ -145,7 +145,7 @@ public sealed class HarnessLoopTests
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
 
         Assert.Equal(AgentStatus.Done, outcome.Status);
-        Assert.Equal(1, client.CallCount); // model only called after the block passes
+        Assert.Equal(1, client.CallCount); // model called on the same turn the sensor fired
 
         var intervention = outcome.FinalState.Trajectory.OfType<SensorInterventionStep>().Single();
         Assert.Equal(HookPoint.PreModelCall, intervention.HookPoint);
@@ -267,24 +267,6 @@ public sealed class HarnessLoopTests
         Assert.Single(outcome.FinalState.Trajectory.OfType<ToolCallStep>());
     }
 
-    [Fact]
-    public async Task RunAsync_PreModelCallIntervenedPersistently_ForcesFinaliseTurnAndReturnsDone()
-    {
-        // A sensor that always blocks at PreModelCall (e.g. CostThrottleSensor once the
-        // threshold is hit) must NOT loop forever. The loop must force one finalise call
-        // with tools disabled so the model can answer from context, then return Done.
-        var sensor = new AlwaysBlockSensor(HookPoint.PreModelCall, reason: "soft limit hit");
-        var client = new ScriptedModelClient(EndTurnResponse("here is my best answer"));
-
-        var harness = BuildHarness(client, sensors: [sensor]);
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var outcome = await harness.RunAsync(NewState(), cts.Token);
-
-        Assert.Equal(AgentStatus.Done, outcome.Status);
-        Assert.Equal("here is my best answer", outcome.FinalAnswer);
-        Assert.Equal(1, client.CallCount); // exactly one forced-finalise call
-    }
 
     // ── Cancellation and exceptions ───────────────────────────────────────────
 

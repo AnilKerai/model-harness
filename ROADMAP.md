@@ -9,6 +9,7 @@ where the implementation would live.
 - [x] `HarnessLoop` — turn-by-turn orchestration (build context → call model → act on response)
 - [x] `IBudgetEnforcer` / `DefaultBudgetEnforcer` — hard limits on turns, tokens, cost, and wall clock
 - [x] Budget exhaustion as control flow (not exception) — one final model call, `PartialResult` outcome
+- [ ] `IRateLimiter` — sits alongside `IBudgetEnforcer` in the pre-model-call check; blocks (delays or rejects) when calls-per-minute or tokens-per-minute thresholds are hit; not a sensor (sensors cannot delay) and not a budget concern (rate limits are provider-enforced windows, not cumulative spend); candidate design mirrors `IBudgetEnforcer` with its own `RateLimitCheck` result and `AddRateLimiter<T>()` DI extension
 - [x] `AgentState` — immutable run-time state; `AppendStep` via `with`-expressions
 - [x] `AgentOutcome` — terminal result with status, final answer, and full trajectory
 
@@ -28,9 +29,8 @@ where the implementation would live.
 - [x] `SensorResult.Intervene(reason)` → `SensorInterventionStep` fed back through `TrajectoryGuide`
 - [x] `StuckDetector` — built-in sensor; blocks repeated identical tool calls
 - [x] `PiiRedactionSensor` — PostModelCall; regex scan for email, phone, credit card, NI, SSN
-- [x] `CostThrottleSensor` — PreModelCall; soft spend cap with force-finalise on trigger
 - [x] `ToolResultSanityCheckSensor` — PostToolCall; validates result shape and per-tool custom rules
-- [x] Per-hookpoint intervention semantics clarified and documented (PostModelCall suppresses blocked content; PostToolCall is advisory-only; PreModelCall force-finalises)
+- [x] Per-hookpoint intervention semantics: sensors may block actions but must never take turns away from the model. PreModelCall injects a note and proceeds; PostModelCall suppresses content and loops back; PreToolCall blocks dispatch and records an error result; PostToolCall is advisory-only; PreReturn loops back for self-correction
 - [ ] `PromptInjectionSensor` — PostToolCall; scans inbound tool results and retrieved content for injection patterns before they land in trajectory; advisory-only (PostToolCall cannot undo execution) but annotates the result so the model is warned of untrusted content
 
 ### Tools

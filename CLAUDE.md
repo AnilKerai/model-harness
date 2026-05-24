@@ -23,7 +23,7 @@ Add an API key first (per-sample; samples fall back to `FakeModelClient` when ab
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete adapters: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `CostThrottleSensor`, `ToolResultSanityCheckSensor`, `StuckDetector`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Skills (procedural memory): `FileSkillStore`, `SkillManageTool`, `SkillViewTool`. Depends on Framework only |
+| `Infrastructure` | Concrete adapters: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Production sensors: `PiiRedactionSensor`, `ToolResultSanityCheckSensor`, `StuckDetector`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Skills (procedural memory): `FileSkillStore`, `SkillManageTool`, `SkillViewTool`. Depends on Framework only |
 | `Infrastructure.Resilience` | `ResilientModelClientDecorator` — wraps any `IModelClient` with Polly retry + circuit breaker. Depends on Framework + Polly v8 |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |
@@ -44,11 +44,11 @@ Guides run **sequentially** before each model call, each contributing to a share
 ### Sensor pattern
 Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Intervene(reason)` appends a `SensorInterventionStep` to the trajectory, which `TrajectoryGuide` renders as a `[HARNESS OBSERVATION — ...]` system note on the next turn. `HarnessInstructionsGuide` primes the model in the system prompt to treat these notes as directives — feedforward and feedback working together.
 
-Sensors observe and report a concern; the loop decides what "intervening" means per hookpoint:
-- **PreModelCall**: force-finalises immediately (looping would produce identical state — infinite loop risk)
+Sensors may block actions but must never take turns away from the model — the model always gets the next call so it can self-correct. The loop decides what "intervening" means per hookpoint:
+- **PreModelCall**: injects the intervention note into the trajectory, then proceeds with the model call on the same turn; use for conditional pre-reasoning guidance (e.g. goal-drift warnings, error-streak alerts)
 - **PostModelCall**: loops back; blocked response text is **suppressed from trajectory** so the model cannot re-see flagged content (e.g. PII) on the retry turn
 - **PreReturn**: loops back; model retries with its prior answer visible so it can correct it
-- **PreToolCall**: tool is never dispatched; a `ToolCallStep` with `IsError = true` is recorded as the outcome
+- **PreToolCall**: tool is never dispatched; a `ToolCallStep` with `IsError = true` is recorded as the outcome; loop continues and model sees the error
 - **PostToolCall**: **advisory only** — the tool has already run and its result is in the trajectory; intervention annotates the result but cannot prevent the model from reasoning on it
 
 ### State
