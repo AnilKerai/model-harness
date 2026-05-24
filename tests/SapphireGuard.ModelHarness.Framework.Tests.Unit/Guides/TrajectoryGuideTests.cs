@@ -76,13 +76,13 @@ public sealed class TrajectoryGuideTests
     }
 
     [Fact]
-    public async Task Contribute_SensorInterventionStep_RendersAsSystemMessage()
+    public async Task Contribute_SensorInterventionStep_RendersAsAssistantMessage()
     {
         var state = EmptyState().AppendStep(InterventionStep(HookPoint.PreReturn, "quality check failed"));
         var draft = await ContributeAsync(state);
 
         var msg = Assert.Single(draft.TrajectoryMessages);
-        Assert.Equal(MessageRole.System, msg.Role);
+        Assert.Equal(MessageRole.Assistant, msg.Role);
         Assert.Contains("quality check failed", msg.Content);
     }
 
@@ -101,7 +101,7 @@ public sealed class TrajectoryGuideTests
         var draft = await ContributeAsync(state);
 
         Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("john@example.com"));
-        Assert.Single(draft.TrajectoryMessages, m => m.Role == MessageRole.System && m.Content.Contains("pii detected"));
+        Assert.Single(draft.TrajectoryMessages, m => m.Role == MessageRole.Assistant && m.Content.Contains("pii detected"));
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed class TrajectoryGuideTests
         var draft = await ContributeAsync(state);
 
         Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("bad content"));
-        Assert.Equal(2, draft.TrajectoryMessages.Count(m => m.Role == MessageRole.System));
+        Assert.Equal(2, draft.TrajectoryMessages.Count(m => m.Role == MessageRole.Assistant));
     }
 
     [Fact]

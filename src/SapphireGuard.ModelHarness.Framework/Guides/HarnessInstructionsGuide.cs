@@ -1,13 +1,12 @@
-using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.Framework.Guides;
 
 /// <summary>
 /// Appends harness-level instructions to the system prompt so the model understands
-/// what sensor observation notes mean and how to respond to them.
+/// what sensor observation notes mean and how to respond to them. Also injects a
+/// live violation count each turn so the model is aware of its cumulative history.
 /// </summary>
-[ExcludeFromCodeCoverage]
 public sealed class HarnessInstructionsGuide : IGuide
 {
     public string Name => "harness-instructions";
@@ -29,6 +28,22 @@ public sealed class HarnessInstructionsGuide : IGuide
     public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
     {
         draft.SystemPrompt += Instructions;
+
+        var violationCounts = state.Trajectory
+            .OfType<SensorInterventionStep>()
+            .GroupBy(s => s.SensorName)
+            .Select(g => $"- {g.Key}: {g.Count()} violation(s)")
+            .ToList();
+
+        if (violationCounts.Count > 0)
+            draft.SystemPrompt += $"""
+
+
+                ## Sensor violations this session
+                Your responses have already been blocked by the following sensors — full compliance is required:
+                {string.Join("\n        ", violationCounts)}
+                """;
+
         return Task.CompletedTask;
     }
 }

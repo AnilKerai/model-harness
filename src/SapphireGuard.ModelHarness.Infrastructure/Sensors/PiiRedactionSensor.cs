@@ -37,9 +37,18 @@ public sealed class PiiRedactionSensor : ISensor
 
         foreach (var (label, pattern) in Patterns)
         {
-            if (pattern.IsMatch(text))
-                return Task.FromResult(SensorResult.Intervene(
-                    $"Response contains possible PII ({label}). Restate your answer without including any personal data."));
+            if (!pattern.IsMatch(text))
+                continue;
+
+            var priorViolations = state.Trajectory
+                .OfType<SensorInterventionStep>()
+                .Count(s => s.SensorName == Name);
+
+            var reason = priorViolations == 0
+                ? $"Response contains possible PII ({label}). Restate your answer without including any personal data."
+                : $"Response contains possible PII ({label}). This is violation {priorViolations + 1} — you have already been blocked {priorViolations} time(s). You must not include any personal data whatsoever.";
+
+            return Task.FromResult(SensorResult.Intervene(reason));
         }
 
         return Task.FromResult(SensorResult.Pass);
