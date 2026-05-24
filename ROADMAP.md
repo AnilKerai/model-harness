@@ -20,6 +20,8 @@ where the implementation would live.
 - [x] Token-aware trajectory compaction — `TrajectoryGuide` trims oldest steps when estimated token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped
 - [x] `MemoryGuide` — seam for long-term memory; default is `NullMemoryStore` (no-op); replace with a vector store or knowledge graph
 - [x] `ToolSelectorGuide` — seam for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
+- [ ] Progressive tool discovery — expose tools contextually rather than all-at-once; research shows selection accuracy degrades meaningfully above ~20 tools; candidate design: a routing step at the start of each turn that classifies the current sub-task and injects only the relevant tool subset into `ContextDraft`; `IToolSelector` is the right seam, needs a smarter default
+- [ ] ReAct loop / goal reiteration — implement Focused ReAct: re-inject the original `state.TaskText` as a framing note on every turn (especially after trajectory compaction); prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns; a one-line addition to `TrajectoryGuide` after it emits the omission note
 
 ### Sensor pattern
 - [x] `ISensor` / `ISensorRunner` / `HookPoint` — parallel observation at five lifecycle positions
@@ -29,6 +31,7 @@ where the implementation would live.
 - [x] `CostThrottleSensor` — PreModelCall; soft spend cap with force-finalise on trigger
 - [x] `ToolResultSanityCheckSensor` — PostToolCall; validates result shape and per-tool custom rules
 - [x] Per-hookpoint intervention semantics clarified and documented (PostModelCall suppresses blocked content; PostToolCall is advisory-only; PreModelCall force-finalises)
+- [ ] `PromptInjectionSensor` — PostToolCall; scans inbound tool results and retrieved content for injection patterns before they land in trajectory; advisory-only (PostToolCall cannot undo execution) but annotates the result so the model is warned of untrusted content
 
 ### Tools
 - [x] `ITool` / `IToolRegistry` / `ToolDefinition` — tool abstraction decoupled from `IModelClient`
