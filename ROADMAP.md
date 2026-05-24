@@ -23,7 +23,7 @@ where the implementation would live.
 - [x] `ToolSelectorGuide` — seam for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
 - [ ] Progressive tool discovery — expose tools contextually rather than all-at-once; research shows selection accuracy degrades meaningfully above ~20 tools; candidate design: a routing step at the start of each turn that classifies the current sub-task and injects only the relevant tool subset into `ContextDraft`; `IToolSelector` is the right seam, needs a smarter default
 - [x] ReAct loop / goal reiteration — `TrajectoryGuide` re-injects the original `state.TaskText` as a `[ORIGINAL GOAL]` system note on every turn; prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns, especially after compaction drops early history
-- [ ] Intermediate validation gate — a `PreModelCall` sensor that fires every N turns and injects a structured checkpoint note ("you have taken N steps — verify you are still on track before continuing"); addresses both context drift and compounding error accumulation without new abstractions; configurable threshold, off by default
+- [x] Intermediate validation gate — `ProgressCheckSensor` fires at `PreModelCall` every N completed turns (configurable, default 5) and annotates the trajectory with a structured checkpoint prompt; included in `AddStandardModelHarness` by default
 
 ### Sensor pattern
 - [x] `ISensor` / `ISensorRunner` / `HookPoint` — parallel observation at five lifecycle positions

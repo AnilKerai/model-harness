@@ -1,6 +1,7 @@
+using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 
-namespace SapphireGuard.ModelHarness.Framework.Sensors;
+namespace SapphireGuard.ModelHarness.Infrastructure.Sensors;
 
 /// <summary>
 /// Flags when the agent issues the same tool call (name + arguments) three or
