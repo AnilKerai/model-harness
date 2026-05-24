@@ -14,6 +14,7 @@
     <Project Path="samples/HappyPath/SapphireGuard.ModelHarness.Samples.HappyPath.csproj" />
     <Project Path="samples/OllamaToolCall/SapphireGuard.ModelHarness.Samples.OllamaToolCall.csproj" />
     <Project Path="samples/PiiDetection/SapphireGuard.ModelHarness.Samples.PiiDetection.csproj" />
+    <Project Path="samples/BudgetEnforcer/SapphireGuard.ModelHarness.Samples.BudgetEnforcer.csproj" />
     <Project Path="samples/SkillLearning/SapphireGuard.ModelHarness.Samples.SkillLearning.csproj" />
     <Project Path="samples/ToolCallReasonableness/SapphireGuard.ModelHarness.Samples.ToolCallReasonableness.csproj" />
     <Project Path="samples/ToolResultSanity/SapphireGuard.ModelHarness.Samples.ToolResultSanity.csproj" />
