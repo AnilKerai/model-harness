@@ -70,6 +70,7 @@ where the implementation would live.
 - [x] `ConsoleHumanChannel` — development-time implementation that blocks on stdin; replace with a channel suited to the deployment environment
 - [x] `AddAskHumanTool<TChannel>()` / factory overload DI extension in `Infrastructure`
 - [x] Decision: HITL is a **system design concern**, not a harness concern — the harness provides the seam (`IHumanChannel`) and signals intent (`AskHumanTool`); how a human is reached is entirely the user's implementation
+- [ ] **Planned redesign** — `IHumanChannel.AskAsync → string` is the wrong contract: request-response assumes the channel can block until the human answers, which is never true in production. Proposed split: (1) replace with `IHumanNotifier.NotifyAsync(HumanInputRequest, ct)` — one-way fire-and-forget; implementation posts HTTP, publishes a bus message, sends Slack DM etc.; (2) harness calls notifier then immediately returns `AgentOutcome { Status = PendingHumanInput }`; (3) answer comes back through checkpoint/resume — caller injects it into state before calling `RunAsync` again. `ConsoleHumanChannel` stays as a dev-only synchronous convenience. `AskHumanTool` stays as the model-side trigger but returns a pending result that signals the loop to suspend rather than blocking for an answer.
 
 ### Skills (procedural memory)
 - [x] `ISkillStore` / `Skill` / `SkillSummary` / `NullSkillStore` — seam in `Framework.Skills`; default is a no-op so the read side ships on with zero overhead
