@@ -84,7 +84,7 @@ where the implementation would live.
 - [x] Sensor intervention guard — `HarnessLoop` tracks consecutive sensor blocks; after 3 consecutive `PostModelCall` or `PreReturn` interventions the loop force-finalises with a clear reason rather than looping indefinitely
 - [x] Exception telemetry on tool failure — `ExecuteToolAsync` now catches exceptions from `toolRegistry.DispatchAsync`, converts them to `IsError` `ToolResult`s (type + message surfaced to the model), and logs via `tracer.LogToolCall`; tool crashes become recoverable errors rather than run-terminating exceptions
 - [ ] Memory retrieval signal — `MemoryGuide` always queries `IMemoryStore` with `state.TaskText`; on long runs the last few model messages or a recent-trajectory summary are better retrieval signals; expose a pluggable `IMemoryQueryBuilder` seam (default: current behaviour)
-- [ ] DI smoke tests — builder methods and `DependencyInjection.cs` files are `[ExcludeFromCodeCoverage]`; a single end-to-end smoke test per sample project (resolve the container, run one turn against `FakeModelClient`) would catch wiring regressions without testing implementation detail
+- [x] DI smoke tests — builder methods and `DependencyInjection.cs` files are `[ExcludeFromCodeCoverage]`; a single end-to-end smoke test per sample project (resolve the container, run one turn against `FakeModelClient`) would catch wiring regressions without testing implementation detail
 
 ### Testing
 - [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
