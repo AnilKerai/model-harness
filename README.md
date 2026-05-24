@@ -260,10 +260,6 @@ when to save one, or whether the agent is "improving"** — the model makes that
 Building anything smarter on top (like automatically saving after a success — see the
 roadmap) is a layer you add, not part of the framework.
 
-One nice side effect: doing the skills list as a guide let us move the **tool** list
-into a guide too (`ToolCatalogueGuide`). Now every part of the prompt is built by a
-guide, and the builder just glues the pieces together.
-
 ---
 
 ## The loop (`HarnessLoop`)
