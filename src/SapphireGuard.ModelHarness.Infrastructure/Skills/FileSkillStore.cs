@@ -1,13 +1,11 @@
-using System.Text;
 using SapphireGuard.ModelHarness.Framework.Skills;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Skills;
 
 /// <summary>
-/// Persists skills as <c>SKILL.md</c> files (YAML-style frontmatter + markdown body)
-/// under a directory, one file per skill keyed by a sanitised name. Mirrors
-/// <c>FileCheckpointStore</c>. Frontmatter is parsed by a minimal hand-rolled reader
-/// to avoid a YAML dependency.
+/// Persists skills as <c>SKILL.md</c> files under a directory, one file per skill
+/// keyed by a sanitised name. Parsing and serialisation are delegated to
+/// <see cref="SkillDocumentParser"/>; this class is responsible only for file I/O.
 /// </summary>
 public sealed class FileSkillStore : ISkillStore
 {
@@ -25,7 +23,7 @@ public sealed class FileSkillStore : ISkillStore
         {
             ct.ThrowIfCancellationRequested();
             var text = await File.ReadAllTextAsync(file, ct);
-            list.Add(ParseSkill(Path.GetFileNameWithoutExtension(file), text).ToSummary());
+            list.Add(SkillDocumentParser.Parse(text).ToSummary());
         }
         return list;
     }
@@ -37,13 +35,16 @@ public sealed class FileSkillStore : ISkillStore
             return null;
 
         var text = await File.ReadAllTextAsync(path, ct);
-        return ParseSkill(name, text);
+        return SkillDocumentParser.Parse(text);
     }
 
     public async Task SaveAsync(Skill skill, CancellationToken ct)
     {
         Directory.CreateDirectory(_dir);
-        await File.WriteAllTextAsync(Path.Combine(_dir, FileName(skill.Name)), Serialize(skill), ct);
+        await File.WriteAllTextAsync(
+            Path.Combine(_dir, FileName(skill.Name)),
+            SkillDocumentParser.Serialize(skill),
+            ct);
     }
 
     public Task DeleteAsync(string name, CancellationToken ct)
@@ -53,50 +54,6 @@ public sealed class FileSkillStore : ISkillStore
             File.Delete(path);
         return Task.CompletedTask;
     }
-
-    private static string Serialize(Skill s)
-    {
-        var sb = new StringBuilder();
-        sb.Append("---\n");
-        sb.Append("name: ").Append(OneLine(s.Name)).Append('\n');
-        sb.Append("description: ").Append(OneLine(s.Description)).Append('\n');
-        sb.Append("when_to_use: ").Append(OneLine(s.WhenToUse)).Append('\n');
-        sb.Append("version: ").Append(OneLine(s.Version)).Append('\n');
-        sb.Append("---\n\n");
-        sb.Append(s.Body.Trim()).Append('\n');
-        return sb.ToString();
-    }
-
-    private static Skill ParseSkill(string fallbackName, string text)
-    {
-        var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var normalized = text.Replace("\r\n", "\n");
-        var body = normalized;
-
-        if (normalized.StartsWith("---\n", StringComparison.Ordinal))
-        {
-            var end = normalized.IndexOf("\n---", 4, StringComparison.Ordinal);
-            if (end > 0)
-            {
-                foreach (var line in normalized[4..end].Split('\n'))
-                {
-                    var idx = line.IndexOf(':');
-                    if (idx > 0)
-                        meta[line[..idx].Trim()] = line[(idx + 1)..].Trim();
-                }
-                body = normalized[(end + 4)..].TrimStart('\n');
-            }
-        }
-
-        return new Skill(
-            meta.GetValueOrDefault("name", fallbackName),
-            meta.GetValueOrDefault("description", ""),
-            meta.GetValueOrDefault("when_to_use", ""),
-            body.Trim(),
-            meta.GetValueOrDefault("version", "1.0.0"));
-    }
-
-    private static string OneLine(string v) => v.Replace("\r", " ").Replace("\n", " ").Trim();
 
     private static string FileName(string name)
     {
