@@ -674,7 +674,6 @@ These are things every agent needs, regardless of domain. The framework provides
 | ------- | -------------- | ------ |
 | Turn-by-turn loop orchestration | `HarnessLoop` | ✅ |
 | Budget enforcement (turns, tokens, cost, wall clock) | `IBudgetEnforcer` / `DefaultBudgetEnforcer` | ✅ |
-| Rate limiting (calls/min, tokens/min — provider sliding windows) | `IRateLimiter` / `NullRateLimiter` (opt-in via `WithRateLimiter`) | ✅ |
 | Context assembly — what the model sees each turn | Guide pipeline / `IContextBuilder` | ✅ |
 | Trajectory rendering and compaction | `TrajectoryGuide` | ✅ |
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
@@ -703,6 +702,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Domain tools | `ITool` | Everything the model can invoke. |
 | Human-in-the-loop | `IHumanChannel` → `AskHumanTool` | The harness provides the seam and a `ConsoleHumanChannel` for development. How a question is surfaced — stdin, Slack, webhook, queue — is a system design decision the harness cannot make. See the FAQ. |
 | Authenticated HTTP clients for tools | Standard .NET DI | Tools that call external APIs (including MCP servers backed by domain services) need authenticated `HttpClient` instances. The harness does not provide this because the authentication mechanism, token lifecycle, and target services are all deployment concerns. The correct pattern is to register a named `HttpClient` with a `DelegatingHandler` for token acquisition and refresh in the composition root, alongside `AddModelHarness`. Tools declare `IHttpClientFactory` as a constructor dependency and call `CreateClient("name")` — the factory and handler are resolved from the same DI container. This means all tools registered with the harness share the same token cache and renewal logic with no harness changes required. For MCP-backed tools specifically, authentication to the MCP server is a transport-layer concern that belongs in how `IMcpClient` connections are established, not in tool implementations. |
+| Rate limiting | `IRateLimiter` (in loop) or a decorator on `IModelClient` | Provider sliding-window limits (calls/min, tokens/min) are a transport concern — the natural home is a `RateLimitingModelClientDecorator` alongside `ResilientModelClientDecorator`. The harness currently provides `IRateLimiter` as a loop-level seam (with `CallsPerMinuteRateLimiter` and `TokensPerMinuteRateLimiter` in Infrastructure) because the loop is the only layer with access to `MaxWallClock`, enabling graceful `PartialResult` instead of an unbounded wait. A decorator would need to either block blindly or throw a typed exception for the loop to catch. Both placements are defensible; the current one is pragmatic. Configure via `WithRateLimiter` — no-op by default. |
 
 ---
 
