@@ -78,7 +78,7 @@ where the implementation would live.
 - [x] `FileSkillStore` — persists skills as `SKILL.md` (frontmatter + markdown body, minimal hand-rolled parser, no YAML dependency); `AddFileSkillStore(dir)`
 - [x] `SkillManageTool` (`skill_manage`) — model-initiated save/delete of procedural memory; `SkillViewTool` (`skill_view`) — loads a full skill body on demand; `AddSkillTools()`
 - [x] `samples/SkillLearning` — scripted, no-API-key demo: run 1 captures a skill, run 2 loads it from disk via `SkillsGuide` and reuses it
-- [ ] User-defined skills — `CompositeSkillStore` aggregates an agent store (writable; `SaveAsync`/`DeleteAsync` route here) and one or more user stores (read-only by routing); agent version shadows a same-named user skill and reveals it again on delete; DI helpers `AddAgentSkillStore(dir)` + `AddUserSkillStore(dir)` (chainable, order-independent); no changes to `ISkillStore`, `SkillManageTool`, `SkillViewTool`, or `SkillsGuide` — composite is transparent to all consumers; intended to land as part of the fluent builder work
+- [x] User-defined skills — `CompositeSkillStore` aggregates an agent store (writable) and one or more user stores (read-only); agent version shadows a same-named user skill and reveals it again on delete; `AddAgentSkillStore(dir)` + `AddUserSkillStore(dir)` DI helpers; transparent to all consumers (`ISkillStore`, `SkillManageTool`, `SkillViewTool`, `SkillsGuide` unchanged)
 
 ### Robustness
 - [x] Sensor intervention guard — `HarnessLoop` tracks consecutive sensor blocks; after 3 consecutive `PostModelCall` or `PreReturn` interventions the loop force-finalises with a clear reason rather than looping indefinitely
