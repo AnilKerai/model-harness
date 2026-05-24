@@ -17,6 +17,10 @@ namespace SapphireGuard.ModelHarness.Framework;
 [ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Registers the model harness with all framework defaults. Use the <paramref name="configure"/>
+    /// callback to wire the model, tools, sensors, tracers, and any other seams.
+    /// </summary>
     public static IServiceCollection AddModelHarness(this IServiceCollection services, Action<ModelHarnessBuilder> configure)
     {
         services

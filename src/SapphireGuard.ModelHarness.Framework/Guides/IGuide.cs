@@ -13,7 +13,13 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// </summary>
 public interface IGuide
 {
+    /// <summary>Unique identifier used in traces and diagnostics.</summary>
     string Name { get; }
 
+    /// <summary>
+    /// Contributes to the context that will be sent to the model on the next turn.
+    /// Write into <paramref name="draft"/> fields — system prompt, trajectory messages,
+    /// memory snippets, available tools, or additional system sections.
+    /// </summary>
     Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct);
 }

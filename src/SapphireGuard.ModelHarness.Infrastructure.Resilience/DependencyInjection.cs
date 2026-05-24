@@ -12,8 +12,12 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 [ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
-    // ── Builder extensions: resilient tool ──────────────────────────────────
+    // ── Resilient tool ───────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Registers <typeparamref name="TImpl"/> wrapped in a <see cref="ResilientTool"/>
+    /// using the default Polly retry and circuit-breaker policy.
+    /// </summary>
     public static ModelHarnessBuilder WithResilientTool<TImpl>(this ModelHarnessBuilder builder)
         where TImpl : class, ITool
     {
@@ -22,6 +26,10 @@ public static class DependencyInjection
         return builder;
     }
 
+    /// <summary>
+    /// Registers <typeparamref name="TImpl"/> wrapped in a <see cref="ResilientTool"/>
+    /// using the provided <paramref name="pipeline"/> instead of the default policy.
+    /// </summary>
     public static ModelHarnessBuilder WithResilientTool<TImpl>(
         this ModelHarnessBuilder builder,
         ResiliencePipeline<ToolResult> pipeline)
@@ -32,8 +40,13 @@ public static class DependencyInjection
         return builder;
     }
 
-    // ── Builder extensions: resilient model client ───────────────────────────
+    // ── Resilient model client ───────────────────────────────────────────────
 
+    /// <summary>
+    /// Registers <typeparamref name="TImpl"/> wrapped in a
+    /// <see cref="ResilientModelClientDecorator"/> using the default Polly retry and
+    /// circuit-breaker policy.
+    /// </summary>
     public static ModelHarnessBuilder WithResilientModel<TImpl>(this ModelHarnessBuilder builder)
         where TImpl : class, IModelClient
     {
@@ -41,6 +54,11 @@ public static class DependencyInjection
         return builder.WithModel(sp => new ResilientModelClientDecorator(sp.GetRequiredService<TImpl>()));
     }
 
+    /// <summary>
+    /// Registers <typeparamref name="TImpl"/> wrapped in a
+    /// <see cref="ResilientModelClientDecorator"/> using the provided
+    /// <paramref name="pipeline"/> instead of the default policy.
+    /// </summary>
     public static ModelHarnessBuilder WithResilientModel<TImpl>(
         this ModelHarnessBuilder builder,
         ResiliencePipeline<ModelResponse> pipeline)
@@ -50,11 +68,21 @@ public static class DependencyInjection
         return builder.WithModel(sp => new ResilientModelClientDecorator(sp.GetRequiredService<TImpl>(), pipeline));
     }
 
+    /// <summary>
+    /// Wraps the model client returned by <paramref name="factory"/> in a
+    /// <see cref="ResilientModelClientDecorator"/> using the default Polly retry and
+    /// circuit-breaker policy.
+    /// </summary>
     public static ModelHarnessBuilder WithResilientModel(
         this ModelHarnessBuilder builder,
         Func<IServiceProvider, IModelClient> factory) =>
         builder.WithModel(sp => new ResilientModelClientDecorator(factory(sp)));
 
+    /// <summary>
+    /// Wraps the model client returned by <paramref name="factory"/> in a
+    /// <see cref="ResilientModelClientDecorator"/> using the provided
+    /// <paramref name="pipeline"/> instead of the default policy.
+    /// </summary>
     public static ModelHarnessBuilder WithResilientModel(
         this ModelHarnessBuilder builder,
         Func<IServiceProvider, IModelClient> factory,

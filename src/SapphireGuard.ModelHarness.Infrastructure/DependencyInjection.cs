@@ -21,7 +21,7 @@ public static class DependencyInjection
         return builder;
     }
 
-    /// <summary>Enables agent learning: a writable store where the agent saves procedures it works out at runtime. Registers skill_manage and skill_view automatically.</summary>
+    /// <summary>Enables agent learning: a writable store where the agent saves procedures it works out at runtime. Registers <c>skill_manage</c> and <c>skill_view</c> automatically.</summary>
     public static ModelHarnessBuilder WithLearning(this ModelHarnessBuilder builder, string directory)
     {
         GetOrAddSkillConfig(builder).AgentDirectory = directory;
@@ -29,13 +29,66 @@ public static class DependencyInjection
         return builder;
     }
 
-    /// <summary>Provides pre-authored skills the agent can read but not modify. Registers skill_view automatically. Chain with <see cref="WithLearning"/> to enable both.</summary>
+    /// <summary>Provides pre-authored skills the agent can read but not modify. Registers <c>skill_view</c> automatically. Chain with <see cref="WithLearning"/> to enable both.</summary>
     public static ModelHarnessBuilder WithSkills(this ModelHarnessBuilder builder, string directory)
     {
         GetOrAddSkillConfig(builder).UserDirectories.Add(directory);
         AddSkillViewTool(builder);
         return builder;
     }
+
+    /// <summary>
+    /// Registers <c>ask_human</c> backed by <typeparamref name="TChannel"/> as the delivery channel.
+    /// Use this for development with <c>ConsoleHumanChannel</c> or to inject a channel registered elsewhere in DI.
+    /// </summary>
+    public static ModelHarnessBuilder WithAskHumanTool<TChannel>(this ModelHarnessBuilder builder)
+        where TChannel : class, IHumanChannel
+    {
+        builder.Services.AddSingleton<IHumanChannel, TChannel>();
+        builder.Services.AddSingleton<ITool, AskHumanTool>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Registers <c>ask_human</c> backed by the <see cref="IHumanChannel"/> returned by
+    /// <paramref name="factory"/>. Use this when the channel requires runtime configuration
+    /// (e.g. a Slack client with a specific channel ID).
+    /// </summary>
+    public static ModelHarnessBuilder WithAskHumanTool(
+        this ModelHarnessBuilder builder,
+        Func<IServiceProvider, IHumanChannel> factory)
+    {
+        builder.Services.AddSingleton(factory);
+        builder.Services.AddSingleton<ITool, AskHumanTool>();
+        return builder;
+    }
+
+    /// <summary>Adds a <c>ConsoleTracer</c> that writes human-readable trace output to stdout. Handy for local development.</summary>
+    public static ModelHarnessBuilder WithConsoleTracer(this ModelHarnessBuilder builder) =>
+        builder.WithTracer<ConsoleTracer>();
+
+    /// <summary>Adds an <c>OpenTelemetryTracer</c> that emits spans and metrics via the OpenTelemetry SDK.</summary>
+    public static ModelHarnessBuilder WithOtelTracer(this ModelHarnessBuilder builder) =>
+        builder.WithTracer<OpenTelemetryTracer>();
+
+    // ── Layer 3: opinionated entry point ─────────────────────────────────────
+
+    /// <summary>
+    /// Registers the model harness with opinionated defaults: <c>InMemoryToolRegistry</c>,
+    /// <c>StuckDetector</c>, and OpenTelemetry tracing. Pass the <paramref name="configure"/>
+    /// callback to add your model, tools, and any overrides.
+    /// </summary>
+    public static IServiceCollection AddStandardModelHarness(
+        this IServiceCollection services,
+        Action<ModelHarnessBuilder> configure) =>
+        services.AddModelHarness(builder =>
+        {
+            builder
+                .WithToolRegistry<InMemoryToolRegistry>()
+                .WithSensor<StuckDetector>()
+                .WithOtelTracer();
+            configure(builder);
+        });
 
     private static SkillStoreConfiguration GetOrAddSkillConfig(ModelHarnessBuilder builder)
     {
@@ -58,41 +111,4 @@ public static class DependencyInjection
 
     private static void AddSkillViewTool(ModelHarnessBuilder builder) =>
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ITool, SkillViewTool>());
-
-    public static ModelHarnessBuilder WithAskHumanTool<TChannel>(this ModelHarnessBuilder builder)
-        where TChannel : class, IHumanChannel
-    {
-        builder.Services.AddSingleton<IHumanChannel, TChannel>();
-        builder.Services.AddSingleton<ITool, AskHumanTool>();
-        return builder;
-    }
-
-    public static ModelHarnessBuilder WithAskHumanTool(
-        this ModelHarnessBuilder builder,
-        Func<IServiceProvider, IHumanChannel> factory)
-    {
-        builder.Services.AddSingleton(factory);
-        builder.Services.AddSingleton<ITool, AskHumanTool>();
-        return builder;
-    }
-
-    public static ModelHarnessBuilder WithConsoleTracer(this ModelHarnessBuilder builder) =>
-        builder.WithTracer<ConsoleTracer>();
-
-    public static ModelHarnessBuilder WithOtelTracer(this ModelHarnessBuilder builder) =>
-        builder.WithTracer<OpenTelemetryTracer>();
-
-    // ── Layer 3: opinionated entry point ─────────────────────────────────────
-
-    public static IServiceCollection AddStandardModelHarness(
-        this IServiceCollection services,
-        Action<ModelHarnessBuilder> configure) =>
-        services.AddModelHarness(builder =>
-        {
-            builder
-                .WithToolRegistry<InMemoryToolRegistry>()
-                .WithSensor<StuckDetector>()
-                .WithOtelTracer();
-            configure(builder);
-        });
 }
