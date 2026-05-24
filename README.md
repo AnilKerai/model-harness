@@ -3,7 +3,7 @@
 A reusable model harness framework for .NET 10, structured around Clean / Onion
 architecture.
 
-> **Why "model harness"?** An *Agent* = Model + Harness — the harness
+> **Why "model harness"?** An *Agent* = Model + Harness. The harness
 > is the scaffolding (loop, guides, sensors, budget) that wraps a model and
 > turns it into an agent.
 
