@@ -12,16 +12,6 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 [ExcludeFromCodeCoverage]
 public static class DependencyInjection
 {
-    // ── Old API ──────────────────────────────────────────────────────────────
-
-    public static IServiceCollection AddResilientTool<TImpl>(this IServiceCollection services)
-        where TImpl : class, ITool
-    {
-        services.AddSingleton<TImpl>();
-        services.AddSingleton<ITool>(sp => new ResilientTool(sp.GetRequiredService<TImpl>()));
-        return services;
-    }
-
     // ── Builder extensions: resilient tool ──────────────────────────────────
 
     public static ModelHarnessBuilder WithResilientTool<TImpl>(this ModelHarnessBuilder builder)
