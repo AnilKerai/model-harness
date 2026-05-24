@@ -403,6 +403,36 @@ retry + circuit-breaking via the Resilience package:
 builder.WithResilientTool<MyApiTool>()
 ```
 
+### Expose MCP tools
+
+Add a reference to the [ModelContextProtocol NuGet package](https://www.nuget.org/packages/ModelContextProtocol), create an `McpClient` for your server, then wrap each `McpClientTool` in a thin `ITool` adapter:
+
+```csharp
+public sealed class McpTool(McpClient client, McpClientTool mcpTool) : ITool
+{
+    public string Name => mcpTool.Name;
+    public string Description => mcpTool.Description ?? string.Empty;
+    public JsonElement InputSchema => mcpTool.JsonSchema;
+
+    public async Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext ctx, CancellationToken ct)
+    {
+        var args = call.Arguments.EnumerateObject()
+            .ToDictionary(p => p.Name, p => (object?)p.Value);
+        var result = await client.CallToolAsync(mcpTool.Name, args, cancellationToken: ct);
+        var text = string.Join("\n", result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+        return new ToolResult(call.CallId, string.IsNullOrEmpty(text) ? "(no text content)" : text, IsError: result.IsError == true);
+    }
+}
+```
+
+Enumerate the server's tools and register them:
+
+```csharp
+var mcpTools = await mcpClient.ListToolsAsync();
+foreach (var t in mcpTools)
+    builder.WithTool(_ => new McpTool(mcpClient, t));
+```
+
 ### Add a sensor
 
 ```csharp
