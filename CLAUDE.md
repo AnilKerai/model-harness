@@ -23,7 +23,7 @@ Add an API key first (per-sample; samples fall back to `FakeModelClient` when ab
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop only. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete implementations: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Sensors: `StuckDetector`, `ProgressCheckSensor`, `PiiRedactionSensor`, `ToolResultSanityCheckSensor`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Skills (procedural memory): `FileSkillStore`, `SkillManageTool`, `SkillViewTool`. Depends on Framework only |
+| `Infrastructure` | Concrete implementations: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Sensors: `StuckDetector`, `ProgressCheckSensor`, `PiiRedactionSensor`, `ToolResultSanityCheckSensor`, `PromptInjectionSensor`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Skills (procedural memory): `FileSkillStore`, `SkillManageTool`, `SkillViewTool`. Depends on Framework only |
 | `Infrastructure.Resilience` | `ResilientModelClientDecorator` — wraps any `IModelClient` with Polly retry + circuit breaker. Depends on Framework + Polly v8 |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |

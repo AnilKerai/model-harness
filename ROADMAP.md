@@ -32,7 +32,7 @@ where the implementation would live.
 - [x] `PiiRedactionSensor` — PostModelCall; regex scan for email, phone, credit card, NI, SSN
 - [x] `ToolResultSanityCheckSensor` — PostToolCall; validates result shape and per-tool custom rules
 - [x] Per-hookpoint intervention semantics: sensors may block actions but must never take turns away from the model. PreModelCall injects a note and proceeds; PostModelCall suppresses content and loops back; PreToolCall blocks dispatch and records an error result; PostToolCall is advisory-only; PreReturn loops back for self-correction
-- [ ] `PromptInjectionSensor` — PostToolCall; scans inbound tool results and retrieved content for injection patterns before they land in trajectory; advisory-only (PostToolCall cannot undo execution) but annotates the result so the model is warned of untrusted content
+- [x] `PromptInjectionSensor` — PostToolCall; scans inbound tool results for injection patterns (instruction overrides, persona hijacks, role overrides, etc.); flags with an untrusted-content warning; included in `AddStandardModelHarness` by default
 - [ ] Irreversible action gate — a mechanism to block dispatch of tools marked as irreversible until a human approves via `IHumanChannel`; design question open: `PreToolCall` sensor is technically viable (sensors can block at that hookpoint) but a dedicated `IPolicyGate` abstraction may be cleaner — it would own the block/approve/escalate decision explicitly, keep sensors observational, and be the natural home for future policy rules beyond just irreversibility
 
 ### Tools

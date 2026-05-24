@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure.Skills;
@@ -76,8 +75,9 @@ public static class DependencyInjection
 
     /// <summary>
     /// Registers the model harness with opinionated defaults: <c>InMemoryToolRegistry</c>,
-    /// <c>StuckDetector</c>, <c>ProgressCheckSensor</c>, and OpenTelemetry tracing. Pass
-    /// the <paramref name="configure"/> callback to add your model, tools, and any overrides.
+    /// <c>StuckDetector</c>, <c>ProgressCheckSensor</c>, <c>PromptInjectionSensor</c>,
+    /// and OpenTelemetry tracing. Pass the <paramref name="configure"/> callback to add
+    /// your model, tools, and any overrides.
     /// </summary>
     public static IServiceCollection AddStandardModelHarness(
         this IServiceCollection services,
@@ -88,6 +88,7 @@ public static class DependencyInjection
                 .WithToolRegistry<InMemoryToolRegistry>()
                 .WithSensor<StuckDetector>()
                 .WithSensor<ProgressCheckSensor>()
+                .WithSensor<PromptInjectionSensor>()
                 .WithOtelTracer();
             configure(builder);
         });

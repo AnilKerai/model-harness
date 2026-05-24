@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Skills;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure;
