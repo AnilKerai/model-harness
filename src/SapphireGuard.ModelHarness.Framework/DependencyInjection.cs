@@ -29,6 +29,8 @@ public static class DependencyInjection
             .AddSkillStoreDefault()
             .AddToolSelectorDefault()
             .AddCheckpointStoreDefault()
+            .AddTracerDefault()
+            .AddToolRegistryDefault()
             .AddSystemPromptGuide(systemPrompt)
             .AddHarnessInstructionsGuideDefault()
             .AddTrajectoryGuideDefault()
@@ -37,6 +39,34 @@ public static class DependencyInjection
             .AddToolCatalogueGuideDefault()
             .AddSkillsGuideDefault()
             .AddSensorRunnerDefault();
+
+    public static IServiceCollection AddModelHarness(this IServiceCollection services, Action<ModelHarnessBuilder> configure)
+    {
+        services
+            .AddAgent()
+            .AddHarnessLoop()
+            .AddBudgetEnforcerDefault()
+            .AddGuideRunnerDefault()
+            .AddContextBuilderDefault()
+            .AddMemoryStoreDefault()
+            .AddSkillStoreDefault()
+            .AddToolSelectorDefault()
+            .AddCheckpointStoreDefault()
+            .AddTracerDefault()
+            .AddToolRegistryDefault()
+            .AddHarnessInstructionsGuideDefault()
+            .AddTrajectoryGuideDefault()
+            .AddMemoryGuideDefault()
+            .AddToolSelectorGuideDefault()
+            .AddToolCatalogueGuideDefault()
+            .AddSkillsGuideDefault()
+            .AddSensorRunnerDefault();
+
+        var builder = new ModelHarnessBuilder(services);
+        configure(builder);
+        builder.ApplyTracers();
+        return services;
+    }
 
     // ── Public API ───────────────────────────────────────────────────────────
 
@@ -201,4 +231,16 @@ public static class DependencyInjection
 
     private static IServiceCollection AddSkillsGuideDefault(this IServiceCollection services) =>
         services.AddGuide<SkillsGuide>();
+
+    private static IServiceCollection AddTracerDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<ITracer, NullTracer>();
+        return services;
+    }
+
+    private static IServiceCollection AddToolRegistryDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IToolRegistry, NullToolRegistry>();
+        return services;
+    }
 }

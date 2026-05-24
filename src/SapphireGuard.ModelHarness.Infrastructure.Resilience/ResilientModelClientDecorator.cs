@@ -9,25 +9,30 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 
 [ExcludeFromCodeCoverage]
-public sealed class ResilientModelClientDecorator(IModelClient inner) : IModelClient
+public sealed class ResilientModelClientDecorator(
+    IModelClient inner,
+    ResiliencePipeline<ModelResponse>? pipeline = null) : IModelClient
 {
-    private readonly ResiliencePipeline<ModelResponse> _pipeline = new ResiliencePipelineBuilder<ModelResponse>()
-        .AddRetry(new RetryStrategyOptions<ModelResponse>
-        {
-            MaxRetryAttempts = 3,
-            BackoffType = DelayBackoffType.Exponential,
-            Delay = TimeSpan.FromMilliseconds(200),
-            ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
-        })
-        .AddCircuitBreaker(new CircuitBreakerStrategyOptions<ModelResponse>
-        {
-            FailureRatio = 0.5,
-            SamplingDuration = TimeSpan.FromSeconds(30),
-            MinimumThroughput = 4,
-            BreakDuration = TimeSpan.FromSeconds(15),
-            ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
-        })
-        .Build();
+    private static readonly ResiliencePipeline<ModelResponse> DefaultPipeline =
+        new ResiliencePipelineBuilder<ModelResponse>()
+            .AddRetry(new RetryStrategyOptions<ModelResponse>
+            {
+                MaxRetryAttempts = 3,
+                BackoffType = DelayBackoffType.Exponential,
+                Delay = TimeSpan.FromMilliseconds(200),
+                ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
+            })
+            .AddCircuitBreaker(new CircuitBreakerStrategyOptions<ModelResponse>
+            {
+                FailureRatio = 0.5,
+                SamplingDuration = TimeSpan.FromSeconds(30),
+                MinimumThroughput = 4,
+                BreakDuration = TimeSpan.FromSeconds(15),
+                ShouldHandle = new PredicateBuilder<ModelResponse>().Handle<HttpRequestException>().Handle<TimeoutException>()
+            })
+            .Build();
+
+    private readonly ResiliencePipeline<ModelResponse> _pipeline = pipeline ?? DefaultPipeline;
 
     public Task<ModelResponse> CallAsync(
         IReadOnlyList<Message> messages,

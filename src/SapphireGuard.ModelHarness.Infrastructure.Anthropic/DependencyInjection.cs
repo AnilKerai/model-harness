@@ -12,4 +12,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         ClaudeClientOptions options) =>
         services.AddModelClient(_ => new ClaudeModelClient(options));
+
+    public static ModelHarnessBuilder WithClaudeModel(this ModelHarnessBuilder builder, ClaudeClientOptions options) =>
+        builder.WithModel(_ => new ClaudeModelClient(options));
 }

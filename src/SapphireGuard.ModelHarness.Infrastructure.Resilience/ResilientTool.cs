@@ -8,7 +8,7 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 
 [ExcludeFromCodeCoverage]
-public sealed class ResilientTool(ITool inner) : ITool
+public sealed class ResilientTool(ITool inner, ResiliencePipeline<ToolResult>? pipeline = null) : ITool
 {
     private static readonly ResiliencePipeline<ToolResult> DefaultPipeline =
         new ResiliencePipelineBuilder<ToolResult>()
@@ -33,12 +33,14 @@ public sealed class ResilientTool(ITool inner) : ITool
             })
             .Build();
 
+    private readonly ResiliencePipeline<ToolResult> _pipeline = pipeline ?? DefaultPipeline;
+
     public string Name => inner.Name;
     public string Description => inner.Description;
     public JsonElement InputSchema => inner.InputSchema;
 
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct) =>
-        DefaultPipeline.ExecuteAsync(
+        _pipeline.ExecuteAsync(
             static async (s, token) => await s.Inner.ExecuteAsync(s.Call, s.Context, token),
             (Inner: inner, Call: call, Context: context),
             ct).AsTask();

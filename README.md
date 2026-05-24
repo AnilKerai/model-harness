@@ -105,8 +105,12 @@ public sealed class MyGuide : IGuide
         return Task.CompletedTask;
     }
 }
+```
 
-services.AddGuide<MyGuide>(); // runs after the seven built-in guides
+Register it in the builder:
+
+```csharp
+services.AddModelHarness(builder => builder.WithGuide<MyGuide>());
 ```
 
 Guides run **sequentially** so each one can build on what the previous added —
@@ -170,8 +174,12 @@ public sealed class MySensor : ISensor
         return Task.FromResult(SensorResult.Pass);
     }
 }
+```
 
-services.AddSingleton<ISensor, MySensor>();
+Register it in the builder:
+
+```csharp
+services.AddModelHarness(builder => builder.WithSensor<MySensor>());
 ```
 
 ### How guides and sensors work together
@@ -325,21 +333,38 @@ is reserved for tools or sub-agents that violate budget from underneath the loop
 
 ## Extending the framework
 
+### The three layers
+
+The framework is layered so you can take exactly as much as you need.
+
+**Layer 1 — Framework** (`AddModelHarness`): pure abstractions and no-op defaults.
+The harness runs without any infrastructure packages — tools, sensors, a model, and a
+tracer can all be wired in via the builder callback.
+
+**Layer 2 — Infrastructure packages**: each package adds `With*` extension methods on
+`ModelHarnessBuilder`. Install only the packages you need; each one is independent.
+
+**Layer 3 — Opinionated defaults** (optional): a thin wrapper like `AddStandardModelHarness`
+can pre-wire common choices (e.g. `InMemoryToolRegistry`, `StuckDetector`, and OpenTelemetry
+tracing) so application code only has to supply what differs. This layer isn't shipped by
+the framework — add it in your own app or platform layer when you find yourself repeating
+the same builder calls across projects.
+
 ### Minimal setup
 
-`AddModelHarness` is the entry point. Wire a model client, tool registry, tracer, and at
-least one tool — then resolve `Agent` and run:
+`AddModelHarness` is the single entry point. Pass a configuration callback that receives a
+`ModelHarnessBuilder`, then resolve `Agent` and run:
 
 ```csharp
 var services = new ServiceCollection();
 
-services.AddModelHarness("You are a helpful assistant.");
-services
-    .AddClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })
-    .AddToolRegistry<InMemoryToolRegistry>()
-    .AddTracer(_ => new ConsoleTracer());
-
-services.AddSingleton<ITool, CalculatorTool>();
+services.AddModelHarness(builder => builder
+    .WithSystemPrompt("You are a helpful assistant.")
+    .WithConsoleTracer()
+    .WithOtelTracer()
+    .WithToolRegistry<InMemoryToolRegistry>()
+    .WithTool<CalculatorTool>()
+    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
 
 await using var provider = services.BuildServiceProvider();
 
@@ -363,21 +388,25 @@ public sealed class MyTool : ITool
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext ctx, CancellationToken ct)
         => Task.FromResult(new ToolResult(call.CallId, "result"));
 }
+```
 
-services.AddSingleton<ITool, MyTool>();
+Register it in the builder:
+
+```csharp
+builder.WithTool<MyTool>()
 ```
 
 For tools that call external services (HTTP APIs, databases, A2A sub-agents), add Polly
-retry + circuit-breaking:
+retry + circuit-breaking via the Resilience package:
 
 ```csharp
-services.AddResilientTool<MyApiTool>();
+builder.WithResilientTool<MyApiTool>()
 ```
 
 ### Add a sensor
 
 ```csharp
-services.AddSingleton<ISensor, MySensor>();
+builder.WithSensor<MySensor>()
 ```
 
 `DefaultSensorRunner` picks it up automatically and runs it in parallel with other sensors
@@ -386,15 +415,29 @@ at the same hookpoint. See the sensor pattern section above for how to implement
 ### Add a guide
 
 ```csharp
-services.AddGuide<MyGuide>(); // runs after the seven built-in guides
+builder.WithGuide<MyGuide>() // runs after the seven built-in guides
 ```
 
 See the guide pattern section above for how to implement `IGuide`.
 
+### Tracers
+
+Tracers are additive — call `WithTracer` (or its convenience variants) multiple times and
+they are automatically composed into a `CompositeTracer` at resolution time:
+
+```csharp
+builder
+    .WithConsoleTracer()   // human-readable stdout — handy for local dev
+    .WithOtelTracer()      // OpenTelemetry spans + metrics — handy for production
+```
+
+Implement `ITracer` and register via `WithTracer<T>()` or `WithTracer(factory)` for a
+custom backend.
+
 ### Checkpoint / resume
 
 ```csharp
-services.AddFileCheckpointStore("/var/checkpoints");
+builder.WithFileCheckpointStore("/var/checkpoints")
 ```
 
 The loop saves a checkpoint at the start of each turn. To resume after a crash:
@@ -413,10 +456,10 @@ Implement `ICheckpointStore` to target blob storage, a database, or any other ba
 
 ```csharp
 // Development — blocks on stdin
-services.AddAskHumanTool<ConsoleHumanChannel>();
+builder.WithAskHumanTool<ConsoleHumanChannel>()
 
 // Production — implement IHumanChannel for your delivery mechanism
-services.AddAskHumanTool(_ => new SlackHumanChannel(slackClient, channelId));
+builder.WithAskHumanTool(_ => new SlackHumanChannel(slackClient, channelId))
 ```
 
 When the model calls `ask_human`, the harness routes it through `IHumanChannel.AskAsync`
@@ -425,9 +468,9 @@ and feeds the response back. See the harness concerns section for where this bou
 ### Skills (procedural memory)
 
 ```csharp
-services
-    .AddFileSkillStore("~/.skills")
-    .AddSkillTools();
+builder
+    .WithFileSkillStore("~/.skills")
+    .WithSkillTools()
 ```
 
 `SkillsGuide` already runs by default — it just shows nothing until a store is plugged in.
@@ -436,12 +479,20 @@ See the skills section above for how this works end-to-end.
 ### Swap the model client
 
 ```csharp
-// Anthropic
-services.AddClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-haiku-4-5-20251001" });
+// Anthropic (via Infrastructure.Anthropic)
+builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
+{
+    ApiKey = apiKey,
+    ModelId = "claude-haiku-4-5-20251001"
+}))
 
-// Ollama (local)
-services.AddOllamaModelClient(new OllamaClientOptions { ModelId = "qwen2.5:7b" });
+// Ollama — local inference (via Infrastructure.Ollama)
+builder.WithOllamaModel(new OllamaClientOptions { ModelId = "qwen2.5:7b" })
 ```
+
+For resilience (Polly retry + circuit-breaker), use `WithResilientModel` from the
+Resilience package. Pass a custom `ResiliencePipeline<ModelResponse>` as a second
+argument to override the default policy.
 
 ---
 

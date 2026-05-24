@@ -2,11 +2,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Sensors;
-using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Infrastructure.Ollama;
 using SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
-using SapphireGuard.ModelHarness.Infrastructure.Tracing;
 using SapphireGuard.ModelHarness.Samples.Common;
 
 var config = new ConfigurationBuilder()
@@ -17,20 +16,19 @@ var config = new ConfigurationBuilder()
 
 var services = new ServiceCollection();
 
-services.AddModelHarness(
-    "You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.");
-
-services
-    .AddTracer(_ => new CompositeTracer(new ConsoleTracer(), new OpenTelemetryTracer()))
-    .AddToolRegistry<InMemoryToolRegistry>()
-    .AddSingleton<ITool, EchoTool>()
-    .AddSingleton<ITool, CalculatorTool>()
-    .AddSingleton<ISensor, StuckDetector>()
-    .AddOllamaModelClient(new OllamaClientOptions
+services.AddModelHarness(builder => builder
+    .WithSystemPrompt("You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.")
+    .WithConsoleTracer()
+    .WithOtelTracer()
+    .WithToolRegistry<InMemoryToolRegistry>()
+    .WithTool<EchoTool>()
+    .WithTool<CalculatorTool>()
+    .WithSensor<StuckDetector>()
+    .WithOllamaModel(new OllamaClientOptions
     {
         BaseUrl = config["Ollama:BaseUrl"] ?? "http://localhost:11434",
         ModelId = config["Ollama:ModelId"] ?? "llama3.2"
-    });
+    }));
 
 await using var provider = services.BuildServiceProvider();
 

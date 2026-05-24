@@ -2,13 +2,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Sensors;
-using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Resilience;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
-using SapphireGuard.ModelHarness.Infrastructure.Tracing;
 using SapphireGuard.ModelHarness.Samples.Common;
 
 var config = new ConfigurationBuilder()
@@ -25,26 +24,27 @@ if (!usingRealModel)
 
 var services = new ServiceCollection();
 
-services.AddModelHarness(
-    "You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.");
+services.AddModelHarness(builder =>
+{
+    builder
+        .WithSystemPrompt("You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.")
+        .WithConsoleTracer()
+        .WithOtelTracer()
+        .WithToolRegistry<InMemoryToolRegistry>()
+        .WithTool<EchoTool>()
+        .WithTool<CalculatorTool>()
+        .WithSensor(_ => new CostThrottleSensor(softLimitUsd: 0.0005m))
+        .WithSensor<StuckDetector>();
 
-services
-    .AddTracer(_ => new CompositeTracer(new ConsoleTracer(), new OpenTelemetryTracer()))
-    .AddToolRegistry<InMemoryToolRegistry>()
-    .AddSingleton<ITool, EchoTool>()
-    .AddSingleton<ITool, CalculatorTool>()
-    .AddSingleton<ISensor>(_ => new CostThrottleSensor(softLimitUsd: 0.0005m))
-    .AddSingleton<ISensor, StuckDetector>();
-
-if (usingRealModel)
-    services.AddModelClient(_ => new ResilientModelClientDecorator(
-        new ClaudeModelClient(new ClaudeClientOptions
+    if (usingRealModel)
+        builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
         {
             ApiKey = apiKey!,
             ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5"
-        })));
-else
-    services.AddModelClient(_ => new FakeModelClient());
+        }));
+    else
+        builder.WithModel(_ => new FakeModelClient());
+});
 
 await using var provider = services.BuildServiceProvider();
 

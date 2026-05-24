@@ -12,4 +12,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         OllamaClientOptions options) =>
         services.AddModelClient(_ => new OllamaModelClient(options));
+
+    public static ModelHarnessBuilder WithOllamaModel(this ModelHarnessBuilder builder, OllamaClientOptions options) =>
+        builder.WithModel(_ => new OllamaModelClient(options));
 }

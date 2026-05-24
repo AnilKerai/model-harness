@@ -2,16 +2,16 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.State;
-using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Framework.Tracing;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Persistence;
 using SapphireGuard.ModelHarness.Infrastructure.Resilience;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
-using SapphireGuard.ModelHarness.Infrastructure.Tracing;
 using SapphireGuard.ModelHarness.Samples.Common;
 
 const string SystemPrompt =
@@ -31,24 +31,27 @@ var usingRealModel = !string.IsNullOrWhiteSpace(apiKey);
 if (!usingRealModel)
     Console.WriteLine("WARNING: Anthropic:ApiKey not configured — using FakeModelClient.");
 
-IModelClient BuildModelClient() =>
-    usingRealModel
-        ? new ResilientModelClientDecorator(new ClaudeModelClient(new ClaudeClientOptions
-            { ApiKey = apiKey!, ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5" }))
-        : new FakeModelClient();
-
 // ── First run ─────────────────────────────────────────────────────────────────
 
 var firstServices = new ServiceCollection();
 
-firstServices.AddModelHarness(SystemPrompt);
-firstServices
-    .AddTracer(_ => new CompositeTracer(new ConsoleTracer(), new OpenTelemetryTracer()))
-    .AddToolRegistry<InMemoryToolRegistry>()
-    .AddSingleton<ITool, EchoTool>()
-    .AddSingleton<ITool, CalculatorTool>()
-    .AddFileCheckpointStore(checkpointDir)
-    .AddModelClient(_ => BuildModelClient());
+firstServices.AddModelHarness(builder =>
+{
+    builder
+        .WithSystemPrompt(SystemPrompt)
+        .WithConsoleTracer()
+        .WithOtelTracer()
+        .WithToolRegistry<InMemoryToolRegistry>()
+        .WithTool<EchoTool>()
+        .WithTool<CalculatorTool>()
+        .WithFileCheckpointStore(checkpointDir);
+
+    if (usingRealModel)
+        builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
+            { ApiKey = apiKey!, ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5" }));
+    else
+        builder.WithModel(_ => new FakeModelClient());
+});
 
 await using var firstProvider = firstServices.BuildServiceProvider();
 
@@ -85,12 +88,13 @@ Console.WriteLine("── Resuming from checkpoint ─────────�
 var resumedState = latest.State with { Status = AgentStatus.Running, Budget = firstOutcome.FinalState.Budget };
 
 var resumeServices = new ServiceCollection();
-resumeServices.AddModelHarness(SystemPrompt);
-resumeServices
-    .AddTracer(_ => firstProvider.GetRequiredService<ITracer>())
-    .AddToolRegistry(_ => firstProvider.GetRequiredService<IToolRegistry>())
-    .AddModelClient(_ => firstProvider.GetRequiredService<IModelClient>())
-    .AddFileCheckpointStore(checkpointDir);
+
+resumeServices.AddModelHarness(builder => builder
+    .WithSystemPrompt(SystemPrompt)
+    .WithTracer(_ => firstProvider.GetRequiredService<ITracer>())
+    .WithToolRegistry(_ => firstProvider.GetRequiredService<IToolRegistry>())
+    .WithModel(_ => firstProvider.GetRequiredService<IModelClient>())
+    .WithFileCheckpointStore(checkpointDir));
 
 await using var resumeProvider = resumeServices.BuildServiceProvider();
 

@@ -1,10 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.State;
-using SapphireGuard.ModelHarness.Framework.Tracing;
 using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
-using SapphireGuard.ModelHarness.Infrastructure.Tracing;
 using SapphireGuard.ModelHarness.Samples.Common;
 using SapphireGuard.ModelHarness.Samples.SkillLearning;
 
@@ -39,13 +37,14 @@ finally
 async Task<AgentOutcome> RunOnceAsync()
 {
     var services = new ServiceCollection();
-    services.AddModelHarness(SystemPrompt);
-    services
-        .AddTracer(_ => new ConsoleTracer())
-        .AddToolRegistry<InMemoryToolRegistry>()
-        .AddFileSkillStore(skillDir)
-        .AddSkillTools()
-        .AddModelClient(_ => new SkillScriptedModelClient());
+
+    services.AddModelHarness(builder => builder
+        .WithSystemPrompt(SystemPrompt)
+        .WithConsoleTracer()
+        .WithToolRegistry<InMemoryToolRegistry>()
+        .WithFileSkillStore(skillDir)
+        .WithSkillTools()
+        .WithModel(_ => new SkillScriptedModelClient()));
 
     await using var provider = services.BuildServiceProvider();
     return await provider.GetRequiredService<Agent>().RunAsync(
