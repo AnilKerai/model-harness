@@ -15,6 +15,31 @@ public static class DependencyInjection
     public static ModelHarnessBuilder WithFileSkillStore(this ModelHarnessBuilder builder, string directory) =>
         builder.WithSkillStore(_ => new FileSkillStore(directory));
 
+    public static ModelHarnessBuilder WithAgentSkillStore(this ModelHarnessBuilder builder, string directory)
+    {
+        GetOrAddSkillConfig(builder).AgentDirectory = directory;
+        return builder;
+    }
+
+    public static ModelHarnessBuilder WithUserSkillStore(this ModelHarnessBuilder builder, string directory)
+    {
+        GetOrAddSkillConfig(builder).UserDirectories.Add(directory);
+        return builder;
+    }
+
+    private static SkillStoreConfiguration GetOrAddSkillConfig(ModelHarnessBuilder builder)
+    {
+        var existing = builder.Services
+            .FirstOrDefault(d => d.ServiceType == typeof(SkillStoreConfiguration))
+            ?.ImplementationInstance as SkillStoreConfiguration;
+        if (existing is not null) return existing;
+
+        var config = new SkillStoreConfiguration();
+        builder.Services.AddSingleton(config);
+        builder.WithSkillStore(sp => sp.GetRequiredService<SkillStoreConfiguration>().Build());
+        return config;
+    }
+
     public static ModelHarnessBuilder WithSkillTools(this ModelHarnessBuilder builder)
     {
         builder.Services.AddSingleton<ITool, SkillManageTool>();
