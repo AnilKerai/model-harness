@@ -206,57 +206,74 @@ Model re-plans without that tool
 
 ---
 
-## Skills and learning (getting better over time) - Experimental
+## Budget enforcement
 
-**Skills** are markdown documents (`SKILL.md`) that give an agent instructions for a
-specific domain — the [agentskills.io](https://agentskills.io) format. They are just
-text dropped into the prompt, never executed as code.
+Every run is bounded by a `Budget` — four hard limits checked at the top of each turn
+before any sensor or model call:
 
-**Learning** is the ability for an agent to write its own skills at runtime — capturing
-a procedure it worked out so it can reuse it next time instead of figuring it out again.
-Nothing about the model itself changes; the only thing that changes is what we show it.
+| Limit | What it controls |
+|---|---|
+| `MaxTurns` | Maximum number of loop iterations |
+| `MaxContextTokens` | Estimated token ceiling for the context window |
+| `MaxCostUsd` | Maximum spend in USD (based on the model client's cost tracking) |
+| `MaxWallClock` | Maximum elapsed time from the first turn |
 
-Both reuse the same two patterns: a **guide** surfaces which skills exist, and **tools**
-let the model load and (when learning is enabled) save them. The loop has no knowledge
-of either.
+Budget exhaustion is **not an exception** — it is control flow. When a limit is hit,
+the loop makes one final model call with tools disabled so the model can produce a
+best-effort answer from what it already knows, then returns
+`AgentOutcome { Status = PartialResult }`. This keeps the agent composable — callers
+always get a result, never an unhandled exception from the harness itself.
+
+```csharp
+var outcome = await agent.RunAsync(task, budget: new Budget
+{
+    MaxTurns         = 10,
+    MaxContextTokens = 100_000,
+    MaxCostUsd       = 0.50m,
+    MaxWallClock     = TimeSpan.FromMinutes(2)
+});
+
+if (outcome.Status == AgentStatus.PartialResult)
+    // The agent hit a limit — outcome.FinalAnswer is its best-effort response.
+```
+
+Implement `IBudgetEnforcer` and register via `builder.WithBudgetEnforcer<T>()` to replace
+the default policy — useful for dynamic limits, per-user quotas, or cost allocation.
+
+---
+
+## Learning *(Experimental)*
+
+An agent can accumulate knowledge over time by writing its own **skills** — `SKILL.md`
+documents that capture a procedure it worked out, so it can reuse it next time instead
+of figuring it out again. Nothing about the model itself changes; the only thing that
+changes is what we show it on the next run.
+
+> This is an experimental capability. Agent learning via in-context procedural memory
+> is not yet an established industry pattern — the boundary between "what the harness
+> owns" and "what belongs above it" is still being explored here. Treat it as a proposal
+> rather than a proven approach.
+
+This reuses the two core patterns: a **guide** surfaces which skills exist, and **tools**
+let the model load and save them. The loop has no knowledge of either.
 
 ```mermaid
 flowchart LR
-    SKILLS[(Skills store\npre-authored SKILL.md files)]
-    LEARNING[(Learning store\nagent-saved SKILL.md files)]
-    SKILLS --> SG[SkillsGuide\nrenders catalogue\nname + when-to-use]
-    LEARNING --> SG
+    STORE[(Learning store\nSKILL.md files on disk)]
+    STORE --> SG[SkillsGuide\nrenders catalogue\nname + when-to-use]
     SG --> CTX[Model sees the\nskill catalogue each turn]
     CTX -. calls .-> SV[skill_view\nload full body]
     CTX -. calls .-> SM[skill_manage\nsave / delete]
-    SV --> SKILLS
-    SV --> LEARNING
-    SM --> LEARNING
+    SV --> STORE
+    SM --> STORE
 ```
 
 How it works, in one turn:
 
 1. `SkillsGuide` shows the model a short catalogue — just the name and when-to-use
-   line for each skill (cheap, so it sits in every prompt).
+   line for each saved skill (cheap, so it sits in every prompt).
 2. If the model wants one, it calls `skill_view` to read the full write-up.
-3. When learning is enabled and there's something worth keeping, the model calls
-   `skill_manage` to save it for next time.
-
-```csharp
-// Pre-authored skills the agent can read but not modify.
-builder.WithSkills("~/.skills/builtin")
-
-// Enable learning — the agent saves procedures it works out at runtime.
-builder.WithLearning("~/.skills/learned")
-
-// Both — the agent reads from everywhere and saves only to its own store.
-builder
-    .WithSkills("~/.skills/builtin")
-    .WithLearning("~/.skills/learned")
-```
-
-The right tools (`skill_view`, and `skill_manage` when learning is enabled) are
-registered automatically — there is no separate tool wiring step.
+3. When there's something worth keeping, the model calls `skill_manage` to save it.
 
 Each skill is persisted as a `SKILL.md` file (YAML frontmatter + markdown body),
 so they survive between runs.
@@ -268,15 +285,15 @@ run 2 loads it from disk and reuses it.
 
 The guiding rule: the harness handles **one task** (one "episode"); getting better
 over many tasks is a separate job that lives *on top of* the harness, not inside it.
-Every choice below keeps that learning logic out of the framework.
+Every choice below keeps that logic out of the framework.
 
 | Decision | Why |
 |---|---|
-| **Skills are notes, not code** | A skill is just text we drop into the prompt — not a new function that gets installed into the running agent. Nothing in the loop has to change, and a bad skill can't break anything — it's only text. |
+| **Skills are notes, not code** | A skill is just text dropped into the prompt — not a function that gets installed into the running agent. Nothing in the loop has to change, and a bad skill can't break anything. |
 | **The model decides to save — the harness just facilitates** | Remember *agent = model + harness*: it's the **model** that chooses to call `skill_manage`, and the harness simply dispatches the call and writes the file. The loop never forces a save or decides one is due. If you later want to automate that (e.g. save after a success), that's a layer you add on top — not something baked into the framework. |
-| **On by default, but free until used** | The read side is always wired in, but the default store is empty — so the guide shows nothing and costs nothing until you plug in a real store. The tools and a real store are opt-in, like `AskHumanTool`. |
+| **Free until used** | The catalogue guide is always wired in, but the default store is empty — so it shows nothing and costs nothing until you opt in. |
 | **Show a short list, load on demand** | Every prompt carries only the skill names and when-to-use lines (cheap). The full write-up loads only when the model asks for it, so cost stays low even with lots of skills. |
-| **Its own store, separate from memory** | Skills (named, with a body) are a different shape from memory snippets, so they get their own `ISkillStore` and the two can change independently. |
+| **Its own store, separate from memory** | Skills (named, with a body) are a different shape from memory snippets, so they get their own `ISkillStore` and the two can evolve independently. |
 
 In short: **the harness stores, lists, and hands skills to the model. It never decides
 when to save one, or whether the agent is "improving"** — the model makes that call.
@@ -510,26 +527,45 @@ builder.WithAskHumanTool(_ => new SlackHumanChannel(slackClient, channelId))
 When the model calls `ask_human`, the harness routes it through `IHumanChannel.AskAsync`
 and feeds the response back. See the harness concerns section for where this boundary sits.
 
-### Skills and learning
+### Budget enforcement
 
 ```csharp
-// Pre-authored skills only
+builder.WithBudgetEnforcer<MyBudgetEnforcer>()
+```
+
+Implement `IBudgetEnforcer` to replace the default policy with dynamic limits — per-user
+quotas, cost allocation, or anything driven by runtime state. See the
+[Budget enforcement](#budget-enforcement) section above for how exhaustion works.
+
+### Skills
+
+Give an agent pre-authored `SKILL.md` instructions it can read but not modify — useful
+for domain knowledge, standard operating procedures, or any fixed guidance you want
+available across runs. Uses the [agentskills.io](https://agentskills.io) format.
+
+```csharp
 builder.WithSkills("~/.skills/builtin")
+```
 
-// Learning only
+`SkillsGuide` surfaces the catalogue automatically; `skill_view` lets the model load
+the full body on demand. No separate tool wiring needed.
+
+### Learning
+
+Enable the agent to accumulate its own skills over time. See the
+[Learning](#learning-experimental) section for the full explanation.
+
+```csharp
 builder.WithLearning("~/.skills/learned")
+```
 
-// Both
+Chain both together to give the agent pre-authored skills *and* the ability to learn:
+
+```csharp
 builder
     .WithSkills("~/.skills/builtin")
     .WithLearning("~/.skills/learned")
 ```
-
-The right tools (`skill_view`, and `skill_manage` when learning is enabled) are
-registered automatically. `SkillsGuide` already runs by default and shows nothing
-until a store is plugged in.
-
-See the skills and learning section above for how this works end-to-end.
 
 ### Swap the model client
 
@@ -598,21 +634,21 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Term | Definition |
 |---|---|
 | **Agent** | An Agent = Model + Harness. A loop-driven process that takes a natural-language task, uses tools and a model to produce a result, and records every step it takes. |
-| **Harness** | The scaffolding that wraps a model: loop, guides, sensors, and budget. The harness is a model control concern — it does not own application or system design decisions. |
-| **Turn** | One iteration of the loop: build context → call model → act on response. Each turn appends one or more `Step`s to the trajectory. |
-| **Episode** | One full run of the agent on a single task — from the first turn to the final `AgentOutcome`. An episode is usually several turns. "Across episodes" means across many separate runs (e.g. reusing a skill saved in an earlier run). |
-| **Trajectory** | The append-only, ordered list of `Step`s on `AgentState`. It is the durable log of everything the agent has done and seen. Three step types: `ModelCallStep` (a model call and its response), `ToolCallStep` (a tool invocation and its result), `SensorInterventionStep` (a sensor concern and its reason). |
-| **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn — the trajectory is the log of those transitions. |
 | **AgentOutcome** | The terminal result of a run: final answer, status (`Done`, `PartialResult`, `Failed`), and the last `AgentState`. |
+| **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn — the trajectory is the log of those transitions. |
 | **Budget** | Hard limits on a run: `MaxTurns`, `MaxContextTokens`, `MaxCostUsd`, `MaxWallClock`. Checked at the top of every turn before any sensor or model call. |
+| **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
+| **Episode** | One full run of the agent on a single task — from the first turn to the final `AgentOutcome`. An episode is usually several turns. "Across episodes" means across many separate runs (e.g. reusing a skill saved in an earlier run). |
 | **Guide** | Shapes what the model perceives. Guides run sequentially before each model call, each contributing to a shared context draft — system prompt, trajectory, memory snippets, available tools. |
-| **Sensor** | Observes the loop at declared hookpoints and can raise a concern. Sensors run in parallel; the loop's response to a concern depends on the hookpoint (see the hookpoint table). |
+| **Harness** | The scaffolding that wraps a model: loop, guides, sensors, and budget. The harness is a model control concern — it does not own application or system design decisions. |
 | **HookPoint** | A lifecycle position where sensors fire: `PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`. |
-| **Tool** | Something the model can invoke by name. The harness dispatches the call; the model decides when and why to use it. |
-| **Skill** | A `SKILL.md` document — YAML frontmatter plus a markdown body — that gives an agent instructions for a specific domain. The [agentskills.io](https://agentskills.io) format. Surfaced into the prompt by `SkillsGuide`; loaded on demand via `skill_view`. Never executed as code. Configure with `WithSkills(dir)`. |
 | **Learning** | The ability for an agent to write its own skills at runtime, capturing procedures it works out so they can be reused across episodes. Implemented via the same `SKILL.md` format. The model decides when to save via `skill_manage`; the harness just persists the file. Enable with `WithLearning(dir)`. |
 | **Model client** | The transport seam (`IModelClient`). Receives a message list and tool definitions; returns a response. Knows nothing about state, the loop, or tool implementations. |
-| **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
+| **Sensor** | Observes the loop at declared hookpoints and can raise a concern. Sensors run in parallel; the loop's response to a concern depends on the hookpoint (see the hookpoint table). |
+| **Skill** | A `SKILL.md` document — YAML frontmatter plus a markdown body — that gives an agent instructions for a specific domain. The [agentskills.io](https://agentskills.io) format. Surfaced into the prompt by `SkillsGuide`; loaded on demand via `skill_view`. Never executed as code. Configure with `WithSkills(dir)`. |
+| **Tool** | Something the model can invoke by name. The harness dispatches the call; the model decides when and why to use it. |
+| **Trajectory** | The append-only, ordered list of `Step`s on `AgentState`. It is the durable log of everything the agent has done and seen. Three step types: `ModelCallStep` (a model call and its response), `ToolCallStep` (a tool invocation and its result), `SensorInterventionStep` (a sensor concern and its reason). |
+| **Turn** | One iteration of the loop: build context → call model → act on response. Each turn appends one or more `Step`s to the trajectory. |
 
 ---
 
