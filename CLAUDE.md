@@ -44,12 +44,12 @@ Guides run **sequentially** before each model call, each contributing to a share
 ### Sensor pattern
 Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Intervene(reason)` appends a `SensorInterventionStep` to the trajectory, which `TrajectoryGuide` renders as a `[HARNESS OBSERVATION — ...]` system note on the next turn. `HarnessInstructionsGuide` primes the model in the system prompt to treat these notes as directives — feedforward and feedback working together.
 
-Sensors may block actions but must never take turns away from the model — the model always gets the next call so it can self-correct. The loop decides what "intervening" means per hookpoint:
-- **PreModelCall**: injects the intervention note into the trajectory, then proceeds with the model call on the same turn; use for conditional pre-reasoning guidance (e.g. goal-drift warnings, error-streak alerts)
-- **PostModelCall**: loops back; blocked response text is **suppressed from trajectory** so the model cannot re-see flagged content (e.g. PII) on the retry turn
-- **PreReturn**: loops back; model retries with its prior answer visible so it can correct it
-- **PreToolCall**: tool is never dispatched; a `ToolCallStep` with `IsError = true` is recorded as the outcome; loop continues and model sees the error
-- **PostToolCall**: **advisory only** — the tool has already run and its result is in the trajectory; intervention annotates the result but cannot prevent the model from reasoning on it
+Sensors may block actions but must never take turns away from the model — the model always gets the next call so it can self-correct. The loop decides what each intervention means per hookpoint:
+- **PreModelCall**: **annotates** — injects the note into the trajectory then proceeds with the model call on the same turn; use for conditional pre-reasoning guidance (e.g. goal-drift warnings, error-streak alerts)
+- **PostModelCall**: **rejects** — response is suppressed from trajectory so the model cannot re-see flagged content (e.g. PII); model gets a fresh turn to produce a clean response
+- **PreReturn**: **challenges** — answer is not accepted; model gets a fresh turn with its prior answer visible so it can self-correct
+- **PreToolCall**: **blocks** — tool is never dispatched; a `ToolCallStep` with `IsError = true` is recorded so the model sees a clean error and can replan
+- **PostToolCall**: **flags** — advisory only; the tool has already run and its result is in the trajectory; intervention annotates it but cannot prevent the model from reasoning on it
 
 ### State
 `AgentState` is an immutable record. Every turn produces a new state via `with`-expressions. The trajectory (`IReadOnlyList<Step>`) is the append-only log of `ModelCallStep`, `ToolCallStep`, and `SensorInterventionStep`.

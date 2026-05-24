@@ -117,6 +117,8 @@ Guides run **sequentially** so each one can build on what the previous added —
 a tool-selector guide can, for example, inspect memory snippets before deciding
 which tools to expose.
 
+`TrajectoryGuide` implements the [Focused ReAct](https://arxiv.org/abs/2501.02955) pattern: it re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
+
 ### The Sensor pattern — observing and intervening
 
 A **Sensor** observes the loop at declared hookpoints and can raise a concern
@@ -142,15 +144,17 @@ The five hookpoints, their typical use, and what the loop does when a sensor int
 
 | HookPoint | Fires | Typical use | On intervention |
 |---|---|---|---|
-| `PreModelCall` | Before building context and calling the model | Goal-drift warnings, error-streak alerts, conditional pre-reasoning guidance | **Injects a note and proceeds** — the intervention is appended to the trajectory and the model call happens on the same turn so the model can act on the note immediately. Unlike other hookpoints this does not loop back or block; it is a conditional guide. Rate limiting and hard cost limits belong in `IBudgetEnforcer` / `IRateLimiter`, not here. |
-| `PostModelCall` | After the model responds, before acting on it | PII detection, output filtering | **Loops back** — the model gets another turn. Crucially, the flagged response text is **suppressed from the next context**: `TrajectoryGuide` omits it so the model cannot re-see flagged content. The intervention note still appears so the model knows why it was flagged. |
-| `PreToolCall` | Before each tool is dispatched | Policy enforcement, authorisation | **Tool is never dispatched** — a `ToolCallStep` with `IsError = true` is recorded so the model sees a clean error result and can replan. |
-| `PostToolCall` | After each tool result is received | Result validation, audit logging | **Advisory only** — the tool has already run and its result is already in the trajectory. The intervention is recorded as a system note; the model can still reason on the result. Use `PreToolCall` if you need to prevent execution. |
-| `PreReturn` | Before returning a final answer to the caller | Answer quality checks | **Loops back** — the model retries. Unlike PostModelCall, the prior answer *is* visible in context so the model can see what it said and correct it. |
+| `PreModelCall` | Before building context and calling the model | Goal-drift warnings, error-streak alerts, conditional pre-reasoning guidance | **Annotates** — the note is appended to the trajectory and the model call proceeds on the same turn so the model can act on it immediately. Rate limiting and hard cost limits belong in `IBudgetEnforcer` / `IRateLimiter`, not here. |
+| `PostModelCall` | After the model responds, before acting on it | PII detection, output filtering | **Rejects** — the response is suppressed from the trajectory so the model cannot re-see flagged content; the model gets a fresh turn to produce a clean response. |
+| `PreToolCall` | Before each tool is dispatched | Policy enforcement, authorisation | **Blocks** — the tool is never dispatched; a `ToolCallStep` with `IsError = true` is recorded so the model sees a clean error and can replan. |
+| `PostToolCall` | After each tool result is received | Result validation, audit logging | **Flags** — advisory only; the tool has already run and its result is in the trajectory. The intervention is recorded as a system note; the model can still reason on the result. Use `PreToolCall` if you need to prevent execution. |
+| `PreReturn` | Before returning a final answer to the caller | Answer quality checks | **Challenges** — the answer is not accepted; the model gets a fresh turn with its prior response visible so it can see what it said and self-correct. |
 
 Sensors may block actions but must never take turns away from the model — the model
-always gets the next call so it can self-correct. An intervention wraps the sensor's
-reason in a `SensorInterventionStep` and appends it to the trajectory. On the next turn
+always gets the next call so it can self-correct. Each hookpoint has a precise verb:
+annotate (`PreModelCall`), reject (`PostModelCall`), block (`PreToolCall`), flag
+(`PostToolCall`), challenge (`PreReturn`). An intervention wraps the sensor's reason
+in a `SensorInterventionStep` and appends it to the trajectory. On the next turn
 (or the same turn for `PreModelCall`), `TrajectoryGuide` renders it as a system-role note
 prefixed `[HARNESS OBSERVATION — ...]`. `HarnessInstructionsGuide` tells the model upfront
 (in the system prompt) what these notes mean and that they must be treated as directives —

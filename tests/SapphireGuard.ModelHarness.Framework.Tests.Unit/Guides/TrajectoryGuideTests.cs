@@ -81,9 +81,8 @@ public sealed class TrajectoryGuideTests
         var state = EmptyState().AppendStep(InterventionStep(HookPoint.PreReturn, "quality check failed"));
         var draft = await ContributeAsync(state);
 
-        var msg = Assert.Single(draft.TrajectoryMessages);
-        Assert.Equal(MessageRole.Assistant, msg.Role);
-        Assert.Contains("quality check failed", msg.Content);
+        var intervention = draft.TrajectoryMessages.Single(m => m.Role == MessageRole.Assistant);
+        Assert.Contains("quality check failed", intervention.Content);
     }
 
     // ── PostModelCall blocking — the core correctness case ────────────────────

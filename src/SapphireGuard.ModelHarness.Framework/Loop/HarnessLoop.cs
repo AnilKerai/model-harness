@@ -13,7 +13,7 @@ namespace SapphireGuard.ModelHarness.Framework.Loop;
 /// <summary>
 /// The core agent loop. Drives turn-by-turn execution: build context, call
 /// model, evaluate sensors, dispatch tools, repeat. Implements the layered
-/// recovery model — sensor blocks become <see cref="SensorInterventionStep"/>s
+/// recovery model — sensor interventions become <see cref="SensorInterventionStep"/>s
 /// rather than terminating, and budget exhaustion triggers a single
 /// finalisation turn returning <see cref="AgentStatus.PartialResult"/>.
 /// </summary>
@@ -32,6 +32,8 @@ public sealed class HarnessLoop(
         var startedAt = DateTimeOffset.UtcNow;
         var runId = Guid.NewGuid().ToString("n");
         var turn = 0;
+        var consecutiveInterventions = 0;
+        const int maxConsecutiveInterventions = 3;
         tracer.StartTrace(state.TaskId, state.TaskText);
 
         try
@@ -55,22 +57,36 @@ public sealed class HarnessLoop(
                     return await FinaliseOnBudgetAsync(state, budgetCheck.Reason!, ct);
                 }
 
-                // PreModelCall sensors inject guidance notes into the trajectory;
-                // the model call proceeds regardless so the model can act on them.
-                bool blocked;
+                // PreModelCall sensors annotate the trajectory; the model call proceeds
+                // regardless so the model can act on the note immediately.
                 (state, _) = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
 
                 var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct);
                 state = newState;
 
-                (state, blocked) = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct);
-                if (blocked) continue;
+                var (postModelState, rejected) = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct);
+                state = postModelState;
+                if (rejected)
+                {
+                    if (++consecutiveInterventions >= maxConsecutiveInterventions)
+                        return await FinaliseOnBudgetAsync(state,
+                            $"Sensor intervention limit ({maxConsecutiveInterventions}) reached — the model repeatedly produced a response that was rejected.", ct);
+                    continue;
+                }
 
                 if (response.ToolCalls.Count == 0)
                 {
-                    (state, blocked) = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct);
-                    if (blocked) continue;
+                    var (preReturnState, challenged) = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct);
+                    state = preReturnState;
+                    if (challenged)
+                    {
+                        if (++consecutiveInterventions >= maxConsecutiveInterventions)
+                            return await FinaliseOnBudgetAsync(state,
+                                $"Sensor intervention limit ({maxConsecutiveInterventions}) reached — the model repeatedly returned an answer that was challenged.", ct);
+                        continue;
+                    }
 
+                    consecutiveInterventions = 0;
                     var done = state with { Status = AgentStatus.Done };
                     tracer.Complete(done.TaskId, AgentStatus.Done, failureReason: null);
                     return new AgentOutcome
@@ -82,6 +98,7 @@ public sealed class HarnessLoop(
                     };
                 }
 
+                consecutiveInterventions = 0;
                 foreach (var call in response.ToolCalls)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -127,17 +144,17 @@ public sealed class HarnessLoop(
         }
     }
 
-    private async Task<(AgentState State, bool Blocked)> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
+    private async Task<(AgentState State, bool Intervened)> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
     {
         var results = await sensorRunner.RunAsync(hookPoint, state, triggeringStep, ct);
         var next = state;
-        var blocked = false;
+        var intervened = false;
         foreach (var (sensor, result) in results)
         {
             tracer.LogSensorResult(state.TaskId, hookPoint, sensor.Name, result);
             if (result.IsIntervene)
             {
-                blocked = true;
+                intervened = true;
                 next = next.AppendStep(new SensorInterventionStep(
                     Id: Guid.NewGuid(),
                     Timestamp: DateTimeOffset.UtcNow,
@@ -147,7 +164,7 @@ public sealed class HarnessLoop(
                     TriggeringStep: triggeringStep));
             }
         }
-        return (next, blocked);
+        return (next, intervened);
     }
 
     private async Task<(AgentState State, ModelResponse Response)> CallModelAsync(AgentState state, bool forceFinalise, CancellationToken ct)
@@ -187,23 +204,30 @@ public sealed class HarnessLoop(
             Call: call,
             Result: new ToolResult(call.CallId, "(pending)"));
 
-        var (afterPre, preBlocked) = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct);
-        if (preBlocked)
+        var (afterPre, toolBlocked) = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct);
+        if (toolBlocked)
         {
             var lastIntervention = afterPre.Trajectory.OfType<SensorInterventionStep>().Last();
-            var blockedResult = new ToolResult(call.CallId,
-                $"Blocked by sensor '{lastIntervention.SensorName}': {lastIntervention.Reason}",
-                IsError: true);
             return afterPre.AppendStep(new ToolCallStep(
                 Id: Guid.NewGuid(),
                 Timestamp: DateTimeOffset.UtcNow,
                 Call: call,
-                Result: blockedResult));
+                Result: new ToolResult(call.CallId,
+                    $"Blocked by sensor '{lastIntervention.SensorName}': {lastIntervention.Reason}",
+                    IsError: true)));
         }
 
         var sw = Stopwatch.StartNew();
         var ctx = ToolContext.Empty(state.TaskId, call.CallId);
-        var result = await toolRegistry.DispatchAsync(call, ctx, ct);
+        ToolResult result;
+        try
+        {
+            result = await toolRegistry.DispatchAsync(call, ctx, ct);
+        }
+        catch (Exception ex)
+        {
+            result = new ToolResult(call.CallId, $"Tool threw {ex.GetType().Name}: {ex.Message}", IsError: true);
+        }
         sw.Stop();
         tracer.LogToolCall(state.TaskId, call, result, sw.Elapsed);
 

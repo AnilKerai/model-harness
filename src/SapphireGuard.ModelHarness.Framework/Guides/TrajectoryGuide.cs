@@ -28,6 +28,9 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
             stepGroups = stepGroups[trimCount..];
         }
 
+        draft.TrajectoryMessages.Add(new Message(MessageRole.System,
+            $"[ORIGINAL GOAL] {state.TaskText}"));
+
         foreach (var (_, messages) in stepGroups)
             draft.TrajectoryMessages.AddRange(messages);
 
