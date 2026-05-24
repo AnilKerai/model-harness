@@ -7,8 +7,8 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// Renders the agent's trajectory into <see cref="ContextDraft.TrajectoryMessages"/>,
 /// trimming the oldest steps when the estimated token count approaches the context limit.
 /// Each step type has a distinct rendering: model turns as assistant messages,
-/// tool calls and results as paired messages, sensor interventions as system
-/// notes so the model can re-plan without them polluting tool-call history.
+/// tool calls and results as paired messages, sensor interventions as assistant
+/// acknowledgements so the model continues from a committed correction posture.
 /// </summary>
 public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
 {
@@ -62,8 +62,8 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
                     break;
 
                 case SensorInterventionStep si:
-                    messages.Add(new Message(MessageRole.System,
-                        $"[HARNESS OBSERVATION — {si.SensorName} at {si.HookPoint}] {si.Reason} — adjust your next action and do not repeat flagged behaviour."));
+                    messages.Add(new Message(MessageRole.Assistant,
+                        $"[HARNESS OBSERVATION — {si.SensorName} at {si.HookPoint}] My previous response was blocked: {si.Reason} I will comply fully and not repeat this behaviour."));
                     break;
             }
 
