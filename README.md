@@ -244,7 +244,7 @@ the default policy — useful for dynamic limits, per-user quotas, or cost alloc
 
 ## Learning *(Experimental)*
 
-An agent can accumulate knowledge over time by writing its own **skills** — `SKILL.md`
+An agent can accumulate knowledge over time by writing its own **skills** — markdown
 documents that capture a procedure it worked out, so it can reuse it next time instead
 of figuring it out again. Nothing about the model itself changes; the only thing that
 changes is what we show it on the next run.
