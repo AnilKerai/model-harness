@@ -507,7 +507,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 
 ---
 
-## References
+## Links
 
 - [ROADMAP.md](ROADMAP.md) — what's done and what's still to implement
 - [FAQ.md](FAQ.md) — design decision FAQs
