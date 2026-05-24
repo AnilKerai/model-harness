@@ -18,11 +18,19 @@ AgentConsoleWriter.PrintHeader(
     "skill-learning",
     "Run 1 captures a skill; run 2 loads it from disk via SkillsGuide and reuses it. Fully scripted — no API key.");
 
+Console.WriteLine($"Skill directory: {skillDir}");
+
 try
 {
     Console.WriteLine();
     Console.WriteLine("── Run 1: no skills yet — the agent solves the task and captures a skill ──");
     AgentConsoleWriter.PrintOutcome(await RunOnceAsync());
+
+    Console.WriteLine();
+    Console.WriteLine("── Persisted skill file ──");
+    var skillFile = Path.Combine(skillDir, "warm-greeting.md");
+    if (File.Exists(skillFile))
+        Console.WriteLine(await File.ReadAllTextAsync(skillFile));
 
     Console.WriteLine();
     Console.WriteLine("── Run 2: SkillsGuide surfaces the persisted skill — the agent loads and reuses it ──");
