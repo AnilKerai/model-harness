@@ -29,9 +29,10 @@ Add an API key first (per-sample; samples fall back to `FakeModelClient` when ab
 | `Infrastructure.Mcp` | MCP adapter (`McpTool`, `McpToolFactory`). Depends on Framework + ModelContextProtocol |
 | `Infrastructure.Persistence` | Checkpoint/resume (`FileCheckpointStore`, `StepJsonConverter`). Depends on Framework only |
 | `Infrastructure.Ollama` | Ollama adapter (`OllamaModelClient`) via OllamaSharp v5. Depends on Framework only |
+| `Infrastructure.AzureOpenAI` | Azure AI Foundry / Azure OpenAI Service adapter (`AzureOpenAIModelClient`) via `Azure.AI.OpenAI` v2. Supports API key and `DefaultAzureCredential`. Depends on Framework only |
 | `samples/*` | One console project per scenario — composition roots showing how to wire everything via DI |
 
-Dependency direction is strict and unidirectional: samples/* → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp / Infrastructure.Ollama / Infrastructure.Resilience → Framework.
+Dependency direction is strict and unidirectional: samples/* → Infrastructure / Infrastructure.Anthropic / Infrastructure.Mcp / Infrastructure.Ollama / Infrastructure.AzureOpenAI / Infrastructure.Resilience → Framework.
 
 ## Core patterns
 
@@ -101,4 +102,4 @@ Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelCl
 
 ## Roadmap status
 
-See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, `AskHumanTool` + `IHumanNotifier` (async HITL suspend/resume), Anthropic adapter, MCP adapter, Ollama adapter, DI composition, context management (memory + tool selection), skills / procedural memory (`ISkillStore` + `SkillsGuide` + skill tools, `ToolCatalogueGuide`), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: additional model providers (OpenAI etc.). Deliberately out of scope (cross-episode concerns that live above the harness): outcome/success evaluation, skill auto-harvest, and the learning/training loop — see `ROADMAP.md`.
+See `ROADMAP.md` for the full list. Done: core loop, guide pattern (with compaction), sensor pattern (with production sensors), tools, `AskHumanTool` + `IHumanNotifier` (async HITL suspend/resume), Anthropic adapter, MCP adapter, Ollama adapter, DI composition, context management (memory + tool selection), skills / procedural memory (`ISkillStore` + `SkillsGuide` + skill tools, `ToolCatalogueGuide`), unit tests, OpenTelemetry tracing + metrics via `CompositeTracer`, checkpoint/resume via `Infrastructure.Persistence`. Still to do: additional model providers (OpenAI, Google Gemini). Deliberately out of scope (cross-episode concerns that live above the harness): outcome/success evaluation, skill auto-harvest, and the learning/training loop — see `ROADMAP.md`.

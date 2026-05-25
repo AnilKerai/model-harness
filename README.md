@@ -25,8 +25,9 @@ always a product decision, not a model decision.
 
 ---
 
-The samples under `samples/` wire up `ClaudeModelClient` against the Anthropic API
-and `OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
+The samples under `samples/` wire up `ClaudeModelClient` against the Anthropic API,
+`AzureOpenAIModelClient` against Azure AI Foundry / Azure OpenAI Service, and
+`OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
 provided for local development with no external dependencies.
 
 ## Run it
@@ -39,6 +40,20 @@ key to the `appsettings.local.json` of the sample you want to run, e.g.
 {
   "Anthropic": {
     "ApiKey": "sk-ant-..."
+  }
+}
+```
+
+To run the Azure AI Foundry scenario, add your endpoint and deployment name to
+`samples/AzureOpenAI/appsettings.local.json`. Omit `ApiKey` to use
+`DefaultAzureCredential` (managed identity):
+
+```json
+{
+  "AzureOpenAI": {
+    "Endpoint": "https://your-resource.openai.azure.com",
+    "DeploymentName": "gpt-4o",
+    "ApiKey": "optional — omit to use DefaultAzureCredential"
   }
 }
 ```
@@ -57,6 +72,7 @@ Then run any sample by its project path:
 
 ```bash
 dotnet run --project samples/HappyPath
+dotnet run --project samples/AzureOpenAI
 dotnet run --project samples/OllamaToolCall
 ```
 
@@ -734,6 +750,15 @@ builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
 
 // Ollama — local inference (via Infrastructure.Ollama)
 builder.WithOllamaModel(new OllamaClientOptions { ModelId = "qwen2.5:7b" })
+
+// Azure AI Foundry / Azure OpenAI Service (via Infrastructure.AzureOpenAI)
+// ApiKey = null uses DefaultAzureCredential (managed identity) — recommended for production
+builder.WithResilientModel(_ => new AzureOpenAIModelClient(new AzureOpenAIClientOptions
+{
+    Endpoint = new Uri("https://your-resource.openai.azure.com"),
+    DeploymentName = "gpt-4o",
+    ApiKey = null
+}))
 ```
 
 For resilience (Polly retry + circuit-breaker), use `WithResilientModel` from the

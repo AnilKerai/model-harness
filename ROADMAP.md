@@ -49,7 +49,8 @@ where the implementation would live.
 - [x] `CompositeTracer` — fans out to multiple `ITracer` instances simultaneously
 - [x] `ClaudeModelClient` — Anthropic SDK adapter; handles message alternation, tool result inlining, cost tracking
 - [x] `OllamaModelClient` — OllamaSharp v5 adapter; stateful tool-call grouping pass; cost is always zero (local inference)
-- [ ] Additional model provider adapters — OpenAI, Azure OpenAI, Google Gemini
+- [x] `AzureOpenAIModelClient` — Azure AI Foundry / Azure OpenAI Service adapter (`Infrastructure.AzureOpenAI`); supports API key and `DefaultAzureCredential` (managed identity); `WithAzureOpenAIModel` DI extension; `samples/AzureOpenAI` demo
+- [ ] Additional model provider adapters — OpenAI, Google Gemini
 
 ### DI / composition
 - [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
