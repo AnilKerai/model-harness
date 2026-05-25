@@ -17,7 +17,6 @@ var services = new ServiceCollection();
 
 services.AddModelHarness(builder => builder
     .WithSystemPrompt("You are a helpful assistant. Ask the human for their preferred currency before answering.")
-    .WithConsoleTracer()
     .WithToolRegistry<InMemoryToolRegistry>()
     .WithAskHumanTool<ConsoleHumanChannel>()
     .WithModel(_ => new HitlFakeClient()));
@@ -95,7 +94,8 @@ sealed class HitlFakeClient : IModelClient
 
     private static ModelResponse AnswerWithHumanInputTurn(IReadOnlyList<Message> messages)
     {
-        var humanAnswer = messages.LastOrDefault(m => m.Role == MessageRole.Tool)?.Content ?? "(no answer)";
+        var raw = messages.LastOrDefault(m => m.Role == MessageRole.Tool)?.Content ?? "(no answer)";
+        var humanAnswer = ExtractToolContent(raw);
         return new ModelResponse
         {
             Text = $"The operator's preferred currency is: {humanAnswer}. I'll use that for all amounts.",
@@ -104,5 +104,13 @@ sealed class HitlFakeClient : IModelClient
             Usage = Usage.Zero,
             Cost = 0m
         };
+    }
+
+    // Tool result messages are rendered as "[tool_result id=... error=False] <content>".
+    // Strip the prefix so the fake can work with the raw answer text.
+    private static string ExtractToolContent(string raw)
+    {
+        var idx = raw.LastIndexOf(']');
+        return idx >= 0 ? raw[(idx + 1)..].Trim() : raw.Trim();
     }
 }
