@@ -87,11 +87,11 @@ public sealed class ProgressCheckSensorTests
     public async Task Check_OnlyCountsModelCallSteps()
     {
         // Non-ModelCallStep entries in the trajectory should not affect the count.
-        var toolStep = new Framework.State.ToolCallStep(
+        var toolStep = new ToolCallStep(
             Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new Framework.Tools.ToolCall(Guid.NewGuid().ToString("n"), "search",
+            new Tools.ToolCall(Guid.NewGuid().ToString("n"), "search",
                 System.Text.Json.JsonDocument.Parse("{}").RootElement),
-            new Framework.Tools.ToolResult("id", "result"));
+            new Tools.ToolResult("id", "result"));
 
         var state = WithTurns(4).AppendStep(toolStep);
 

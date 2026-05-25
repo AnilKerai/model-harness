@@ -355,7 +355,7 @@ public sealed class HarnessLoopTests
 
 // ── Extra test double ─────────────────────────────────────────────────────────
 
-file sealed class ThrowingModelClient(string message) : SapphireGuard.ModelHarness.Framework.Model.IModelClient
+file sealed class ThrowingModelClient(string message) : Model.IModelClient
 {
     public Task<ModelResponse> CallAsync(
         IReadOnlyList<Message> messages,

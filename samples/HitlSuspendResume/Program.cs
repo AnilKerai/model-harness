@@ -23,7 +23,7 @@ services.AddStandardModelHarness(builder => builder
 await using var provider = services.BuildServiceProvider();
 
 var agent = provider.GetRequiredService<Agent>();
-var budget = new SapphireGuard.ModelHarness.Framework.State.Budget
+var budget = new Budget
 {
     MaxTurns = 5,
     MaxContextTokens = 100_000,

@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using SapphireGuard.ModelHarness.Framework.State;
-using AgentBudget = global::SapphireGuard.ModelHarness.Framework.State.Budget;
+using AgentBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
 
 namespace SapphireGuard.ModelHarness.Framework;
 
