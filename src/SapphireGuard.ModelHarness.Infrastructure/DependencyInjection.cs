@@ -38,25 +38,25 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Registers <c>ask_human</c> backed by <typeparamref name="TChannel"/> as the delivery channel.
-    /// Use this for development with <c>ConsoleHumanChannel</c> or to inject a channel registered elsewhere in DI.
+    /// Registers <c>ask_human</c> backed by <typeparamref name="TNotifier"/> as the human-input notifier.
+    /// Use this for development with <c>ConsoleHumanChannel</c> or to inject a notifier registered elsewhere in DI.
     /// </summary>
-    public static ModelHarnessBuilder WithAskHumanTool<TChannel>(this ModelHarnessBuilder builder)
-        where TChannel : class, IHumanChannel
+    public static ModelHarnessBuilder WithAskHumanTool<TNotifier>(this ModelHarnessBuilder builder)
+        where TNotifier : class, IHumanNotifier
     {
-        builder.Services.AddSingleton<IHumanChannel, TChannel>();
+        builder.Services.AddSingleton<IHumanNotifier, TNotifier>();
         builder.Services.AddSingleton<ITool, AskHumanTool>();
         return builder;
     }
 
     /// <summary>
-    /// Registers <c>ask_human</c> backed by the <see cref="IHumanChannel"/> returned by
+    /// Registers <c>ask_human</c> backed by the <see cref="IHumanNotifier"/> returned by
     /// <paramref name="factory"/>. Use this when the channel requires runtime configuration
     /// (e.g. a Slack client with a specific channel ID).
     /// </summary>
     public static ModelHarnessBuilder WithAskHumanTool(
         this ModelHarnessBuilder builder,
-        Func<IServiceProvider, IHumanChannel> factory)
+        Func<IServiceProvider, IHumanNotifier> factory)
     {
         builder.Services.AddSingleton(factory);
         builder.Services.AddSingleton<ITool, AskHumanTool>();

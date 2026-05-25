@@ -114,6 +114,29 @@ public sealed class HarnessLoop(
                 {
                     ct.ThrowIfCancellationRequested();
                     state = await ExecuteToolAsync(state, call, ct);
+
+                    var lastTool = state.Trajectory.OfType<ToolCallStep>().LastOrDefault();
+                    if (lastTool?.Result.IsPending == true)
+                    {
+                        await checkpointStore.SaveAsync(new Checkpoint
+                        {
+                            CheckpointId = Guid.NewGuid().ToString("n"),
+                            RunId = runId,
+                            CreatedAt = DateTimeOffset.UtcNow,
+                            TurnNumber = turn,
+                            State = state
+                        }, ct);
+                        var suspended = state with { Status = AgentStatus.AwaitingHuman };
+                        tracer.Complete(suspended.TaskId, AgentStatus.AwaitingHuman, failureReason: null);
+                        return new AgentOutcome
+                        {
+                            TaskId = suspended.TaskId,
+                            Status = AgentStatus.AwaitingHuman,
+                            FinalAnswer = null,
+                            FinalState = suspended,
+                            PendingHumanInput = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content)
+                        };
+                    }
                 }
             }
         }

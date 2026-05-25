@@ -5,7 +5,7 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 
 [ExcludeFromCodeCoverage]
-public sealed class AskHumanTool(IHumanChannel channel) : ITool
+public sealed class AskHumanTool(IHumanNotifier notifier) : ITool
 {
     private static readonly JsonElement Schema = JsonDocument.Parse(
         """
@@ -21,7 +21,8 @@ public sealed class AskHumanTool(IHumanChannel channel) : ITool
     public string Name => "ask_human";
 
     public string Description =>
-        "Ask the human operator a question and wait for their response. " +
+        "Ask the human operator a question. The run suspends immediately after this call; " +
+        "the human's answer is injected when the run resumes. " +
         "Use when you need clarification, approval, or information only a human can provide.";
 
     public JsonElement InputSchema => Schema;
@@ -29,7 +30,7 @@ public sealed class AskHumanTool(IHumanChannel channel) : ITool
     public async Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
     {
         var question = call.Arguments.TryGetProperty("question", out var q) ? q.GetString() ?? "" : "";
-        var response = await channel.AskAsync(question, ct);
-        return new ToolResult(call.CallId, response);
+        await notifier.NotifyAsync(new HumanInputRequest(context.TaskId, call.CallId, question), ct);
+        return new ToolResult(call.CallId, question, IsPending: true);
     }
 }

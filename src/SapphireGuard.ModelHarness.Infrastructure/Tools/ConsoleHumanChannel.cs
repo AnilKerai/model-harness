@@ -3,16 +3,16 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 
-// Development-time IHumanChannel that reads from stdin.
-// Replace with a channel suited to the deployment environment in production.
+// Development-time IHumanNotifier that prints the question to stdout then returns immediately.
+// The harness suspends; the sample's resume loop reads the answer from stdin.
 [ExcludeFromCodeCoverage]
-public sealed class ConsoleHumanChannel : IHumanChannel
+public sealed class ConsoleHumanChannel : IHumanNotifier
 {
-    public Task<string> AskAsync(string question, CancellationToken ct = default)
+    public Task NotifyAsync(HumanInputRequest request, CancellationToken ct = default)
     {
         Console.WriteLine();
-        Console.WriteLine($"[HUMAN INPUT REQUIRED] {question}");
+        Console.WriteLine($"[HUMAN INPUT REQUIRED] {request.Question}");
         Console.Write("> ");
-        return Task.FromResult(Console.ReadLine() ?? string.Empty);
+        return Task.CompletedTask;
     }
 }

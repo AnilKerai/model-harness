@@ -20,4 +20,11 @@ public sealed record AgentOutcome
 
     /// <summary>Human-readable reason for a <see cref="AgentStatus.Failed"/> outcome. <see langword="null"/> otherwise.</summary>
     public string? FailureReason { get; init; }
+
+    /// <summary>
+    /// Details of the pending human-input request when <see cref="Status"/> is
+    /// <see cref="AgentStatus.AwaitingHuman"/>. <see langword="null"/> for all other statuses.
+    /// Use <see cref="AgentState.ResumeWithHumanAnswer"/> with <see cref="FinalState"/> to continue the run.
+    /// </summary>
+    public PendingHumanInput? PendingHumanInput { get; init; }
 }

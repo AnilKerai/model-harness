@@ -1,3 +1,5 @@
+using SapphireGuard.ModelHarness.Framework.Tools;
+
 namespace SapphireGuard.ModelHarness.Framework.State;
 
 /// <summary>
@@ -45,4 +47,23 @@ public sealed record AgentState
     /// <summary>Returns a new state with <paramref name="step"/> appended to the trajectory.</summary>
     public AgentState AppendStep(Step step) =>
         this with { Trajectory = [.. Trajectory, step] };
+
+    /// <summary>
+    /// Returns a new <see cref="AgentStatus.Running"/> state with the pending <c>ask_human</c>
+    /// <see cref="ToolCallStep"/> (identified by <paramref name="callId"/>) replaced by a completed
+    /// one carrying <paramref name="answer"/>. Pass the result back to <c>HarnessLoop.RunAsync</c>
+    /// to continue the run from the point of suspension.
+    /// </summary>
+    public AgentState ResumeWithHumanAnswer(string callId, string answer)
+    {
+        var updated = new List<Step>(Trajectory.Count);
+        foreach (var step in Trajectory)
+        {
+            if (step is ToolCallStep ts && ts.Result.IsPending && ts.Result.CallId == callId)
+                updated.Add(ts with { Result = new ToolResult(callId, answer) });
+            else
+                updated.Add(step);
+        }
+        return this with { Trajectory = updated, Status = AgentStatus.Running };
+    }
 }

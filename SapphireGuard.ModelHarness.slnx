@@ -18,6 +18,7 @@
     <Project Path="samples/SkillLearning/SapphireGuard.ModelHarness.Samples.SkillLearning.csproj" />
     <Project Path="samples/ToolCallReasonableness/SapphireGuard.ModelHarness.Samples.ToolCallReasonableness.csproj" />
     <Project Path="samples/ToolResultSanity/SapphireGuard.ModelHarness.Samples.ToolResultSanity.csproj" />
+    <Project Path="samples/HitlSuspendResume/SapphireGuard.ModelHarness.Samples.HitlSuspendResume.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/SapphireGuard.ModelHarness.Framework.Tests.Unit.csproj" />

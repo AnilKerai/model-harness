@@ -12,7 +12,7 @@ public enum AgentStatus
     /// <summary>The run terminated due to an unrecoverable error.</summary>
     Failed,
 
-    /// <summary>The run is paused waiting for a human response via <see cref="SapphireGuard.ModelHarness.Framework.Tools.IHumanChannel"/>.</summary>
+    /// <summary>The run is paused waiting for a human response. Resume via <see cref="AgentState.ResumeWithHumanAnswer"/>.</summary>
     AwaitingHuman,
 
     /// <summary>

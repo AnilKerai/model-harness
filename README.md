@@ -564,16 +564,62 @@ Implement `ICheckpointStore` to target blob storage, a database, or any other ba
 
 ### Human-in-the-loop
 
-```csharp
-// Development — blocks on stdin
-builder.WithAskHumanTool<ConsoleHumanChannel>()
+The harness uses a **suspend/resume** model rather than blocking for a human answer. When
+the model calls `ask_human`, the loop fires the notifier, saves a checkpoint, and immediately
+returns — the caller is free to wait however long the deployment requires before resuming.
 
-// Production — implement IHumanChannel for your delivery mechanism
-builder.WithAskHumanTool(_ => new SlackHumanChannel(slackClient, channelId))
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant HarnessLoop
+    participant Notifier as IHumanNotifier
+
+    Caller->>HarnessLoop: RunAsync(state)
+    HarnessLoop->>Notifier: NotifyAsync(question)
+    note right of Notifier: HTTP / Slack / stdin / queue...
+    Notifier-->>HarnessLoop: (returns immediately)
+    HarnessLoop-->>Caller: AgentOutcome { Status = AwaitingHuman }
+
+    note over Caller: human answers — seconds or days later
+
+    Caller->>Caller: state = outcome.FinalState<br/>.ResumeWithHumanAnswer(callId, answer)
+    Caller->>HarnessLoop: RunAsync(resumedState)
+    HarnessLoop-->>Caller: AgentOutcome { Status = Done }
 ```
 
-When the model calls `ask_human`, the harness routes it through `IHumanChannel.AskAsync`
-and feeds the response back. See the harness concerns section for where this boundary sits.
+**Wiring:**
+
+```csharp
+// Development — ConsoleHumanChannel prints the question; your loop reads stdin after RunAsync returns
+builder.WithAskHumanTool<ConsoleHumanChannel>()
+
+// Production — implement IHumanNotifier for your delivery mechanism
+builder.WithAskHumanTool(_ => new SlackHumanNotifier(slackClient, channelId))
+```
+
+**The suspend/resume cycle:**
+
+```csharp
+var outcome = await agent.RunAsync(task, budget);
+
+while (outcome.Status == AgentStatus.AwaitingHuman)
+{
+    var pending = outcome.PendingHumanInput!;
+    // answer arrives via whatever mechanism IHumanNotifier dispatched to
+    var answer = await GetHumanAnswerAsync(pending.CallId);
+
+    var next = outcome.FinalState.ResumeWithHumanAnswer(pending.CallId, answer);
+    outcome = await agent.RunAsync(next);
+}
+```
+
+`ResumeWithHumanAnswer` replaces the pending `ToolCallStep` in the trajectory with the real
+answer — the model sees it as a normal completed tool call on its next turn and continues from there.
+`PendingHumanInput.CallId` is the correlation key that links the question to the answer across the
+suspension boundary.
+
+See `samples/HitlSuspendResume` for a runnable demo. For where this boundary sits relative to
+system design, see the [harness vs user concerns](#harness-vs-user-concerns) section.
 
 ### Budget enforcement
 
@@ -680,7 +726,7 @@ These are things every agent needs, regardless of domain. The framework provides
 | Tool dispatch | `IToolRegistry` | ✅ |
 | Skills plumbing — listing and loading pre-authored skill documents | `SkillsGuide` / `ISkillStore` / `skill_view` | ✅ |
 | Learning plumbing — persisting agent-saved skills across episodes | `ISkillStore` / `skill_manage` | ✅ |
-| Human-in-the-loop plumbing — signalling a question & dispatching to a channel | `AskHumanTool` / `IHumanChannel` | ✅ |
+| Human-in-the-loop plumbing — suspend on `ask_human`, resume via `ResumeWithHumanAnswer` | `AskHumanTool` / `IHumanNotifier` | ✅ |
 | Model transport | `IModelClient` | ✅ |
 | Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
 | Checkpoint / resume | `ICheckpointStore` / `FileCheckpointStore` | ✅ |
@@ -700,9 +746,9 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. |
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
-| Human-in-the-loop | `IHumanChannel` → `AskHumanTool` | The harness provides the seam and a `ConsoleHumanChannel` for development. How a question is surfaced — stdin, Slack, webhook, queue — is a system design decision the harness cannot make. See the FAQ. |
+| Human-in-the-loop | `IHumanNotifier` → `AskHumanTool` | The harness provides the seam (`IHumanNotifier`) and suspends with `AwaitingHuman`; `ConsoleHumanChannel` is the dev-time implementation. How a question is dispatched — HTTP, Slack, a bus message — and how the answer is routed back are system design decisions the harness cannot make. See the [Human-in-the-loop](#human-in-the-loop) section. |
 | Authenticated HTTP clients for tools | Standard .NET DI | Tools that call external APIs (including MCP servers backed by domain services) need authenticated `HttpClient` instances. The harness does not provide this because the authentication mechanism, token lifecycle, and target services are all deployment concerns. The correct pattern is to register a named `HttpClient` with a `DelegatingHandler` for token acquisition and refresh in the composition root, alongside `AddModelHarness`. Tools declare `IHttpClientFactory` as a constructor dependency and call `CreateClient("name")` — the factory and handler are resolved from the same DI container. This means all tools registered with the harness share the same token cache and renewal logic with no harness changes required. For MCP-backed tools specifically, authentication to the MCP server is a transport-layer concern that belongs in how `IMcpClient` connections are established, not in tool implementations. |
-| Irreversible action gate | `PreToolCall` sensor + `IHumanChannel` + checkpoint/resume | Blocking dispatch of dangerous tools until a human approves only makes sense when a human is available and reachable — something an ambient agent cannot guarantee. For chat agents, a `PreToolCall` sensor can block and route via `IHumanChannel`; the checkpoint/resume seam handles suspension and resume once the answer arrives. For ambient agents, the right pattern is to structure the task so the human approves a plan *before* the agent has authority to take destructive actions — not to intercept at dispatch time. Both patterns are user-side compositions of existing seams; the harness cannot decide which applies. |
+| Irreversible action gate | `PreToolCall` sensor + `IHumanNotifier` + checkpoint/resume | Blocking dispatch of dangerous tools until a human approves only makes sense when a human is available and reachable — something an ambient agent cannot guarantee. For chat agents, a `PreToolCall` sensor can block and trigger `ask_human`; the suspend/resume seam handles the wait. For ambient agents, the right pattern is to structure the task so the human approves a plan *before* the agent has authority to take destructive actions — not to intercept at dispatch time. Both patterns are user-side compositions of existing seams; the harness cannot decide which applies. |
 | Rate limiting | `IRateLimiter` (in loop) or a decorator on `IModelClient` | Provider sliding-window limits (calls/min, tokens/min) are a transport concern — the natural home is a `RateLimitingModelClientDecorator` alongside `ResilientModelClientDecorator`. The harness currently provides `IRateLimiter` as a loop-level seam (with `CallsPerMinuteRateLimiter` and `TokensPerMinuteRateLimiter` in Infrastructure) because the loop is the only layer with access to `MaxWallClock`, enabling graceful `PartialResult` instead of an unbounded wait. A decorator would need to either block blindly or throw a typed exception for the loop to catch. Both placements are defensible; the current one is pragmatic. Configure via `WithRateLimiter` — no-op by default. |
 
 ---
@@ -713,7 +759,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 |---|---|
 | **Agent** | An Agent = Model + Harness. A loop-driven process that takes a natural-language task, uses tools and a model to produce a result, and records every step it takes. |
 | **Agent Learning** | The ability for an agent to write its own skills at runtime, capturing procedures it works out so they can be reused across episodes. Implemented via the same `SKILL.md` format. The model decides when to save via `skill_manage`; the harness just persists the file. Enable with `WithLearning(dir)`. |
-| **AgentOutcome** | The terminal result of a run: final answer, status (`Done`, `PartialResult`, `Failed`), and the last `AgentState`. |
+| **AgentOutcome** | The terminal result of a run: final answer, status (`Done`, `PartialResult`, `Failed`, `AwaitingHuman`), and the last `AgentState`. When status is `AwaitingHuman`, `PendingHumanInput` carries the `CallId` and question needed to resume. |
 | **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn — the trajectory is the log of those transitions. |
 | **Budget** | Hard limits on a run: `MaxTurns`, `MaxContextTokens`, `MaxCostUsd`, `MaxWallClock`. Checked at the top of every turn before any sensor or model call. |
 | **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
