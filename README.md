@@ -36,7 +36,7 @@ Every agent, no matter how capable it looks, is an assembly of the same small se
 | **Perception** | What the agent can see right now — the shaped view of world state it reasons over before each model call. Every prompt is an act of perception design. Getting this right matters more than most people expect: what you omit is as important as what you include. Implemented here via the **Guide pattern** — a sequential pipeline of guides that each contribute to a shared context draft before every model call. |
 | **Control flow** | The loop that decides what runs next and in what order: call model → act on response → repeat. Budget enforcement, rate limiting, and checkpoint/resume are all control-flow concerns. The loop is deceptively simple; almost all agent reliability problems are really control-flow problems in disguise. |
 | **Guardrails** | Checkpoints that intercept and shape agent behaviour at declared points in the loop — before the model call, after it, before a tool runs, after it, before the final answer is accepted. Guardrails observe and redirect; they do not take turns away from the model. Implemented here via the **Sensor pattern** — sensors run in parallel at five hookpoints and feed interventions back through the guide pipeline so the model can self-correct. |
-| **Sub-agents** | Agents calling other agents — an orchestrator delegates a sub-task to a specialist, gets a result back, and continues. From the calling agent's perspective a sub-agent is just a tool: it takes a task and returns a result. The isolation contract is what makes this composable — each agent runs in its own container with its own model, sensors, and budget. Implemented here via **`AgentFactory`** and **`AgentTool`** — see the [Multi-agent](#multi-agent) section. |
+| **Sub-agents** | Agents calling other agents — an orchestrator delegates a sub-task to a specialist, gets a result back, and continues. From the calling agent's perspective a sub-agent is just a tool: it takes a task and returns a result. The isolation contract is what makes this composable — each agent runs in its own container with its own model, sensors, and budget. Implemented here via **`AgentFactory`** and **`AgentTool`** — see the [Multi-agent setup](#multi-agent-setup) section. |
 
 Most agent complexity is a composition of these six — not something fundamentally new. A "research agent" is control flow + tools + memory. An "orchestrated pipeline" adds sub-agents. Building the framework around named primitives keeps the seams obvious: when a new concern arrives, there is usually a clear home for it.
 
@@ -365,68 +365,6 @@ roadmap) is a layer you add, not part of the framework.
 
 ---
 
-## Multi-agent
-
-Multi-agent is the sixth agentic primitive — agents calling other agents. From a single
-agent's perspective, a sub-agent is just a **tool**: the orchestrator calls it with a task,
-it runs its own full harness loop, and it returns a result. No new abstractions are needed.
-
-The key design guarantee: **each agent gets its own isolated container**. Sub-containers are
-built from a fresh `ServiceCollection` with no fallback to the host — sensors, tools, model
-client, tracer, and budget enforcer are all private to the agent they belong to. Nothing
-leaks between agents.
-
-### Wiring
-
-`AddAgentFactory` creates an `AgentFactory`, passes it to a configure callback for agent
-registration, then registers the factory as a singleton in the host container:
-
-```csharp
-services.AddAgentFactory(factory =>
-{
-    factory.AddStandardAgent("research", builder => builder
-        .WithSystemPrompt("You are a research specialist.")
-        .WithConsoleTracer()
-        .WithModel(_ => new ClaudeModelClient(...)));
-
-    factory.AddStandardAgent("orchestrator", builder => builder
-        .WithSystemPrompt("You are an orchestrator. Delegate research, then synthesise.")
-        .WithConsoleTracer()
-        .WithModel(_ => new ClaudeModelClient(...))
-        .AddSubAgentAsTool("research", factory));   // research agent exposed as a tool
-});
-```
-
-`AddStandardAgent` pre-wires the same opinionated defaults as `AddStandardModelHarness`.
-Use `AddAgent` instead for a bare builder with no defaults.
-
-`AddSubAgentAsTool` is a one-liner that wraps the named agent in an `AgentTool` and
-registers it as an `ITool` on the builder — the `factory` reference is captured directly
-in a closure, so no service resolution from the sub-container is required.
-
-### Running agents
-
-```csharp
-await using var provider = services.BuildServiceProvider();
-
-var outcome = await provider.GetRequiredService<AgentFactory>()
-    .GetAgent("orchestrator")
-    .RunAsync("Research quantum computing and write a brief summary.");
-```
-
-`GetAgent` builds the sub-container lazily on first call and caches it. Disposal of the
-host `ServiceProvider` disposes all sub-containers automatically.
-
-### Isolation in practice
-
-From the trace you can see two separate `taskId`s — one for the orchestrator's loop, one
-for the research agent's loop running inside the tool call. Each has its own sensors,
-budget, and tracer output. They share nothing.
-
-See `samples/SubAgent` for a runnable, no-API-key demo.
-
----
-
 ## AI-powered sensors *(Experimental)*
 
 Sensors are normally pure, in-process checks — regex, heuristics, rule evaluation. For
@@ -594,28 +532,32 @@ Everything below is opt-in whether you use `AddStandardModelHarness` or `AddMode
 
 ### Multi-agent setup
 
-For multi-agent systems use `AddAgentFactory` instead. Each named agent gets its own
-isolated sub-container — the standard and bare variants mirror the single-agent entry points:
+For multi-agent systems use `AddAgentFactory`. Each named agent gets its own isolated
+sub-container — `AddStandardAgent` / `AddAgent` mirror the single-agent entry points and
+share the same defaults source of truth. Use `AddSubAgentAsTool` to expose one agent as
+a tool on another's builder:
 
 ```csharp
 services.AddAgentFactory(factory =>
 {
-    // AddStandardAgent = AddStandardModelHarness equivalent (same defaults, same source of truth)
     factory.AddStandardAgent("research", builder => builder
-        .WithSystemPrompt("...")
+        .WithSystemPrompt("You are a research specialist.")
         .WithModel(...));
 
-    // AddAgent = AddModelHarness equivalent (bare builder, no defaults)
-    factory.AddAgent("writer", builder => builder
-        .WithToolRegistry<InMemoryToolRegistry>()
-        .WithSystemPrompt("...")
-        .WithModel(...));
+    factory.AddStandardAgent("orchestrator", builder => builder
+        .WithSystemPrompt("You are an orchestrator.")
+        .WithModel(...)
+        .AddSubAgentAsTool("research", factory));
 });
+
+await using var provider = services.BuildServiceProvider();
+var outcome = await provider.GetRequiredService<AgentFactory>()
+    .GetAgent("orchestrator")
+    .RunAsync("Research quantum computing and write a brief summary.");
 ```
 
-`AddStandardAgent` and `AddStandardModelHarness` share a single internal helper
-(`ApplyStandardDefaults`) — adding a new standard sensor in one place automatically
-applies to both. See the [Multi-agent](#multi-agent) section for the full wiring pattern.
+Each agent's sensors, model, and budget are fully isolated — nothing leaks between
+sub-containers. See `samples/SubAgent` for a runnable no-API-key demo.
 
 ### Add a tool
 
