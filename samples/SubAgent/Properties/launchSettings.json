@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "SubAgent": {
+      "commandName": "Project"
+    }
+  }
+}
