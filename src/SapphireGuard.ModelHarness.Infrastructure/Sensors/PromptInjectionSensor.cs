@@ -33,6 +33,9 @@ public sealed class PromptInjectionSensor : ISensor
         if (triggeringStep is not ToolCallStep toolStep)
             return Task.FromResult(SensorResult.Pass);
 
+        if (toolStep.Call.ToolName == "ask_human")
+            return Task.FromResult(SensorResult.Pass);
+
         var content = toolStep.Result.Content;
         if (string.IsNullOrWhiteSpace(content))
             return Task.FromResult(SensorResult.Pass);
