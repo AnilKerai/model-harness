@@ -21,7 +21,7 @@ where the implementation would live.
 - [x] Token-aware trajectory compaction — `TrajectoryGuide` trims oldest steps when estimated token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped
 - [x] `MemoryGuide` — seam for long-term memory; default is `NullMemoryStore` (no-op); replace with a vector store or knowledge graph
 - [x] `ToolSelectorGuide` — seam for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
-- [ ] Progressive tool discovery — expose tools contextually rather than all-at-once; research shows selection accuracy degrades meaningfully above ~20 tools; candidate design: a routing step at the start of each turn that classifies the current sub-task and injects only the relevant tool subset into `ContextDraft`; `IToolSelector` is the right seam, needs a smarter default
+- [ ] ~~Progressive tool discovery~~ — removed from backlog; see the ADR in README.md (tool relevance ranking row). Short version: a routing layer papers over an agent design problem. An agent with 20+ tools is already a smell; the right fix is decomposition, not a router.
 - [x] ReAct loop / goal reiteration — `TrajectoryGuide` re-injects the original `state.TaskText` as a `[ORIGINAL GOAL]` system note on every turn; prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns, especially after compaction drops early history
 - [x] Intermediate validation gate — `ProgressCheckSensor` fires at `PreModelCall` every N completed turns (configurable, default 5) and annotates the trajectory with a structured checkpoint prompt; included in `AddStandardModelHarness` by default
 
@@ -50,7 +50,7 @@ where the implementation would live.
 - [x] `ClaudeModelClient` — Anthropic SDK adapter; handles message alternation, tool result inlining, cost tracking
 - [x] `OllamaModelClient` — OllamaSharp v5 adapter; stateful tool-call grouping pass; cost is always zero (local inference)
 - [x] `AzureOpenAIModelClient` — Azure AI Foundry / Azure OpenAI Service adapter (`Infrastructure.AzureOpenAI`); supports API key and `DefaultAzureCredential` (managed identity); `WithAzureOpenAIModel` DI extension; `samples/AzureOpenAI` demo
-- [ ] Additional model provider adapters — OpenAI, Google Gemini
+- [ ] ~~Additional model provider adapters (OpenAI, Google Gemini)~~ — removed from backlog; Anthropic, Azure AI Foundry, and Ollama cover current needs. `IModelClient` is the seam — add one if and when a new provider is needed.
 
 ### DI / composition
 - [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
@@ -89,7 +89,7 @@ where the implementation would live.
 ### Robustness
 - [x] Sensor intervention guard — `HarnessLoop` tracks consecutive sensor blocks; after 3 consecutive `PostModelCall` or `PreReturn` interventions the loop force-finalises with a clear reason rather than looping indefinitely
 - [x] Exception telemetry on tool failure — `ExecuteToolAsync` now catches exceptions from `toolRegistry.DispatchAsync`, converts them to `IsError` `ToolResult`s (type + message surfaced to the model), and logs via `tracer.LogToolCall`; tool crashes become recoverable errors rather than run-terminating exceptions
-- [ ] Memory retrieval signal — `MemoryGuide` always queries `IMemoryStore` with `state.TaskText`; on long runs the last few model messages or a recent-trajectory summary are better retrieval signals; expose a pluggable `IMemoryQueryBuilder` seam (default: current behaviour)
+- [ ] ~~Memory retrieval signal (`IMemoryQueryBuilder`)~~ — removed from backlog; the problem (stale query signal on long runs) is better solved by keeping runs focused and bounded via the budget, not by adding a retrieval seam. `MemoryGuide` passes `state.TaskText` — sufficient for well-scoped agents.
 - [x] DI smoke tests — builder methods and `DependencyInjection.cs` files are `[ExcludeFromCodeCoverage]`; smoke tests live in `tests/.../Smoke/DiSmokeTests.cs`; resolve the container, run one turn against `FakeModelClient` to catch wiring regressions without testing implementation detail
 
 ### Testing
