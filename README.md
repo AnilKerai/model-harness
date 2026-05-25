@@ -25,6 +25,24 @@ always a product decision, not a model decision.
 
 ---
 
+## Single-agent primitives
+
+Every agent, no matter how capable it looks, is an assembly of the same small set of building blocks. Understanding these primitives makes it easier to read this code and reason about where a new concern belongs.
+
+| Primitive | What it is |
+|---|---|
+| **Tools** | The agent's hands — functions it can call to effect change or read state outside the context window. Tools are the only way an agent can act on the world. |
+| **Memory** | What the agent can remember. Four varieties: *in-context* (the current context window), *external / retrieved* (a vector store or knowledge graph queried each turn), *procedural* (named instructions the agent can load and follow), and *in-weights* (fine-tuning — lives outside the harness). |
+| **Perception** | What the agent can see right now — the shaped view of world state it reasons over before each model call. Every prompt is an act of perception design. Getting this right matters more than most people expect: what you omit is as important as what you include. |
+| **Control flow** | The loop that decides what runs next and in what order: call model → act on response → repeat. Budget enforcement, rate limiting, and checkpoint/resume are all control-flow concerns. The loop is deceptively simple; almost all agent reliability problems are really control-flow problems in disguise. |
+| **Guardrails** | Checkpoints that intercept and shape agent behaviour at declared points in the loop — before the model call, after it, before a tool runs, after it, before the final answer is accepted. Guardrails observe and redirect; they do not take turns away from the model. |
+
+Most agent complexity is a composition of these five — not something fundamentally new. A "research agent" is control flow + tools + memory. A "safe agent" is the same, with guardrails. Building the framework around named primitives keeps the seams obvious: when a new concern arrives, there is usually a clear home for it.
+
+Multi-agent systems add a sixth primitive — sub-agents — where agents call other agents and aggregate results. That is a separate layer, covered in the [roadmap](ROADMAP.md).
+
+---
+
 The samples under `samples/` wire up `ClaudeModelClient` against the Anthropic API,
 `AzureOpenAIModelClient` against Azure AI Foundry / Azure OpenAI Service, and
 `OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
