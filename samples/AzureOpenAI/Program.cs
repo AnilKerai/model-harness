@@ -2,7 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Infrastructure;
-using SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI;
 using SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Resilience;

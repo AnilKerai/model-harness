@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Infrastructure.MultiAgent;
