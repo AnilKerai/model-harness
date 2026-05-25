@@ -65,12 +65,16 @@ where the implementation would live.
 - [x] At-least-once resume semantics — pass a loaded checkpoint's state (with `Status = Running`) back to `HarnessLoop.RunAsync`
 
 ### Human-in-the-loop
-- [x] `IHumanChannel` — seam in `Framework.Tools`; one method: `AskAsync(question, ct) → string`
-- [x] `AskHumanTool` — standard `ITool` the model invokes when it needs human input; delegates to `IHumanChannel`
-- [x] `ConsoleHumanChannel` — development-time implementation that blocks on stdin; replace with a channel suited to the deployment environment
-- [x] `AddAskHumanTool<TChannel>()` / factory overload DI extension in `Infrastructure`
-- [x] Decision: HITL is a **system design concern**, not a harness concern — the harness provides the seam (`IHumanChannel`) and signals intent (`AskHumanTool`); how a human is reached is entirely the user's implementation
-- [ ] **Planned redesign** — `IHumanChannel.AskAsync → string` is the wrong contract: request-response assumes the channel can block until the human answers, which is never true in production. Proposed split: (1) replace with `IHumanNotifier.NotifyAsync(HumanInputRequest, ct)` — one-way fire-and-forget; implementation posts HTTP, publishes a bus message, sends Slack DM etc.; (2) harness calls notifier then immediately returns `AgentOutcome { Status = PendingHumanInput }`; (3) answer comes back through checkpoint/resume — caller injects it into state before calling `RunAsync` again. `ConsoleHumanChannel` stays as a dev-only synchronous convenience. `AskHumanTool` stays as the model-side trigger but returns a pending result that signals the loop to suspend rather than blocking for an answer.
+- [x] `IHumanNotifier` — seam in `Framework.Tools`; one method: `NotifyAsync(HumanInputRequest, ct)` — fire-and-forget; implementation posts HTTP, publishes a bus message, sends Slack DM etc.
+- [x] `HumanInputRequest` — carries `TaskId`, `CallId`, and `Question` across the suspension boundary
+- [x] `AskHumanTool` — standard `ITool` the model invokes; fires the notifier and returns `ToolResult { IsPending = true }` to signal suspension
+- [x] `ToolResult.IsPending` — flag detected by `HarnessLoop` after tool dispatch; triggers checkpoint save and `AwaitingHuman` return
+- [x] `AgentOutcome.PendingHumanInput` — carries `CallId` + `Question` when status is `AwaitingHuman`
+- [x] `AgentState.ResumeWithHumanAnswer(callId, answer)` — replaces the pending `ToolCallStep` in the trajectory with the real answer; pass result back to `RunAsync` to continue the run
+- [x] `ConsoleHumanChannel` — dev-time `IHumanNotifier`; prints the question and returns immediately; the calling loop reads stdin after `RunAsync` suspends
+- [x] `AddAskHumanTool<TNotifier>()` / factory overload DI extension in `Infrastructure`
+- [x] Decision: HITL is a **system design concern**, not a harness concern — the harness provides the seam (`IHumanNotifier`) and suspends with `AwaitingHuman`; how the question is dispatched and the answer routed back are entirely the user's concern
+- [x] `samples/HitlSuspendResume` — scripted no-API-key demo of the full suspend/resume cycle
 
 ### Skills (procedural memory)
 - [x] `ISkillStore` / `Skill` / `SkillSummary` / `NullSkillStore` — seam in `Framework.Skills`; default is a no-op so the read side ships on with zero overhead
