@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Infrastructure.MultiAgent;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure.Skills;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
@@ -92,6 +93,36 @@ public static class DependencyInjection
                 .WithOtelTracer();
             configure(builder);
         });
+
+    // ── Multi-agent ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates an <see cref="AgentFactory"/>, passes it to <paramref name="configure"/> so
+    /// named agents can be registered, then adds the factory as a singleton so it can be
+    /// resolved and disposed by the host container.
+    /// </summary>
+    public static IServiceCollection AddAgentFactory(
+        this IServiceCollection services,
+        Action<AgentFactory> configure)
+    {
+        var factory = new AgentFactory();
+        configure(factory);
+        services.AddSingleton(factory);
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the named sub-agent as a tool on this agent's harness. The
+    /// <paramref name="factory"/> reference is captured directly in a closure —
+    /// no service resolution from the sub-container is needed.
+    /// </summary>
+    public static ModelHarnessBuilder AddSubAgentAsTool(
+        this ModelHarnessBuilder builder,
+        string agentName,
+        AgentFactory factory) =>
+        builder.WithTool(_ => new AgentTool(agentName, factory));
+
+    // ── Internal helpers ─────────────────────────────────────────────────────
 
     private static SkillStoreConfiguration GetOrAddSkillConfig(ModelHarnessBuilder builder)
     {

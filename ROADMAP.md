@@ -56,7 +56,7 @@ where the implementation would live.
 - [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
 - [x] Two-method pattern per abstraction: `AddXxx<T>()` (explicit override) + `AddXxxDefault()` (TryAdd)
 - [x] Graceful fallback to `FakeModelClient` when no API key is configured
-- [ ] Multi-agent support — the current DI model is one agent per container; the entire harness sub-graph (sensors, guides, model client, budget enforcer) would need to be isolated per agent, not just `Agent` itself; candidate approaches include child/scoped containers per agent, a factory that builds an isolated `ServiceProvider` per agent definition, or a dedicated `AgentDefinition` value object that carries its own configuration and is resolved independently
+- [x] Multi-agent support — `AgentFactory` builds an isolated `ServiceProvider` per named agent (fresh `ServiceCollection`, no shared services); `AgentTool` exposes any named agent as an `ITool` so orchestrators delegate via the standard tool primitive; `AddAgentFactory` + `AddStandardAgent` / `AddAgent` DI extensions in Infrastructure; `AddSubAgentAsTool` builder extension wires sub-agents without shared services; `samples/SubAgent` scripted no-API-key demo
 
 ### Persistence
 - [x] `ICheckpointStore` / `Checkpoint` / `NullCheckpointStore` — seam in `Framework.Persistence`; `HarnessLoop` auto-saves at the top of every turn (captures the fully-completed prior turn)

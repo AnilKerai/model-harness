@@ -39,7 +39,7 @@ Every agent, no matter how capable it looks, is an assembly of the same small se
 
 Most agent complexity is a composition of these five — not something fundamentally new. A "research agent" is control flow + tools + memory. A "safe agent" is the same, with guardrails. Building the framework around named primitives keeps the seams obvious: when a new concern arrives, there is usually a clear home for it.
 
-Multi-agent systems add a sixth primitive — sub-agents — where agents call other agents and aggregate results. That is a separate layer, covered in the [roadmap](ROADMAP.md).
+Multi-agent systems add a sixth primitive — sub-agents — where agents call other agents and aggregate results. Covered in the [Multi-agent](#multi-agent) section below.
 
 ---
 
@@ -363,6 +363,68 @@ In short: **the harness stores, lists, and hands skills to the model. It never d
 when to save one, or whether the agent is "improving"** — the model makes that call.
 Building anything smarter on top (like automatically saving after a success — see the
 roadmap) is a layer you add, not part of the framework.
+
+---
+
+## Multi-agent
+
+Multi-agent is the sixth agentic primitive — agents calling other agents. From a single
+agent's perspective, a sub-agent is just a **tool**: the orchestrator calls it with a task,
+it runs its own full harness loop, and it returns a result. No new abstractions are needed.
+
+The key design guarantee: **each agent gets its own isolated container**. Sub-containers are
+built from a fresh `ServiceCollection` with no fallback to the host — sensors, tools, model
+client, tracer, and budget enforcer are all private to the agent they belong to. Nothing
+leaks between agents.
+
+### Wiring
+
+`AddAgentFactory` creates an `AgentFactory`, passes it to a configure callback for agent
+registration, then registers the factory as a singleton in the host container:
+
+```csharp
+services.AddAgentFactory(factory =>
+{
+    factory.AddStandardAgent("research", builder => builder
+        .WithSystemPrompt("You are a research specialist.")
+        .WithConsoleTracer()
+        .WithModel(_ => new ClaudeModelClient(...)));
+
+    factory.AddStandardAgent("orchestrator", builder => builder
+        .WithSystemPrompt("You are an orchestrator. Delegate research, then synthesise.")
+        .WithConsoleTracer()
+        .WithModel(_ => new ClaudeModelClient(...))
+        .AddSubAgentAsTool("research", factory));   // research agent exposed as a tool
+});
+```
+
+`AddStandardAgent` pre-wires the same opinionated defaults as `AddStandardModelHarness`.
+Use `AddAgent` instead for a bare builder with no defaults.
+
+`AddSubAgentAsTool` is a one-liner that wraps the named agent in an `AgentTool` and
+registers it as an `ITool` on the builder — the `factory` reference is captured directly
+in a closure, so no service resolution from the sub-container is required.
+
+### Running agents
+
+```csharp
+await using var provider = services.BuildServiceProvider();
+
+var outcome = await provider.GetRequiredService<AgentFactory>()
+    .GetAgent("orchestrator")
+    .RunAsync("Research quantum computing and write a brief summary.");
+```
+
+`GetAgent` builds the sub-container lazily on first call and caches it. Disposal of the
+host `ServiceProvider` disposes all sub-containers automatically.
+
+### Isolation in practice
+
+From the trace you can see two separate `taskId`s — one for the orchestrator's loop, one
+for the research agent's loop running inside the tool call. Each has its own sensors,
+budget, and tracer output. They share nothing.
+
+See `samples/SubAgent` for a runnable, no-API-key demo.
 
 ---
 
