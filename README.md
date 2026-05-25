@@ -7,6 +7,24 @@ architecture.
 > is the scaffolding (loop, guides, sensors, budget) that wraps a model and
 > turns it into an agent.
 
+## The thesis: do more with less
+
+The prevailing assumption is that better results require a bigger model. This project
+tests a different hypothesis: **a well-structured harness can close much of that gap**.
+
+Sensors catch errors and route the model back before they compound. Guides keep context
+clean and goal-focused across many turns. Skills give the model reusable procedures so
+it does not have to reason from scratch every time. Budget enforcement prevents runaway
+costs. Together these let a smaller, cheaper, or locally-hosted model operate with the
+kind of reliability that is otherwise assumed to require a frontier model.
+
+The practical ambition: swap `ClaudeModelClient` for `OllamaModelClient` with a
+7B-parameter local model and get an *acceptable* result on the same task — not identical,
+but good enough for the use case, at a fraction of the cost. Where that bar sits is
+always a product decision, not a model decision.
+
+---
+
 The samples under `samples/` wire up `ClaudeModelClient` against the Anthropic API
 and `OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
 provided for local development with no external dependencies.
