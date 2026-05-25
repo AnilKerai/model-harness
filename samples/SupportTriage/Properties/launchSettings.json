@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "SupportTriage (Anthropic)": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "Provider": "anthropic"
+      }
+    },
+    "SupportTriage (Azure OpenAI)": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "Provider": "azure"
+      }
+    }
+  }
+}
