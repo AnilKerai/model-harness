@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
@@ -24,17 +23,14 @@ if (!usingRealModel)
 
 var services = new ServiceCollection();
 
-services.AddModelHarness(builder =>
+services.AddStandardModelHarness(builder =>
 {
     builder
         .WithSystemPrompt("You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.")
         .WithConsoleTracer()
-        .WithOtelTracer()
-        .WithToolRegistry<InMemoryToolRegistry>()
         .WithTool<EchoTool>()
         .WithTool<CalculatorTool>()
-        .WithSensor<ToolCallReasonablenessSensor>()
-        .WithSensor<StuckDetector>();
+        .WithSensor<ToolCallReasonablenessSensor>();
 
     if (usingRealModel)
         builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions

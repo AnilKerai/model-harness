@@ -46,10 +46,9 @@ async Task<AgentOutcome> RunOnceAsync()
 {
     var services = new ServiceCollection();
 
-    services.AddModelHarness(builder => builder
+    services.AddStandardModelHarness(builder => builder
         .WithSystemPrompt(SystemPrompt)
         .WithConsoleTracer()
-        .WithToolRegistry<InMemoryToolRegistry>()
         .WithLearning(skillDir)
         .WithModel(_ => new SkillScriptedModelClient()));
 

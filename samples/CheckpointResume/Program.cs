@@ -35,13 +35,11 @@ if (!usingRealModel)
 
 var firstServices = new ServiceCollection();
 
-firstServices.AddModelHarness(builder =>
+firstServices.AddStandardModelHarness(builder =>
 {
     builder
         .WithSystemPrompt(SystemPrompt)
         .WithConsoleTracer()
-        .WithOtelTracer()
-        .WithToolRegistry<InMemoryToolRegistry>()
         .WithTool<EchoTool>()
         .WithTool<CalculatorTool>()
         .WithFileCheckpointStore(checkpointDir);

@@ -14,10 +14,9 @@ AgentConsoleWriter.PrintHeader(
 
 var services = new ServiceCollection();
 
-services.AddModelHarness(builder => builder
+services.AddStandardModelHarness(builder => builder
     .WithSystemPrompt("You are a sample agent. Keep calling the echo tool until you are done.")
     .WithConsoleTracer()
-    .WithToolRegistry<InMemoryToolRegistry>()
     .WithTool<EchoTool>()
     .WithModel(_ => new LoopingScriptedModelClient()));
 

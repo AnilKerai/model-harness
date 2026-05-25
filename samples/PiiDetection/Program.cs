@@ -19,17 +19,14 @@ var usingRealModel = !string.IsNullOrWhiteSpace(apiKey);
 if (!usingRealModel)
     Console.WriteLine("WARNING: Anthropic:ApiKey not configured — using FakeModelClient.");
 var services = new ServiceCollection();
-services.AddModelHarness(builder =>
+services.AddStandardModelHarness(builder =>
 {
     builder
         .WithSystemPrompt("You are a sample arithmetic agent. Use the calculator tool to compute results and then answer the user.")
         .WithConsoleTracer()
-        .WithOtelTracer()
-        .WithToolRegistry<InMemoryToolRegistry>()
         .WithTool<EchoTool>()
         .WithTool<CalculatorTool>()
-        .WithSensor<PiiRedactionSensor>()
-        .WithSensor<StuckDetector>();
+        .WithSensor<PiiRedactionSensor>();
     if (usingRealModel)
         builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
         {

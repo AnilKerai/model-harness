@@ -424,25 +424,24 @@ tracer can all be wired in via the builder callback.
 **Layer 2 — Infrastructure packages**: each package adds `With*` extension methods on
 `ModelHarnessBuilder`. Install only the packages you need; each one is independent.
 
-**Layer 3 — Opinionated defaults** (optional): a thin wrapper like `AddStandardModelHarness`
-can pre-wire common choices (e.g. `InMemoryToolRegistry`, `StuckDetector`, and OpenTelemetry
-tracing) so application code only has to supply what differs. This layer isn't shipped by
-the framework — add it in your own app or platform layer when you find yourself repeating
-the same builder calls across projects.
+**Layer 3 — Opinionated defaults** (`AddStandardModelHarness`): shipped in `Infrastructure`,
+this thin wrapper pre-wires `InMemoryToolRegistry`, `StuckDetector`, `ProgressCheckSensor`,
+`PromptInjectionSensor`, and OpenTelemetry tracing. Pass the configuration callback to supply
+your model, tools, and any overrides — the defaults are applied first and your additions layer
+on top.
 
 ### Minimal setup
 
-`AddModelHarness` is the single entry point. Pass a configuration callback that receives a
-`ModelHarnessBuilder`, then resolve `Agent` and run:
+`AddStandardModelHarness` is the recommended entry point. It pre-wires the common defaults
+(`InMemoryToolRegistry`, `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor`,
+OpenTelemetry tracing) — supply your model, tools, and any overrides:
 
 ```csharp
 var services = new ServiceCollection();
 
-services.AddModelHarness(builder => builder
+services.AddStandardModelHarness(builder => builder
     .WithSystemPrompt("You are a helpful assistant.")
     .WithConsoleTracer()
-    .WithOtelTracer()
-    .WithToolRegistry<InMemoryToolRegistry>()
     .WithTool<CalculatorTool>()
     .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
 
@@ -454,7 +453,24 @@ var outcome = await provider.GetRequiredService<Agent>()
 Console.WriteLine(outcome.FinalAnswer);
 ```
 
-Everything below is opt-in.
+### Customising the harness
+
+Use `AddModelHarness` directly when you want full control over every registered component —
+it is the lower-level entry point that `AddStandardModelHarness` builds on:
+
+```csharp
+services.AddModelHarness(builder => builder
+    .WithSystemPrompt("You are a helpful assistant.")
+    .WithConsoleTracer()
+    .WithOtelTracer()
+    .WithToolRegistry<InMemoryToolRegistry>()
+    .WithTool<CalculatorTool>()
+    .WithSensor<MySensor>()
+    .WithGuide<MyGuide>()
+    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
+```
+
+Everything below is opt-in whether you use `AddStandardModelHarness` or `AddModelHarness`.
 
 ### Add a tool
 

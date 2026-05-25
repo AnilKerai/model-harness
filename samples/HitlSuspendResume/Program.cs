@@ -15,9 +15,8 @@ AgentConsoleWriter.PrintHeader(
 
 var services = new ServiceCollection();
 
-services.AddModelHarness(builder => builder
+services.AddStandardModelHarness(builder => builder
     .WithSystemPrompt("You are a helpful assistant. Ask the human for their preferred currency before answering.")
-    .WithToolRegistry<InMemoryToolRegistry>()
     .WithAskHumanTool<ConsoleHumanChannel>()
     .WithModel(_ => new HitlFakeClient()));
 
