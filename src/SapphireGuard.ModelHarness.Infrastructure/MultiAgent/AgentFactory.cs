@@ -1,7 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
-using SapphireGuard.ModelHarness.Infrastructure.Sensors;
-using SapphireGuard.ModelHarness.Infrastructure.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.MultiAgent;
 
@@ -32,12 +30,7 @@ public sealed class AgentFactory : IAsyncDisposable
     public void AddStandardAgent(string name, Action<ModelHarnessBuilder> configure) =>
         AddAgent(name, builder =>
         {
-            builder
-                .WithToolRegistry<InMemoryToolRegistry>()
-                .WithSensor<StuckDetector>()
-                .WithSensor<ProgressCheckSensor>()
-                .WithSensor<PromptInjectionSensor>()
-                .WithOtelTracer();
+            DependencyInjection.ApplyStandardDefaults(builder);
             configure(builder);
         });
 

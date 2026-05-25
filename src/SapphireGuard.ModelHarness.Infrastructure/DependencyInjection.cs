@@ -85,14 +85,22 @@ public static class DependencyInjection
         Action<ModelHarnessBuilder> configure) =>
         services.AddModelHarness(builder =>
         {
-            builder
-                .WithToolRegistry<InMemoryToolRegistry>()
-                .WithSensor<StuckDetector>()
-                .WithSensor<ProgressCheckSensor>()
-                .WithSensor<PromptInjectionSensor>()
-                .WithOtelTracer();
+            ApplyStandardDefaults(builder);
             configure(builder);
         });
+
+    /// <summary>
+    /// Applies the standard opinionated defaults to any <see cref="ModelHarnessBuilder"/>.
+    /// Single source of truth shared by <see cref="AddStandardModelHarness"/> and
+    /// <see cref="AgentFactory.AddStandardAgent"/> — add new standard sensors here only.
+    /// </summary>
+    internal static void ApplyStandardDefaults(ModelHarnessBuilder builder) =>
+        builder
+            .WithToolRegistry<InMemoryToolRegistry>()
+            .WithSensor<StuckDetector>()
+            .WithSensor<ProgressCheckSensor>()
+            .WithSensor<PromptInjectionSensor>()
+            .WithOtelTracer();
 
     // ── Multi-agent ──────────────────────────────────────────────────────────
 

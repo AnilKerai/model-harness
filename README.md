@@ -593,6 +593,31 @@ services.AddModelHarness(builder => builder
 
 Everything below is opt-in whether you use `AddStandardModelHarness` or `AddModelHarness`.
 
+### Multi-agent setup
+
+For multi-agent systems use `AddAgentFactory` instead. Each named agent gets its own
+isolated sub-container — the standard and bare variants mirror the single-agent entry points:
+
+```csharp
+services.AddAgentFactory(factory =>
+{
+    // AddStandardAgent = AddStandardModelHarness equivalent (same defaults, same source of truth)
+    factory.AddStandardAgent("research", builder => builder
+        .WithSystemPrompt("...")
+        .WithModel(...));
+
+    // AddAgent = AddModelHarness equivalent (bare builder, no defaults)
+    factory.AddAgent("writer", builder => builder
+        .WithToolRegistry<InMemoryToolRegistry>()
+        .WithSystemPrompt("...")
+        .WithModel(...));
+});
+```
+
+`AddStandardAgent` and `AddStandardModelHarness` share a single internal helper
+(`ApplyStandardDefaults`) — adding a new standard sensor in one place automatically
+applies to both. See the [Multi-agent](#multi-agent) section for the full wiring pattern.
+
 ### Add a tool
 
 ```csharp
