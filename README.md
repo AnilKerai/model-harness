@@ -25,7 +25,7 @@ always a product decision, not a model decision.
 
 ---
 
-## Single-agent primitives
+## Agentic primitives
 
 Every agent, no matter how capable it looks, is an assembly of the same small set of building blocks. Understanding these primitives makes it easier to read this code and reason about where a new concern belongs.
 
@@ -36,10 +36,9 @@ Every agent, no matter how capable it looks, is an assembly of the same small se
 | **Perception** | What the agent can see right now — the shaped view of world state it reasons over before each model call. Every prompt is an act of perception design. Getting this right matters more than most people expect: what you omit is as important as what you include. Implemented here via the **Guide pattern** — a sequential pipeline of guides that each contribute to a shared context draft before every model call. |
 | **Control flow** | The loop that decides what runs next and in what order: call model → act on response → repeat. Budget enforcement, rate limiting, and checkpoint/resume are all control-flow concerns. The loop is deceptively simple; almost all agent reliability problems are really control-flow problems in disguise. |
 | **Guardrails** | Checkpoints that intercept and shape agent behaviour at declared points in the loop — before the model call, after it, before a tool runs, after it, before the final answer is accepted. Guardrails observe and redirect; they do not take turns away from the model. Implemented here via the **Sensor pattern** — sensors run in parallel at five hookpoints and feed interventions back through the guide pipeline so the model can self-correct. |
+| **Sub-agents** | Agents calling other agents — an orchestrator delegates a sub-task to a specialist, gets a result back, and continues. From the calling agent's perspective a sub-agent is just a tool: it takes a task and returns a result. The isolation contract is what makes this composable — each agent runs in its own container with its own model, sensors, and budget. Implemented here via **`AgentFactory`** and **`AgentTool`** — see the [Multi-agent](#multi-agent) section. |
 
-Most agent complexity is a composition of these five — not something fundamentally new. A "research agent" is control flow + tools + memory. A "safe agent" is the same, with guardrails. Building the framework around named primitives keeps the seams obvious: when a new concern arrives, there is usually a clear home for it.
-
-Multi-agent systems add a sixth primitive — sub-agents — where agents call other agents and aggregate results. Covered in the [Multi-agent](#multi-agent) section below.
+Most agent complexity is a composition of these six — not something fundamentally new. A "research agent" is control flow + tools + memory. An "orchestrated pipeline" adds sub-agents. Building the framework around named primitives keeps the seams obvious: when a new concern arrives, there is usually a clear home for it.
 
 ---
 
