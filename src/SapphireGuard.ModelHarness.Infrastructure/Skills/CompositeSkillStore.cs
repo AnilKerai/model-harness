@@ -45,4 +45,10 @@ public sealed class CompositeSkillStore(
 
     public Task DeleteAsync(string name, CancellationToken ct) =>
         agentStore.DeleteAsync(name, ct);
+
+    public Task<IReadOnlyList<SkillVersion>> ListVersionsAsync(string name, CancellationToken ct) =>
+        agentStore.ListVersionsAsync(name, ct);
+
+    public Task<Skill?> GetVersionAsync(string name, string versionId, CancellationToken ct) =>
+        agentStore.GetVersionAsync(name, versionId, ct);
 }

@@ -70,4 +70,82 @@ public sealed class FileSkillStoreTests : IDisposable
         var store = new FileSkillStore(_dir);
         Assert.Empty(await store.ListAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Save_SecondSave_ArchivesPreviousVersion()
+    {
+        var store = new FileSkillStore(_dir);
+        var v1 = new Skill("greet", "Greets user", "when greeting", "Say hi.", "1.0.0");
+        var v2 = new Skill("greet", "Greets user warmly", "when greeting", "Say hello!", "2.0.0");
+
+        await store.SaveAsync(v1, CancellationToken.None);
+        await store.SaveAsync(v2, CancellationToken.None);
+
+        var current = await store.GetAsync("greet", CancellationToken.None);
+        Assert.Equal("Say hello!", current!.Body);
+
+        var versions = await store.ListVersionsAsync("greet", CancellationToken.None);
+        Assert.Single(versions);
+        Assert.Equal("Say hi.", versions[0].Skill.Body);
+    }
+
+    [Fact]
+    public async Task ListVersions_NoHistory_ReturnsEmpty()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("fresh", "d", "u", "b"), CancellationToken.None);
+
+        Assert.Empty(await store.ListVersionsAsync("fresh", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ListVersions_MultipleOverwrites_ReturnedNewestFirst()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("s", "d", "u", "v1"), CancellationToken.None);
+        await Task.Delay(1100); // ensure distinct timestamps (1-second resolution)
+        await store.SaveAsync(new Skill("s", "d", "u", "v2"), CancellationToken.None);
+        await Task.Delay(1100);
+        await store.SaveAsync(new Skill("s", "d", "u", "v3"), CancellationToken.None);
+
+        var versions = await store.ListVersionsAsync("s", CancellationToken.None);
+
+        Assert.Equal(2, versions.Count);
+        Assert.Equal("v2", versions[0].Skill.Body);
+        Assert.Equal("v1", versions[1].Skill.Body);
+    }
+
+    [Fact]
+    public async Task GetVersion_ValidId_ReturnsSnapshot()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("s", "d", "u", "original"), CancellationToken.None);
+        await store.SaveAsync(new Skill("s", "d", "u", "updated"), CancellationToken.None);
+
+        var versions = await store.ListVersionsAsync("s", CancellationToken.None);
+        var loaded = await store.GetVersionAsync("s", versions[0].Id, CancellationToken.None);
+
+        Assert.NotNull(loaded);
+        Assert.Equal("original", loaded!.Body);
+    }
+
+    [Fact]
+    public async Task GetVersion_UnknownId_ReturnsNull()
+    {
+        var store = new FileSkillStore(_dir);
+        Assert.Null(await store.GetVersionAsync("s", "doesnotexist", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Delete_DoesNotRemoveHistory()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("s", "d", "u", "v1"), CancellationToken.None);
+        await store.SaveAsync(new Skill("s", "d", "u", "v2"), CancellationToken.None);
+
+        await store.DeleteAsync("s", CancellationToken.None);
+
+        Assert.Null(await store.GetAsync("s", CancellationToken.None));
+        Assert.Single(await store.ListVersionsAsync("s", CancellationToken.None));
+    }
 }

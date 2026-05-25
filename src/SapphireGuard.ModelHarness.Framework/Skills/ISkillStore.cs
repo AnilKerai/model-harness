@@ -20,4 +20,20 @@ public interface ISkillStore
 
     /// <summary>Removes a skill by name. No-op if the skill does not exist.</summary>
     Task DeleteAsync(string name, CancellationToken ct);
+
+    /// <summary>
+    /// Returns point-in-time snapshots archived before each overwrite, newest first.
+    /// Returns an empty list when no history exists or the implementation does not
+    /// support versioning.
+    /// </summary>
+    Task<IReadOnlyList<SkillVersion>> ListVersionsAsync(string name, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<SkillVersion>>([]);
+
+    /// <summary>
+    /// Returns a specific archived snapshot by its <see cref="SkillVersion.Id"/>, or
+    /// <see langword="null"/> if not found. The implementation does not support versioning
+    /// by default.
+    /// </summary>
+    Task<Skill?> GetVersionAsync(string name, string versionId, CancellationToken ct) =>
+        Task.FromResult<Skill?>(null);
 }
