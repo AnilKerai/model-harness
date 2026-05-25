@@ -335,7 +335,11 @@ How it works, in one turn:
 3. When there's something worth keeping, the model calls `skill_manage` to save it.
 
 Each skill is persisted as a `SKILL.md` file (YAML frontmatter + markdown body),
-so they survive between runs.
+so they survive between runs. Every time the model overwrites a skill, `FileSkillStore`
+archives the previous version to `.history/{name}/{timestamp}.md` before writing the new
+one — giving operators a full point-in-time record they can inspect or restore via
+`ISkillStore.ListVersionsAsync` and `GetVersionAsync`. The model always sees only the
+current version; history is an operator safety net, not a model-visible capability.
 
 See `samples/SkillLearning` for a runnable, no-API-key demo: run 1 saves a skill, and
 run 2 loads it from disk and reuses it.
@@ -353,6 +357,7 @@ Every choice below keeps that logic out of the framework.
 | **Free until used** | The catalogue guide is always wired in, but the default store is empty — so it shows nothing and costs nothing until you opt in. |
 | **Show a short list, load on demand** | Every prompt carries only the skill names and when-to-use lines (cheap). The full write-up loads only when the model asks for it, so cost stays low even with lots of skills. |
 | **Its own store, separate from memory** | Skills (named, with a body) are a different shape from memory snippets, so they get their own `ISkillStore` and the two can evolve independently. |
+| **Version history is an operator concern** | Every overwrite archives the previous `SKILL.md` to a `.history/` subfolder. The model always sees the current version — history is a safety net for the operator (inspect, restore, audit), not something the model reasons about. `ISkillStore` exposes `ListVersionsAsync` / `GetVersionAsync` for programmatic access; `NullSkillStore` and `CompositeSkillStore` get no-op defaults automatically. |
 
 In short: **the harness stores, lists, and hands skills to the model. It never decides
 when to save one, or whether the agent is "improving"** — the model makes that call.
@@ -804,7 +809,7 @@ These are things every agent needs, regardless of domain. The framework provides
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
 | Tool dispatch | `IToolRegistry` | ✅ |
 | Skills plumbing — listing and loading pre-authored skill documents | `SkillsGuide` / `ISkillStore` / `skill_view` | ✅ |
-| Learning plumbing — persisting agent-saved skills across episodes | `ISkillStore` / `skill_manage` | ✅ |
+| Learning plumbing — persisting agent-saved skills across episodes, with version history | `ISkillStore` / `FileSkillStore` / `skill_manage` | ✅ |
 | Human-in-the-loop plumbing — suspend on `ask_human`, resume via `ResumeWithHumanAnswer` | `AskHumanTool` / `IHumanNotifier` | ✅ |
 | Model transport | `IModelClient` | ✅ |
 | Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
@@ -837,7 +842,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Term | Definition |
 |---|---|
 | **Agent** | An Agent = Model + Harness. A loop-driven process that takes a natural-language task, uses tools and a model to produce a result, and records every step it takes. |
-| **Agent Learning** | The ability for an agent to write its own skills at runtime, capturing procedures it works out so they can be reused across episodes. Implemented via the same `SKILL.md` format. The model decides when to save via `skill_manage`; the harness just persists the file. Enable with `WithLearning(dir)`. |
+| **Agent Learning** | The ability for an agent to write its own skills at runtime, capturing procedures it works out so they can be reused across episodes. Implemented via the same `SKILL.md` format. The model decides when to save via `skill_manage`; the harness persists the file and archives the previous version to `.history/` automatically. Enable with `WithLearning(dir)`. |
 | **AgentOutcome** | The terminal result of a run: final answer, status (`Done`, `PartialResult`, `Failed`, `AwaitingHuman`), and the last `AgentState`. When status is `AwaitingHuman`, `PendingHumanInput` carries the `CallId` and question needed to resume. |
 | **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn — the trajectory is the log of those transitions. |
 | **Budget** | Hard limits on a run: `MaxTurns`, `MaxContextTokens`, `MaxCostUsd`, `MaxWallClock`. Checked at the top of every turn before any sensor or model call. |
@@ -850,6 +855,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | **Rate limiter** | Checks provider sliding-window limits (calls/min, tokens/min) before each model call. Returns a `RetryAfter` duration when limited; the loop waits then retries. Default is a no-op — configure with `WithRateLimiter`. |
 | **Sensor** | Observes the loop at declared hookpoints and can raise a concern. Sensors run in parallel; the loop's response to a concern depends on the hookpoint (see the hookpoint table). |
 | **Skill** | A `SKILL.md` document — YAML frontmatter plus a markdown body — that gives an agent instructions for a specific domain. The [agentskills.io](https://agentskills.io) format. Surfaced into the prompt by `SkillsGuide`; loaded on demand via `skill_view`. Never executed as code. Configure with `WithSkills(dir)`. |
+| **SkillVersion** | A point-in-time snapshot of a skill, archived automatically by `FileSkillStore` before each overwrite. Carries an `Id` (timestamp string used as a lookup key), `ArchivedAt`, and the full `Skill` at that moment. Accessible to operators via `ISkillStore.ListVersionsAsync` and `GetVersionAsync`; never surfaced to the model. |
 | **Tool** | Something the model can invoke by name. The harness dispatches the call; the model decides when and why to use it. |
 | **Trajectory** | The append-only, ordered list of `Step`s on `AgentState`. It is the durable log of everything the agent has done and seen. Three step types: `ModelCallStep` (a model call and its response), `ToolCallStep` (a tool invocation and its result), `SensorInterventionStep` (a sensor concern and its reason). |
 | **Turn** | One iteration of the loop: build context → call model → act on response. Each turn appends one or more `Step`s to the trajectory. |
