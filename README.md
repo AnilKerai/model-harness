@@ -306,10 +306,12 @@ documents that capture a procedure it worked out, so it can reuse it next time i
 of figuring it out again. Nothing about the model itself changes; the only thing that
 changes is what we show it on the next run.
 
-> This is an experimental capability. Agent learning via in-context procedural memory
-> is not yet an established industry pattern — the boundary between "what the harness
-> owns" and "what belongs above it" is still being explored here. Treat it as a proposal
-> rather than a proven approach.
+> Anthropic validates this pattern directly: their [Memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool)
+> lets agents store and retrieve knowledge as plain files between sessions, and their
+> [Dreams](https://platform.claude.com/docs/en/managed-agents/dreams) feature consolidates
+> those files asynchronously across many transcripts — the cross-episode layer this harness
+> deliberately leaves above itself. The boundary between what the harness owns and what
+> belongs above it is still worth being deliberate about, but the core pattern is proven.
 
 This reuses the two core patterns: a **guide** surfaces which skills exist, and **tools**
 let the model load and save them. The loop has no knowledge of either.
