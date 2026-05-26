@@ -55,9 +55,9 @@ Sensors may block actions but must never take turns away from the model — the 
 ### State
 `AgentState` is an immutable record. Every turn produces a new state via `with`-expressions. The trajectory (`IReadOnlyList<Step>`) is the append-only log of `ModelCallStep`, `ToolCallStep`, and `SensorInterventionStep`.
 
-## Key extension seams
+## Key ports
 
-| Seam | Interface | Default |
+| Port | Interface | Default |
 |---|---|---|
 | Model transport | `IModelClient` | `ClaudeModelClient` (Anthropic) / `FakeModelClient` |
 | Tool registry | `IToolRegistry` | `InMemoryToolRegistry` |

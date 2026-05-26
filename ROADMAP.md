@@ -1,6 +1,6 @@
 # Roadmap
 
-Features are grouped by theme. Each item links to the seam in the codebase
+Features are grouped by theme. Each item links to the port in the codebase
 where the implementation would live.
 
 ---
@@ -19,8 +19,8 @@ where the implementation would live.
 - [x] `HarnessInstructionsGuide` — appends harness conventions to the system prompt; teaches the model to treat `[HARNESS OBSERVATION — ...]` notes as directives (feedforward complement to sensor feedback)
 - [x] `TrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt; sensor notes use `[HARNESS OBSERVATION — ...]` prefix matching what `HarnessInstructionsGuide` declares
 - [x] Token-aware trajectory compaction — `TrajectoryGuide` trims oldest steps when estimated token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped
-- [x] `MemoryGuide` — seam for long-term memory; default is `NullMemoryStore` (no-op); replace with a vector store or knowledge graph
-- [x] `ToolSelectorGuide` — seam for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
+- [x] `MemoryGuide` — port for long-term memory; default is `NullMemoryStore` (no-op); replace with a vector store or knowledge graph
+- [x] `ToolSelectorGuide` — port for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
 - [ ] ~~Progressive tool discovery~~ — removed from backlog; see the ADR in README.md (tool relevance ranking row). Short version: a routing layer papers over an agent design problem. An agent with 20+ tools is already a smell; the right fix is decomposition, not a router.
 - [x] ReAct loop / goal reiteration — `TrajectoryGuide` re-injects the original `state.TaskText` as a `[ORIGINAL GOAL]` system note on every turn; prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns, especially after compaction drops early history
 - [x] Intermediate validation gate — `ProgressCheckSensor` fires at `PreModelCall` every N completed turns (configurable, default 5) and annotates the trajectory with a structured checkpoint prompt; included in `AddStandardModelHarness` by default
@@ -33,7 +33,7 @@ where the implementation would live.
 - [x] `ToolResultSanityCheckSensor` — PostToolCall; validates result shape and per-tool custom rules
 - [x] Per-hookpoint intervention semantics: sensors may block actions but must never take turns away from the model. PreModelCall injects a note and proceeds; PostModelCall suppresses content and loops back; PreToolCall blocks dispatch and records an error result; PostToolCall is advisory-only; PreReturn loops back for self-correction
 - [x] `PromptInjectionSensor` — PostToolCall; scans inbound tool results for injection patterns (instruction overrides, persona hijacks, role overrides, etc.); flags with an untrusted-content warning; included in `AddStandardModelHarness` by default
-- [ ] ~~Irreversible action gate~~ — removed from backlog; the gate only makes sense when a human is available to answer, which an ambient agent cannot guarantee. The seam already exists (`PreToolCall` blocks dispatch; `IHumanChannel` routes questions; checkpoint/resume enables suspension). What counts as irreversible, who gets notified, and how long to wait are system design decisions the harness cannot make — documented in user concerns ADR instead.
+- [ ] ~~Irreversible action gate~~ — removed from backlog; the gate only makes sense when a human is available to answer, which an ambient agent cannot guarantee. The ports already exist (`PreToolCall` blocks dispatch; `IHumanChannel` routes questions; checkpoint/resume enables suspension). What counts as irreversible, who gets notified, and how long to wait are system design decisions the harness cannot make — documented in user concerns ADR instead.
 
 ### Tools
 - [x] `ITool` / `IToolRegistry` / `ToolDefinition` — tool abstraction decoupled from `IModelClient`
@@ -50,7 +50,7 @@ where the implementation would live.
 - [x] `ClaudeModelClient` — Anthropic SDK adapter; handles message alternation, tool result inlining, cost tracking
 - [x] `OllamaModelClient` — OllamaSharp v5 adapter; stateful tool-call grouping pass; cost is always zero (local inference)
 - [x] `AzureOpenAIModelClient` — Azure AI Foundry / Azure OpenAI Service adapter (`Infrastructure.AzureOpenAI`); supports API key and `DefaultAzureCredential` (managed identity); `WithAzureOpenAIModel` DI extension; `samples/AzureOpenAI` demo
-- [ ] ~~Additional model provider adapters (OpenAI, Google Gemini)~~ — removed from backlog; Anthropic, Azure AI Foundry, and Ollama cover current needs. `IModelClient` is the seam — add one if and when a new provider is needed.
+- [ ] ~~Additional model provider adapters (OpenAI, Google Gemini)~~ — removed from backlog; Anthropic, Azure AI Foundry, and Ollama cover current needs. `IModelClient` is the port — add an adapter if and when a new provider is needed.
 
 ### DI / composition
 - [x] `AddModelHarness(systemPrompt)` — aggregate registration with `TryAdd`/`Replace` discipline
@@ -59,14 +59,14 @@ where the implementation would live.
 - [x] Multi-agent support — `AgentFactory` builds an isolated `ServiceProvider` per named agent (fresh `ServiceCollection`, no shared services); `AgentTool` exposes any named agent as an `ITool` so orchestrators delegate via the standard tool primitive; `AddAgentFactory` + `AddStandardAgent` / `AddAgent` DI extensions in Infrastructure; `AddSubAgentAsTool` builder extension wires sub-agents without shared services; `samples/SubAgent` scripted no-API-key demo
 
 ### Persistence
-- [x] `ICheckpointStore` / `Checkpoint` / `NullCheckpointStore` — seam in `Framework.Persistence`; `HarnessLoop` auto-saves at the top of every turn (captures the fully-completed prior turn)
+- [x] `ICheckpointStore` / `Checkpoint` / `NullCheckpointStore` — port in `Framework.Persistence`; `HarnessLoop` auto-saves at the top of every turn (captures the fully-completed prior turn)
 - [x] `FileCheckpointStore` — writes `{dir}/{taskId}/{timestamp}_{id}.json`; lexicographic filename order makes `LoadLatestAsync` a trivial sort
 - [x] `StepJsonConverter` — custom `JsonConverter<Step>` using a `$type` discriminator; handles the polymorphic `Step` hierarchy without annotating the domain model
 - [x] `AddFileCheckpointStore(directory)` DI extension; `AddCheckpointStore<T>()` / factory override for custom backends
 - [x] At-least-once resume semantics — pass a loaded checkpoint's state (with `Status = Running`) back to `HarnessLoop.RunAsync`
 
 ### Human-in-the-loop
-- [x] `IHumanNotifier` — seam in `Framework.Tools`; one method: `NotifyAsync(HumanInputRequest, ct)` — fire-and-forget; implementation posts HTTP, publishes a bus message, sends Slack DM etc.
+- [x] `IHumanNotifier` — port in `Framework.Tools`; one method: `NotifyAsync(HumanInputRequest, ct)` — fire-and-forget; implementation posts HTTP, publishes a bus message, sends Slack DM etc.
 - [x] `HumanInputRequest` — carries `TaskId`, `CallId`, and `Question` across the suspension boundary
 - [x] `AskHumanTool` — standard `ITool` the model invokes; fires the notifier and returns `ToolResult { IsPending = true }` to signal suspension
 - [x] `ToolResult.IsPending` — flag detected by `HarnessLoop` after tool dispatch; triggers checkpoint save and `AwaitingHuman` return
@@ -74,11 +74,11 @@ where the implementation would live.
 - [x] `AgentState.ResumeWithHumanAnswer(callId, answer)` — replaces the pending `ToolCallStep` in the trajectory with the real answer; pass result back to `RunAsync` to continue the run
 - [x] `ConsoleHumanChannel` — dev-time `IHumanNotifier`; prints the question and returns immediately; the calling loop reads stdin after `RunAsync` suspends
 - [x] `AddAskHumanTool<TNotifier>()` / factory overload DI extension in `Infrastructure`
-- [x] Decision: HITL is a **system design concern**, not a harness concern — the harness provides the seam (`IHumanNotifier`) and suspends with `AwaitingHuman`; how the question is dispatched and the answer routed back are entirely the user's concern
+- [x] Decision: HITL is a **system design concern**, not a harness concern — the harness provides the port (`IHumanNotifier`) and suspends with `AwaitingHuman`; how the question is dispatched and the answer routed back are entirely the user's concern
 - [x] `samples/HitlSuspendResume` — scripted no-API-key demo of the full suspend/resume cycle
 
 ### Skills (procedural memory)
-- [x] `ISkillStore` / `Skill` / `SkillSummary` / `NullSkillStore` — seam in `Framework.Skills`; default is a no-op so the read side ships on with zero overhead
+- [x] `ISkillStore` / `Skill` / `SkillSummary` / `NullSkillStore` — port in `Framework.Skills`; default is a no-op so the read side ships on with zero overhead
 - [x] `SkillsGuide` — surfaces the skill catalogue (name + when-to-use) into context via progressive disclosure; emits nothing when no skills exist
 - [x] `ToolCatalogueGuide` — tool-catalogue rendering extracted out of `DefaultContextBuilder` into a guide via `ContextDraft.SystemSections`; all system-prompt sections are now guide-driven (the builder just concatenates)
 - [x] `FileSkillStore` — persists skills as `SKILL.md` (frontmatter + markdown body, minimal hand-rolled parser, no YAML dependency); `AddFileSkillStore(dir)`
@@ -89,7 +89,7 @@ where the implementation would live.
 ### Robustness
 - [x] Sensor intervention guard — `HarnessLoop` tracks consecutive sensor blocks; after 3 consecutive `PostModelCall` or `PreReturn` interventions the loop force-finalises with a clear reason rather than looping indefinitely
 - [x] Exception telemetry on tool failure — `ExecuteToolAsync` now catches exceptions from `toolRegistry.DispatchAsync`, converts them to `IsError` `ToolResult`s (type + message surfaced to the model), and logs via `tracer.LogToolCall`; tool crashes become recoverable errors rather than run-terminating exceptions
-- [ ] ~~Memory retrieval signal (`IMemoryQueryBuilder`)~~ — removed from backlog; the problem (stale query signal on long runs) is better solved by keeping runs focused and bounded via the budget, not by adding a retrieval seam. `MemoryGuide` passes `state.TaskText` — sufficient for well-scoped agents.
+- [ ] ~~Memory retrieval signal (`IMemoryQueryBuilder`)~~ — removed from backlog; the problem (stale query signal on long runs) is better solved by keeping runs focused and bounded via the budget, not by adding a retrieval port. `MemoryGuide` passes `state.TaskText` — sufficient for well-scoped agents.
 - [x] DI smoke tests — builder methods and `DependencyInjection.cs` files are `[ExcludeFromCodeCoverage]`; smoke tests live in `tests/.../Smoke/DiSmokeTests.cs`; resolve the container, run one turn against `FakeModelClient` to catch wiring regressions without testing implementation detail
 
 ### Testing
@@ -108,7 +108,7 @@ the mechanical `AgentStatus`.
 - **Outcome / success evaluation** (an `IOutcomeEvaluator`-style "was the run correct?"
   judge). Deciding correctness is a domain judgment the harness cannot make. Decisive
   test: a verdict, by design, *cannot influence the run* (record, never react), so it
-  has **no causal role in the loop** — unlike every seam the loop does invoke
+  has **no causal role in the loop** — unlike every port the loop does invoke
   (`IMemoryStore`, `ISkillStore`, `IHumanChannel`, `IModelClient`), each of which feeds
   the next turn. Judging belongs to whatever consumes `AgentOutcome`. (Runtime quality
   checks that *do* affect the run are already a `PreReturn` sensor.)
