@@ -10,7 +10,7 @@ public sealed class CallsPerMinuteRateLimiterTests
 
     private static AgentState EmptyState() => AgentState.NewTask("t", new Framework.State.Budget
     {
-        MaxTurns = 100, MaxContextTokens = 100_000, MaxCostUsd = 10m,
+        MaxTurns = 100, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(5)
     });
 

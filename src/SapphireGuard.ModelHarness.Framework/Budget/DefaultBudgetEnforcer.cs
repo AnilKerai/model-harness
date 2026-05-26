@@ -24,15 +24,22 @@ public sealed class DefaultBudgetEnforcer : IBudgetEnforcer
                 totalCost += call.Cost;
                 totalTokens += call.Usage.TotalTokens;
             }
+            else if (step is ToolCallStep toolStep)
+            {
+                if (toolStep.Result.Cost is { } delegatedCost)
+                    totalCost += delegatedCost;
+                if (toolStep.Result.Usage is { } delegatedUsage)
+                    totalTokens += delegatedUsage.TotalTokens;
+            }
         }
 
         if (turns >= budget.MaxTurns)
         {
             return BudgetCheckResult.Exhausted($"Reached MaxTurns ({budget.MaxTurns}).");
         }
-        if (totalCost >= budget.MaxCostUsd)
+        if (totalCost >= budget.MaxCost)
         {
-            return BudgetCheckResult.Exhausted($"Reached MaxCostUsd ({budget.MaxCostUsd:C}).");
+            return BudgetCheckResult.Exhausted($"Reached MaxCost ({budget.MaxCost:F4}).");
         }
         if (totalTokens >= budget.MaxContextTokens)
         {

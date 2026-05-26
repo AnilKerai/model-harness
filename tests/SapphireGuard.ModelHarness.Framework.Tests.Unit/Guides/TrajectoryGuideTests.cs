@@ -17,7 +17,7 @@ public sealed class TrajectoryGuideTests
         {
             MaxTurns = 10,
             MaxContextTokens = 100_000,
-            MaxCostUsd = 10m,
+            MaxCost = 10m,
             MaxWallClock = TimeSpan.FromMinutes(1)
         });
 

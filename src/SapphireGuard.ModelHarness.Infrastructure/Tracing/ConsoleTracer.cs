@@ -28,7 +28,7 @@ public sealed class ConsoleTracer : ITracer
             toolCalls = response.ToolCalls.Count,
             textPreview = Truncate(response.Text, 120),
             usage = new { input = response.Usage.InputTokens, output = response.Usage.OutputTokens },
-            costUsd = response.Cost
+            cost = response.Cost
         });
 
     public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration) =>

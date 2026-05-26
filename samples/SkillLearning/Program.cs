@@ -54,5 +54,5 @@ async Task<AgentOutcome> RunOnceAsync()
     await using var provider = services.BuildServiceProvider();
     return await provider.GetRequiredService<Agent>().RunAsync(
         TaskText,
-        budget: new Budget { MaxTurns = 4, MaxContextTokens = 100_000, MaxCostUsd = 1m, MaxWallClock = TimeSpan.FromSeconds(30) });
+        budget: new Budget { MaxTurns = 4, MaxContextTokens = 100_000, MaxCost = 1m, MaxWallClock = TimeSpan.FromSeconds(30) });
 }

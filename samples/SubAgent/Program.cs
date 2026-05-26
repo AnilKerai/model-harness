@@ -35,7 +35,7 @@ var outcome = await provider.GetRequiredService<AgentFactory>()
         {
             MaxTurns = 5,
             MaxContextTokens = 100_000,
-            MaxCostUsd = 1m,
+            MaxCost = 1m,
             MaxWallClock = TimeSpan.FromSeconds(30)
         });
 

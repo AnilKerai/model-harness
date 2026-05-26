@@ -24,6 +24,6 @@ await using var provider = services.BuildServiceProvider();
 
 var outcome = await provider.GetRequiredService<Agent>().RunAsync(
     "Echo a message for each step you take.",
-    budget: new Budget { MaxTurns = MaxTurns, MaxContextTokens = 100_000, MaxCostUsd = 1m, MaxWallClock = TimeSpan.FromSeconds(30) });
+    budget: new Budget { MaxTurns = MaxTurns, MaxContextTokens = 100_000, MaxCost = 1m, MaxWallClock = TimeSpan.FromSeconds(30) });
 
 AgentConsoleWriter.PrintOutcome(outcome);

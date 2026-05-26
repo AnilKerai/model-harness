@@ -12,7 +12,7 @@ public sealed class ToolCatalogueGuideTests
     private static AgentState State() =>
         AgentState.NewTask("task", new StateBudget
         {
-            MaxTurns = 10, MaxContextTokens = 100_000, MaxCostUsd = 1m,
+            MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 1m,
             MaxWallClock = TimeSpan.FromMinutes(1)
         });
 

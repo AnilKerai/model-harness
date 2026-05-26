@@ -12,7 +12,7 @@ public sealed class DefaultContextBuilderTests
     private static AgentState State(string task = "do the thing") =>
         AgentState.NewTask(task, new StateBudget
         {
-            MaxTurns = 10, MaxContextTokens = 100_000, MaxCostUsd = 10m,
+            MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m,
             MaxWallClock = TimeSpan.FromMinutes(1)
         });
 

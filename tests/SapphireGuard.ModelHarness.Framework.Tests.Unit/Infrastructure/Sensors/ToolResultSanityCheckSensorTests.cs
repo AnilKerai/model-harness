@@ -12,7 +12,7 @@ public sealed class ToolResultSanityCheckSensorTests
 {
     private static AgentState State() => AgentState.NewTask("t", new StateBudget
     {
-        MaxTurns = 10, MaxContextTokens = 100_000, MaxCostUsd = 10m,
+        MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(1)
     });
 

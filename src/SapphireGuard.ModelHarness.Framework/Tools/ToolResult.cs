@@ -1,3 +1,5 @@
+using SapphireGuard.ModelHarness.Framework.State;
+
 namespace SapphireGuard.ModelHarness.Framework.Tools;
 
 /// <summary>Outcome of a tool execution, surfaced back to the model as a tool result message.</summary>
@@ -9,4 +11,12 @@ namespace SapphireGuard.ModelHarness.Framework.Tools;
 /// The harness suspends with <see cref="SapphireGuard.ModelHarness.Framework.State.AgentStatus.AwaitingHuman"/> and
 /// the caller must resume via <see cref="SapphireGuard.ModelHarness.Framework.State.AgentState.ResumeWithHumanAnswer"/>.
 /// </param>
-public sealed record ToolResult(string CallId, string Content, bool IsError = false, bool IsPending = false);
+/// <param name="Cost">Optional cost incurred by the tool (e.g. a sub-agent delegation). Propagated to the parent budget.</param>
+/// <param name="Usage">Optional token usage incurred by the tool (e.g. a sub-agent delegation). Propagated to the parent budget.</param>
+public sealed record ToolResult(
+    string CallId,
+    string Content,
+    bool IsError = false,
+    bool IsPending = false,
+    decimal? Cost = null,
+    Usage? Usage = null);

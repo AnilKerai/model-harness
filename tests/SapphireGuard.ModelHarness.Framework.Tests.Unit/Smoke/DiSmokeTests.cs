@@ -14,7 +14,7 @@ public sealed class DiSmokeTests
     {
         MaxTurns = 1,
         MaxContextTokens = 100_000,
-        MaxCostUsd = 1m,
+        MaxCost = 1m,
         MaxWallClock = TimeSpan.FromSeconds(10)
     };
 

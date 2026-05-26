@@ -11,7 +11,7 @@ public sealed class DefaultBudgetEnforcerTests
     {
         MaxTurns = 10,
         MaxContextTokens = 100_000,
-        MaxCostUsd = 10m,
+        MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(5)
     };
 
@@ -52,7 +52,7 @@ public sealed class DefaultBudgetEnforcerTests
     [Fact]
     public void Check_CostAtLimit_ReturnsExhausted()
     {
-        var budget = Generous with { MaxCostUsd = 1m };
+        var budget = Generous with { MaxCost = 1m };
         var state = EmptyState(budget)
             .AppendStep(ModelStep(cost: 0.5m))
             .AppendStep(ModelStep(cost: 0.5m));
@@ -60,7 +60,7 @@ public sealed class DefaultBudgetEnforcerTests
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
 
         Assert.True(result.IsExhausted);
-        Assert.Contains("MaxCostUsd", result.Reason);
+        Assert.Contains("MaxCost", result.Reason);
     }
 
     [Fact]
@@ -101,5 +101,67 @@ public sealed class DefaultBudgetEnforcerTests
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
 
         Assert.False(result.IsExhausted);
+    }
+
+    [Fact]
+    public void Check_ToolCallStepWithDelegatedCost_ExhaustsWhenTotalCostReachesLimit()
+    {
+        var budget = Generous with { MaxCost = 1m };
+        var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
+            new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+            new Tools.ToolResult("id", "ok", Cost: 1.0m));
+        var state = EmptyState(budget).AppendStep(toolStep);
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
+    }
+
+    [Fact]
+    public void Check_ToolCallStepWithDelegatedUsage_ExhaustsWhenTokensReachLimit()
+    {
+        var budget = Generous with { MaxContextTokens = 100 };
+        var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
+            new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+            new Tools.ToolResult("id", "ok", Usage: new Usage(60, 40)));
+        var state = EmptyState(budget).AppendStep(toolStep);
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxContextTokens", result.Reason);
+    }
+
+    [Fact]
+    public void Check_ToolCallStepWithNullCostAndUsage_DoesNotContributeToTotals()
+    {
+        var budget = Generous with { MaxCost = 0.5m, MaxContextTokens = 50 };
+        // Tool result with null Cost and null Usage should not push over the limit
+        var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
+            new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+            new Tools.ToolResult("id", "ok"));
+        var state = EmptyState(budget).AppendStep(toolStep);
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.False(result.IsExhausted);
+    }
+
+    [Fact]
+    public void Check_ModelCallAndToolCallCostsCombined_AggregatesCorrectly()
+    {
+        var budget = Generous with { MaxCost = 1m };
+        // 0.6 from model call + 0.5 from delegated tool = 1.1 ≥ 1.0
+        var state = EmptyState(budget)
+            .AppendStep(ModelStep(cost: 0.6m))
+            .AppendStep(new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
+                new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+                new Tools.ToolResult("id", "ok", Cost: 0.5m)));
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
     }
 }

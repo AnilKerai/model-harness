@@ -32,9 +32,24 @@ public sealed class AgentTool(string agentName, AgentFactory factory) : ITool
 
         var outcome = await factory.GetAgent(agentName).RunAsync(task, ct: ct);
 
+        var delegatedCost = 0m;
+        var totalInput = 0;
+        var totalOutput = 0;
+        foreach (var step in outcome.FinalState.Trajectory)
+        {
+            if (step is ModelCallStep modelStep)
+            {
+                delegatedCost += modelStep.Cost;
+                totalInput += modelStep.Usage.InputTokens;
+                totalOutput += modelStep.Usage.OutputTokens;
+            }
+        }
+
         return new ToolResult(
             call.CallId,
             outcome.FinalAnswer ?? outcome.FailureReason ?? "(no result)",
-            IsError: outcome.Status == AgentStatus.Failed);
+            IsError: outcome.Status == AgentStatus.Failed,
+            Cost: delegatedCost > 0 ? delegatedCost : null,
+            Usage: (totalInput + totalOutput) > 0 ? new Usage(totalInput, totalOutput) : null);
     }
 }

@@ -27,8 +27,8 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         "agent.tokens.input", unit: "{token}", description: "Total input tokens consumed.");
     private static readonly Counter<long> OutputTokens = Meter.CreateCounter<long>(
         "agent.tokens.output", unit: "{token}", description: "Total output tokens produced.");
-    private static readonly Counter<double> CostUsd = Meter.CreateCounter<double>(
-        "agent.cost.usd", unit: "USD", description: "Accumulated model call cost.");
+    private static readonly Counter<double> Cost = Meter.CreateCounter<double>(
+        "agent.cost", unit: "", description: "Accumulated model call cost.");
     private static readonly Histogram<double> ToolDurationMs = Meter.CreateHistogram<double>(
         "agent.tool.duration", unit: "ms", description: "Tool execution duration.");
     private static readonly Counter<long> SensorInterventions = Meter.CreateCounter<long>(
@@ -56,14 +56,14 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
                 ["tool.calls"] = response.ToolCalls.Count,
                 ["tokens.input"] = response.Usage.InputTokens,
                 ["tokens.output"] = response.Usage.OutputTokens,
-                ["cost.usd"] = (double)response.Cost,
+                ["cost"] = (double)response.Cost,
             }));
         }
 
         var tags = new TagList { { "task.id", taskId } };
         InputTokens.Add(response.Usage.InputTokens, tags);
         OutputTokens.Add(response.Usage.OutputTokens, tags);
-        CostUsd.Add((double)response.Cost, tags);
+        Cost.Add((double)response.Cost, tags);
     }
 
     public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration)

@@ -27,7 +27,7 @@ var budget = new Budget
 {
     MaxTurns = 5,
     MaxContextTokens = 100_000,
-    MaxCostUsd = 1m,
+    MaxCost = 1m,
     MaxWallClock = TimeSpan.FromMinutes(1)
 };
 

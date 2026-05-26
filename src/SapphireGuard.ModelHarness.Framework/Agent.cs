@@ -12,7 +12,7 @@ public sealed class Agent(HarnessLoop loop)
     {
         MaxTurns = 10,
         MaxContextTokens = 100_000,
-        MaxCostUsd = 1.00m,
+        MaxCost = 1.00m,
         MaxWallClock = TimeSpan.FromMinutes(2)
     };
 
