@@ -168,7 +168,7 @@ Guides run **sequentially** so each one can build on what the previous added —
 a tool-selector guide can, for example, inspect memory snippets before deciding
 which tools to expose.
 
-`TrajectoryGuide` implements the [Focused ReAct](https://arxiv.org/abs/2501.02955) pattern: it re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
+`TrajectoryGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
 
 ### The Sensor pattern — observing and intervening
 
