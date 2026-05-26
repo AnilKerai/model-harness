@@ -76,7 +76,7 @@ Sensors may block actions but must never take turns away from the model — the 
 
 ## Coding conventions
 
-- SOLID principles and Clean / Onion Architecture throughout.
+- SOLID principles and Clean / Onion Architecture with ports and adapters throughout.
 - Primary constructors preferred.
 - Interfaces over concrete implementations.
 - Small, focused changes — build after each set of changes.
