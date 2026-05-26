@@ -20,7 +20,7 @@ public sealed class PiiRedactionSensor : ISensor
     private static readonly (string Label, Regex Pattern)[] Patterns =
     [
         ("email",       new Regex(@"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",                   RegexOptions.Compiled)),
-        ("phone",       new Regex(@"\+?(?=(?:[^\d]*\d){9})[\d\s\-().]{9,17}",                             RegexOptions.Compiled)),
+        ("phone",       new Regex(@"(?<!\d)(?=[+\d])\+?(?!(?:19|20)\d{2}[-\s])(?=(?:[^\d]*\d){9})[\d \t\-()]{9,17}", RegexOptions.Compiled)),
         ("credit-card", new Regex(@"\b(?:\d[ \-]?){13,16}\b",                                             RegexOptions.Compiled)),
         ("uk-ni",       new Regex(@"\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b",                                 RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("us-ssn",      new Regex(@"\b\d{3}-\d{2}-\d{4}\b",                                               RegexOptions.Compiled)),

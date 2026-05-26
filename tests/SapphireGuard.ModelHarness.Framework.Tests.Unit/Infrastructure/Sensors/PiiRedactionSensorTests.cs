@@ -83,11 +83,29 @@ public sealed class PiiRedactionSensorTests
         Assert.True(result.IsIntervene);
     }
 
-    // ISO dates have only 8 digits — the tightened phone regex requires 9+.
+    // Real UK mobile that must still be detected.
+    [Fact]
+    public async Task Check_UkMobile_Intervenes()
+    {
+        var step = ModelStep("You can reach me on 07700 900123 if needed.");
+        var result = await Sut.CheckAsync(HookPoint.PostModelCall, State(), step, CancellationToken.None);
+        Assert.True(result.IsIntervene);
+        Assert.Contains("phone", result.Reason);
+    }
+
+    // Patterns that were triggering false positives in production runs.
     [Theory]
+    // ISO date alone — 8 digits
     [InlineData("The incident started on 2026-05-24.")]
+    // Timestamp with hour — year prefix blocks match
+    [InlineData("Empty files observed since 2026-05-24 22:00 UTC.")]
+    // Version number — dots excluded from char class
     [InlineData("Version v2.14.1 introduced the regression.")]
-    public async Task Check_DateOrVersion_DoesNotMatchPhonePattern(string text)
+    // Version number + multiline list — newline excluded from char class
+    [InlineData("Regression in v2.14.1\n4. Apply the hotfix.")]
+    // Hotfix ID embedded in multiline bullet — newline breaks the run
+    [InlineData("Applied hotfix KB-4421)\n   - No config changes needed.")]
+    public async Task Check_FalsePositivePattern_DoesNotIntervene(string text)
     {
         var step = ModelStep(text);
         var result = await Sut.CheckAsync(HookPoint.PostModelCall, State(), step, CancellationToken.None);

@@ -23,6 +23,12 @@ public sealed class HarnessInstructionsGuide : IGuide
         - Comply with the stated constraint fully — partial compliance is not acceptable.
         - Do not repeat the flagged behaviour under any circumstances.
         The loop will keep retrying until you comply. There is no path forward except full compliance.
+
+        ## Trajectory and tool call deduplication
+
+        The trajectory is the complete, append-only record of all work done this session — including any work done before a suspension and resume.
+        - Do not call a tool with arguments identical to a call already present in the trajectory. The result will be identical; repeating it wastes turns and budget.
+        - If ask_human appears in the trajectory and already has a result, the human has responded. Act on that answer immediately — do not re-run prior investigation steps before proceeding.
         """;
 
     public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
