@@ -8,8 +8,6 @@ namespace SapphireGuard.ModelHarness.Framework.Tracing;
 [ExcludeFromCodeCoverage]
 public sealed class NullTracer : ITracer
 {
-    public static readonly NullTracer Instance = new();
-
     public void StartTrace(string taskId, string taskText) { }
     public void LogModelCall(string taskId, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) { }
     public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration) { }
