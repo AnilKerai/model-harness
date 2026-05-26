@@ -62,9 +62,7 @@ services.AddStandardModelHarness(builder =>
         .WithTool<SearchKnownIssuesTool>()
         .WithTool<DraftResponseTool>()
         .WithAskHumanTool<ConsoleHumanChannel>()
-        .WithSensor<PiiRedactionSensor>()
-        .WithSensor<PromptInjectionSensor>()
-        .WithSensor<StuckDetector>();
+        .WithSensor<PiiRedactionSensor>();
 
     if (usingRealModel && provider == "anthropic")
         builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
