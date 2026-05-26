@@ -60,6 +60,16 @@ public sealed class PiiRedactionSensorTests
         Assert.Contains(expectedLabel, result.Reason);
     }
 
+    [Fact]
+    public async Task Check_PiiPattern_InterventionReasonIncludesMatchedText()
+    {
+        var step = ModelStep("Contact john@example.com for details.");
+        var result = await Sut.CheckAsync(HookPoint.PostModelCall, State(), step, CancellationToken.None);
+
+        Assert.True(result.IsIntervene);
+        Assert.Contains("john@example.com", result.Reason);
+    }
+
     // Credit card and SSN digit sequences also match the broad phone regex, so we only assert
     // that the sensor intervenes — not which specific label fires first.
     [Theory]
@@ -71,5 +81,17 @@ public sealed class PiiRedactionSensorTests
         var result = await Sut.CheckAsync(HookPoint.PostModelCall, State(), step, CancellationToken.None);
 
         Assert.True(result.IsIntervene);
+    }
+
+    // ISO dates have only 8 digits — the tightened phone regex requires 9+.
+    [Theory]
+    [InlineData("The incident started on 2026-05-24.")]
+    [InlineData("Version v2.14.1 introduced the regression.")]
+    public async Task Check_DateOrVersion_DoesNotMatchPhonePattern(string text)
+    {
+        var step = ModelStep(text);
+        var result = await Sut.CheckAsync(HookPoint.PostModelCall, State(), step, CancellationToken.None);
+
+        Assert.False(result.IsIntervene);
     }
 }

@@ -19,11 +19,11 @@ public sealed class PiiRedactionSensor : ISensor
 
     private static readonly (string Label, Regex Pattern)[] Patterns =
     [
-        ("email",       new Regex(@"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",       RegexOptions.Compiled)),
-        ("phone",       new Regex(@"(\+?[\d\s\-().]{10,17})",                                   RegexOptions.Compiled)),
-        ("credit-card", new Regex(@"\b(?:\d[ \-]?){13,16}\b",                                  RegexOptions.Compiled)),
-        ("uk-ni",       new Regex(@"\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b",                      RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("us-ssn",      new Regex(@"\b\d{3}-\d{2}-\d{4}\b",                                    RegexOptions.Compiled)),
+        ("email",       new Regex(@"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",                   RegexOptions.Compiled)),
+        ("phone",       new Regex(@"\+?(?=(?:[^\d]*\d){9})[\d\s\-().]{9,17}",                             RegexOptions.Compiled)),
+        ("credit-card", new Regex(@"\b(?:\d[ \-]?){13,16}\b",                                             RegexOptions.Compiled)),
+        ("uk-ni",       new Regex(@"\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b",                                 RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("us-ssn",      new Regex(@"\b\d{3}-\d{2}-\d{4}\b",                                               RegexOptions.Compiled)),
     ];
 
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
@@ -37,16 +37,18 @@ public sealed class PiiRedactionSensor : ISensor
 
         foreach (var (label, pattern) in Patterns)
         {
-            if (!pattern.IsMatch(text))
+            var match = pattern.Match(text);
+            if (!match.Success)
                 continue;
 
             var priorViolations = state.Trajectory
                 .OfType<SensorInterventionStep>()
                 .Count(s => s.SensorName == Name);
 
+            var matched = match.Value.Length > 40 ? match.Value[..40] + "…" : match.Value;
             var reason = priorViolations == 0
-                ? $"Response contains possible PII ({label}). Restate your answer without including any personal data."
-                : $"Response contains possible PII ({label}). This is violation {priorViolations + 1} — you have already been blocked {priorViolations} time(s). You must not include any personal data whatsoever.";
+                ? $"Response contains possible PII ({label}: \"{matched}\"). Restate your answer without including any personal data."
+                : $"Response contains possible PII ({label}: \"{matched}\"). This is violation {priorViolations + 1} — you have already been blocked {priorViolations} time(s). You must not include any personal data whatsoever.";
 
             return Task.FromResult(SensorResult.Intervene(reason));
         }
