@@ -95,7 +95,7 @@ where the implementation would live.
 - [x] DI smoke tests — builder methods and `DependencyInjection.cs` files are `[ExcludeFromCodeCoverage]`; smoke tests live in `tests/.../Smoke/DiSmokeTests.cs`; resolve the container, run one turn against `FakeModelClient` to catch wiring regressions without testing implementation detail
 
 ### Testing
-- [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 85 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
+- [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 209 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
 - [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
 
 ---
