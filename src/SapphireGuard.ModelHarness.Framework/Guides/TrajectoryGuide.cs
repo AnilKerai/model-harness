@@ -12,8 +12,10 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// When steps are evicted, the injected <see cref="ICompactionStrategy"/> decides what
 /// to put in their place — a bare omission note (<see cref="NullCompactionStrategy"/>)
 /// or an AI-generated prose summary (<c>AiCompactionStrategy</c> in Infrastructure).
+/// Must run last in the guide pipeline so it can measure all prior guide contributions
+/// and compute an accurate token budget rather than relying on a fixed reserve.
 /// </summary>
-public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy, int reservedTokens = 2000) : IGuide
+public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy) : IGuide
 {
     public string Name => "trajectory";
 
@@ -21,7 +23,7 @@ public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy, int 
     {
         var stepGroups = RenderSteps(state.Trajectory);
 
-        var budget = state.Budget.MaxContextTokens - reservedTokens;
+        var budget = state.Budget.MaxContextTokens - EstimateDraftTokens(draft);
         var trimCount = ComputeTrimCount(stepGroups, budget);
 
         if (trimCount > 0)
@@ -93,6 +95,17 @@ public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy, int 
                 break;
         }
         return false;
+    }
+
+    // Sums the estimated token cost of everything already written to the draft by prior guides
+    // (system prompt, memory snippets, system sections such as tool catalogue and skills).
+    // TrajectoryMessages is empty at this point — TrajectoryGuide hasn't written yet.
+    private static int EstimateDraftTokens(ContextDraft draft)
+    {
+        var total = EstimateTokens(draft.SystemPrompt);
+        total += draft.MemorySnippets.Sum(EstimateTokens);
+        total += draft.SystemSections.Sum(EstimateTokens);
+        return total;
     }
 
     private static int ComputeTrimCount(List<(Step Step, List<Message> Messages)> groups, int tokenBudget)

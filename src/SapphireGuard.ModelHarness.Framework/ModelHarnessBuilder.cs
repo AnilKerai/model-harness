@@ -24,6 +24,7 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
 {
     private readonly List<Func<IServiceProvider, ITracer>> _tracers = [];
     private readonly List<Func<IServiceProvider, IRateLimiter>> _rateLimiters = [];
+    private readonly List<Func<IServiceProvider, IGuide>> _customGuides = [];
 
     /// <summary>
     /// Direct access to the underlying <see cref="IServiceCollection"/> for registrations
@@ -210,12 +211,23 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
     }
 
     /// <summary>
-    /// Registers a custom guide by type. Multiple calls are additive. Custom guides run
-    /// after the seven built-in guides in registration order.
+    /// Adds a custom guide by type. Multiple calls are additive. Custom guides run after
+    /// the built-in guides and before <see cref="TrajectoryGuide"/>, which is always last.
     /// </summary>
     public ModelHarnessBuilder WithGuide<TImpl>() where TImpl : class, IGuide
     {
-        Services.AddSingleton<IGuide, TImpl>();
+        Services.TryAddSingleton<TImpl>();
+        _customGuides.Add(sp => sp.GetRequiredService<TImpl>());
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a custom guide via factory. Multiple calls are additive. Custom guides run after
+    /// the built-in guides and before <see cref="TrajectoryGuide"/>, which is always last.
+    /// </summary>
+    public ModelHarnessBuilder WithGuide(Func<IServiceProvider, IGuide> factory)
+    {
+        _customGuides.Add(factory);
         return this;
     }
 
@@ -238,6 +250,18 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
     {
         _rateLimiters.Add(factory);
         return this;
+    }
+
+    internal void ApplyGuides()
+    {
+        foreach (var factory in _customGuides)
+            Services.AddSingleton(factory);
+
+        // TrajectoryGuide is always registered last so it can measure the token cost
+        // of all prior guide contributions (system prompt, memory, tool catalogue, etc.)
+        // and compute an accurate context budget rather than relying on a fixed reserve.
+        Services.AddSingleton<IGuide>(sp =>
+            new TrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
     }
 
     internal void ApplyTracers()

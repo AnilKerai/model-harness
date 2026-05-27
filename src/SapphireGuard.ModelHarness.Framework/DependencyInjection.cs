@@ -38,18 +38,14 @@ public static class DependencyInjection
             .AddTracerDefault()
             .AddToolRegistryDefault()
             .AddCompactionStrategyDefault()
-            .AddHarnessInstructionsGuideDefault()
-            .AddTrajectoryGuideDefault()
-            .AddMemoryGuideDefault()
-            .AddToolSelectorGuideDefault()
-            .AddToolCatalogueGuideDefault()
-            .AddSkillsGuideDefault()
+            .AddDefaultGuidePipeline()
             .AddSensorRunnerDefault();
 
         var builder = new ModelHarnessBuilder(services);
         configure(builder);
         builder.ApplyTracers();
         builder.ApplyRateLimiters();
+        builder.ApplyGuides();
         return services;
     }
 
@@ -129,39 +125,22 @@ public static class DependencyInjection
         return services;
     }
 
-    private static IServiceCollection AddHarnessInstructionsGuideDefault(this IServiceCollection services)
+    /// <summary>
+    /// Registers the built-in guide pipeline in explicit execution order.
+    /// TrajectoryGuide is intentionally absent — it is always pinned last by
+    /// ModelHarnessBuilder.ApplyGuides() so it can measure all prior guide
+    /// contributions when computing its token budget.
+    /// Custom guides registered via builder.WithGuide() are inserted between
+    /// these built-ins and TrajectoryGuide.
+    /// </summary>
+    private static IServiceCollection AddDefaultGuidePipeline(this IServiceCollection services)
     {
         services.AddSingleton<IGuide, HarnessInstructionsGuide>();
-        return services;
-    }
-
-    private static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services)
-    {
-        services.AddSingleton<IGuide>(sp =>
-            new TrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
-        return services;
-    }
-
-    private static IServiceCollection AddMemoryGuideDefault(this IServiceCollection services)
-    {
         services.AddSingleton<IGuide, MemoryGuide>();
-        return services;
-    }
-
-    private static IServiceCollection AddToolSelectorGuideDefault(this IServiceCollection services)
-    {
+        // ToolSelectorGuide must precede ToolCatalogueGuide — the catalogue renders
+        // whatever tools the selector has approved for this turn.
         services.AddSingleton<IGuide, ToolSelectorGuide>();
-        return services;
-    }
-
-    private static IServiceCollection AddToolCatalogueGuideDefault(this IServiceCollection services)
-    {
         services.AddSingleton<IGuide, ToolCatalogueGuide>();
-        return services;
-    }
-
-    private static IServiceCollection AddSkillsGuideDefault(this IServiceCollection services)
-    {
         services.AddSingleton<IGuide, SkillsGuide>();
         return services;
     }

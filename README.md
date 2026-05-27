@@ -134,17 +134,16 @@ flowchart LR
 
     subgraph "Guide pipeline — runs before every model call"
         direction LR
-        D[ContextDraft\ninitialised] --> G1[SystemPromptGuide\nsets SystemPrompt]
-        G1 --> G2[HarnessInstructionsGuide\nappends harness conventions]
-        G2 --> G3[TrajectoryGuide\nrenders history]
-        G3 --> G4[MemoryGuide\nsurfaces snippets]
-        G4 --> G5[ToolSelectorGuide\nfilters AvailableTools]
-        G5 --> G6[ToolCatalogueGuide\nrenders tool catalogue]
-        G6 --> G7[SkillsGuide\nrenders skill catalogue]
-        G7 --> GN[... custom guides]
+        D[ContextDraft\ninitialised] --> G1[HarnessInstructionsGuide\nappends harness conventions]
+        G1 --> G2[MemoryGuide\nsurfaces snippets]
+        G2 --> G3[ToolSelectorGuide\nfilters AvailableTools]
+        G3 --> G4[ToolCatalogueGuide\nrenders tool catalogue]
+        G4 --> G5[SkillsGuide\nrenders skill catalogue]
+        G5 --> GN[... custom guides]
+        GN --> G6[TrajectoryGuide\nrenders history — always last]
     end
 
-    GN --> CB[DefaultContextBuilder\nassembles prompt]
+    G6 --> CB[DefaultContextBuilder\nassembles prompt]
     CB --> M([Model call])
 ```
 
@@ -183,9 +182,12 @@ Register it in the builder:
 services.AddModelHarness(builder => builder.WithGuide<MyGuide>());
 ```
 
-Guides run **sequentially** so each one can build on what the previous added —
-a tool-selector guide can, for example, inspect memory snippets before deciding
-which tools to expose.
+The pipeline order is explicit and fixed. Two ordering constraints drive it:
+
+- **`ToolSelectorGuide` before `ToolCatalogueGuide`** — the catalogue renders whatever tools the selector has approved for this turn; reversing them would always render the full tool list regardless of filtering.
+- **`TrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve.
+
+Custom guides registered via `builder.WithGuide<T>()` slot in after the built-ins and before `TrajectoryGuide`.
 
 `TrajectoryGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
 
