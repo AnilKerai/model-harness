@@ -50,7 +50,7 @@ public sealed class TrajectoryGuideTests
     private static async Task<ContextDraft> ContributeAsync(AgentState state)
     {
         var draft = new ContextDraft();
-        await new TrajectoryGuide().ContributeAsync(draft, state, CancellationToken.None);
+        await new TrajectoryGuide(new NullCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
         return draft;
     }
 

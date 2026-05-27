@@ -9,12 +9,15 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// Each step type has a distinct rendering: model turns as assistant messages,
 /// tool calls and results as paired messages, sensor interventions as assistant
 /// acknowledgements so the model continues from a committed correction posture.
+/// When steps are evicted, the injected <see cref="ICompactionStrategy"/> decides what
+/// to put in their place — a bare omission note (<see cref="NullCompactionStrategy"/>)
+/// or an AI-generated prose summary (<c>AiCompactionStrategy</c> in Infrastructure).
 /// </summary>
-public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
+public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy, int reservedTokens = 2000) : IGuide
 {
     public string Name => "trajectory";
 
-    public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+    public async Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
     {
         var stepGroups = RenderSteps(state.Trajectory);
 
@@ -23,8 +26,11 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
 
         if (trimCount > 0)
         {
-            draft.TrajectoryMessages.Add(new Message(MessageRole.System,
-                $"[{trimCount} earlier step(s) omitted — context window limit]"));
+            var evictedContent = stepGroups[..trimCount]
+                .SelectMany(g => g.Messages.Select(m => m.Content))
+                .ToList();
+            var summary = await compactionStrategy.SummariseAsync(trimCount, evictedContent, budget, ct);
+            draft.TrajectoryMessages.Add(new Message(MessageRole.System, summary));
             stepGroups = stepGroups[trimCount..];
         }
 
@@ -33,8 +39,6 @@ public sealed class TrajectoryGuide(int reservedTokens = 2000) : IGuide
 
         foreach (var (_, messages) in stepGroups)
             draft.TrajectoryMessages.AddRange(messages);
-
-        return Task.CompletedTask;
     }
 
     private static List<(Step Step, List<Message> Messages)> RenderSteps(IReadOnlyList<Step> trajectory)

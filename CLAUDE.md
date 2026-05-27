@@ -64,6 +64,7 @@ Sensors may block actions but must never take turns away from the model — the 
 | Memory retrieval | `IMemoryStore` | `NullMemoryStore` (no-op) |
 | Skill storage | `ISkillStore` | `NullSkillStore` (no-op) |
 | Tool filtering | `IToolSelector` | `PassthroughToolSelector` |
+| Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note); opt in to `AiCompactionStrategy` via `WithAiCompaction(modelClient)` |
 | Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` |
 | Tracing | `ITracer` | `CompositeTracer(ConsoleTracer, OpenTelemetryTracer)` |
 

@@ -37,6 +37,7 @@ public static class DependencyInjection
             .AddCheckpointStoreDefault()
             .AddTracerDefault()
             .AddToolRegistryDefault()
+            .AddCompactionStrategyDefault()
             .AddHarnessInstructionsGuideDefault()
             .AddTrajectoryGuideDefault()
             .AddMemoryGuideDefault()
@@ -122,6 +123,12 @@ public static class DependencyInjection
         return services;
     }
 
+    private static IServiceCollection AddCompactionStrategyDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<ICompactionStrategy, NullCompactionStrategy>();
+        return services;
+    }
+
     private static IServiceCollection AddHarnessInstructionsGuideDefault(this IServiceCollection services)
     {
         services.AddSingleton<IGuide, HarnessInstructionsGuide>();
@@ -130,7 +137,8 @@ public static class DependencyInjection
 
     private static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services)
     {
-        services.AddSingleton<IGuide, TrajectoryGuide>();
+        services.AddSingleton<IGuide>(sp =>
+            new TrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
         return services;
     }
 

@@ -2,7 +2,10 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SapphireGuard.ModelHarness.Framework;
+using SapphireGuard.ModelHarness.Framework.Guides;
+using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Infrastructure.Compaction;
 using SapphireGuard.ModelHarness.Infrastructure.MultiAgent;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure.Skills;
@@ -61,6 +64,34 @@ public static class DependencyInjection
     {
         builder.Services.AddSingleton(factory);
         builder.Services.AddSingleton<ITool, AskHumanTool>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Enables AI-powered trajectory compaction. When the context window fills up, evicted steps
+    /// are summarised by <paramref name="modelClient"/> rather than silently dropped. Use a fast,
+    /// cheap model (Haiku-class) to keep compaction overhead low. The strategy fails open —
+    /// a bare omission note is used if the model call fails or returns empty text.
+    /// </summary>
+    public static ModelHarnessBuilder WithAiCompaction(
+        this ModelHarnessBuilder builder,
+        IModelClient modelClient)
+    {
+        builder.Services.Replace(ServiceDescriptor.Singleton<ICompactionStrategy>(
+            _ => new AiCompactionStrategy(modelClient)));
+        return builder;
+    }
+
+    /// <summary>
+    /// Enables AI-powered trajectory compaction using a model client resolved from the container.
+    /// Use a fast, cheap model (Haiku-class) to keep compaction overhead low.
+    /// </summary>
+    public static ModelHarnessBuilder WithAiCompaction(
+        this ModelHarnessBuilder builder,
+        Func<IServiceProvider, IModelClient> factory)
+    {
+        builder.Services.Replace(ServiceDescriptor.Singleton<ICompactionStrategy>(
+            sp => new AiCompactionStrategy(factory(sp))));
         return builder;
     }
 
