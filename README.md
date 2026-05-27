@@ -42,6 +42,25 @@ Most agent complexity is a composition of these six — not something fundamenta
 
 ---
 
+## Context engineering
+
+In 2025 "context engineering" emerged as the umbrella term for what this framework is built around. Andrej Karpathy's framing is the clearest: *"the delicate art and science of filling the context window with just the right information for the next step"* — with the analogy that the LLM is the CPU, the context window is RAM, and the context engineer is the OS deciding what to load. Shopify CEO Tobi Lütke puts it plainly: *"the art of providing all the context for the task to be plausibly solvable by the LLM."*
+
+If your team is coming from context engineering literature, here is the direct mapping to harness primitives. The four standard operations — **write, select, compress, isolate** — each have a named home:
+
+| CE operation | What it means | Where it lives in the harness |
+|---|---|---|
+| **Write** | Externalise information outside the window for later retrieval | Sensor interventions write `[HARNESS OBSERVATION]` notes into the trajectory; `skill_manage` externalises agent-derived procedures to disk; `ICheckpointStore` externalises full run state |
+| **Select** | Pull relevant information into the window when needed | `MemoryGuide` → `IMemoryStore` (replace `NullMemoryStore` with a vector store or knowledge graph); `ToolSelectorGuide` → `IToolSelector`; `SkillsGuide` progressive disclosure — catalogue summary in every prompt, full body loaded on demand via `skill_view`; `TrajectoryGuide` re-injects `[ORIGINAL GOAL]` every turn so the goal survives compaction |
+| **Compress** | Reduce token count while preserving signal | `TrajectoryGuide` token-aware compaction drops the oldest steps and prepends an omission note when the estimated token count approaches `MaxContextTokens`; skills use two-tier disclosure (name + when-to-use only, full body on demand) so cost stays low even with many skills |
+| **Isolate** | Partition context so sub-agents don't pollute each other | `AgentFactory` gives each named agent a fully isolated `ServiceProvider` — no trajectory, sensors, or state shared between agents; the HITL suspend/resume boundary is a clean context break |
+
+The `ContextDraft` that guides build before each model call is the harness's representation of a context engineering decision. Every field — `SystemPrompt`, `TrajectoryMessages`, `MemorySnippets`, `AvailableTools`, `SystemSections` — is an explicit choice about what the model sees on this turn. Implement `IGuide` to change any of those choices without touching the loop.
+
+> **Known gap:** the select operation for long-term retrieval (`IMemoryStore`) ships as a no-op (`NullMemoryStore`). The port and `MemoryGuide` are the right shape — replace with a vector store or knowledge graph to close this.
+
+---
+
 The samples under `samples/` wire up `ClaudeModelClient` against the Anthropic API,
 `AzureOpenAIModelClient` against Azure AI Foundry / Azure OpenAI Service, and
 `OllamaModelClient` against a local Ollama instance. A `FakeModelClient` is also
@@ -271,7 +290,7 @@ before any sensor or model call:
 |---|---|
 | `MaxTurns` | Maximum number of loop iterations |
 | `MaxContextTokens` | Estimated token ceiling for the context window |
-| `MaxCostUsd` | Maximum spend in USD (based on the model client's cost tracking) |
+| `MaxCost` | Maximum spend (based on the model client's cost tracking) |
 | `MaxWallClock` | Maximum elapsed time from the first turn |
 
 Budget exhaustion is **not an exception** — it is control flow. When a limit is hit,
@@ -285,7 +304,7 @@ var outcome = await agent.RunAsync(task, budget: new Budget
 {
     MaxTurns         = 10,
     MaxContextTokens = 100_000,
-    MaxCostUsd       = 0.50m,
+    MaxCost          = 0.50m,
     MaxWallClock     = TimeSpan.FromMinutes(2)
 });
 
@@ -874,7 +893,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | **Agent Learning** | The ability for an agent to write its own skills at runtime, capturing procedures it works out so they can be reused across episodes. Implemented via the same `SKILL.md` format. The model decides when to save via `skill_manage`; the harness persists the file and archives the previous version to `.history/` automatically. Enable with `WithLearning(dir)`. |
 | **AgentOutcome** | The terminal result of a run: final answer, status (`Done`, `PartialResult`, `Failed`, `AwaitingHuman`), and the last `AgentState`. When status is `AwaitingHuman`, `PendingHumanInput` carries the `CallId` and question needed to resume. |
 | **AgentState** | Immutable record of the agent's full state at a point in time. New state is produced each turn — the trajectory is the log of those transitions. |
-| **Budget** | Hard limits on a run: `MaxTurns`, `MaxContextTokens`, `MaxCostUsd`, `MaxWallClock`. Checked at the top of every turn before any sensor or model call. |
+| **Budget** | Hard limits on a run: `MaxTurns`, `MaxContextTokens`, `MaxCost`, `MaxWallClock`. Checked at the top of every turn before any sensor or model call. |
 | **Checkpoint** | A durable snapshot of `AgentState` saved at the start of each turn. Used to resume a run after a crash or restart — pass the loaded state back to a fresh `HarnessLoop`. |
 | **Episode** | One full run of the agent on a single task — from the first turn to the final `AgentOutcome`. An episode is usually several turns. "Across episodes" means across many separate runs (e.g. reusing a skill saved in an earlier run). |
 | **Guide** | Shapes what the model perceives. Guides run sequentially before each model call, each contributing to a shared context draft — system prompt, trajectory, memory snippets, available tools. |
