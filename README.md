@@ -185,7 +185,7 @@ services.AddModelHarness(builder => builder.WithGuide<MyGuide>());
 The pipeline order is explicit and fixed. Two ordering constraints drive it:
 
 - **`ToolSelectorGuide` before `ToolCatalogueGuide`** — the catalogue renders whatever tools the selector has approved for this turn; reversing them would always render the full tool list regardless of filtering.
-- **`TrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve.
+- **`TrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve. This constraint is enforced structurally: `TrajectoryGuide` implements `ITrajectoryGuide` (not `IGuide`), and `DefaultGuideRunner` resolves it as a separate dependency and always invokes it after all `IGuide` instances — no reliance on DI registration order. Swap the default via `builder.WithTrajectoryGuide<T>()`.
 
 Custom guides registered via `builder.WithGuide<T>()` slot in after the built-ins and before `TrajectoryGuide`.
 
@@ -869,7 +869,7 @@ These are things every agent needs, regardless of domain. The framework provides
 | Turn-by-turn loop orchestration | `HarnessLoop` | ✅ |
 | Budget enforcement (turns, tokens, cost, wall clock) | `IBudgetEnforcer` / `DefaultBudgetEnforcer` | ✅ |
 | Context assembly — what the model sees each turn | Guide pipeline / `IContextBuilder` | ✅ |
-| Trajectory rendering and compaction | `TrajectoryGuide` | ✅ |
+| Trajectory rendering and compaction | `ITrajectoryGuide` / `TrajectoryGuide` | ✅ |
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
 | Tool dispatch | `IToolRegistry` | ✅ |
 | Skills plumbing — listing and loading pre-authored skill documents | `SkillsGuide` / `ISkillStore` / `skill_view` | ✅ |
