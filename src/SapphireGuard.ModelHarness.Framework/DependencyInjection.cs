@@ -38,6 +38,7 @@ public static class DependencyInjection
             .AddTracerDefault()
             .AddToolRegistryDefault()
             .AddCompactionStrategyDefault()
+            .AddTrajectoryGuideDefault()
             .AddDefaultGuidePipeline()
             .AddSensorRunnerDefault();
 
@@ -84,7 +85,9 @@ public static class DependencyInjection
     private static IServiceCollection AddGuideRunnerDefault(this IServiceCollection services)
     {
         services.TryAddSingleton<IGuideRunner>(sp =>
-            new DefaultGuideRunner(sp.GetRequiredService<IEnumerable<IGuide>>()));
+            new DefaultGuideRunner(
+                sp.GetRequiredService<IEnumerable<IGuide>>(),
+                sp.GetRequiredService<ITrajectoryGuide>()));
         return services;
     }
 
@@ -122,6 +125,13 @@ public static class DependencyInjection
     private static IServiceCollection AddCompactionStrategyDefault(this IServiceCollection services)
     {
         services.TryAddSingleton<ICompactionStrategy, NullCompactionStrategy>();
+        return services;
+    }
+
+    private static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<ITrajectoryGuide>(sp =>
+            new TrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
         return services;
     }
 

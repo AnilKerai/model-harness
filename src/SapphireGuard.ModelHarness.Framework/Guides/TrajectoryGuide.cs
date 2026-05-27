@@ -15,7 +15,7 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// Must run last in the guide pipeline so it can measure all prior guide contributions
 /// and compute an accurate token budget rather than relying on a fixed reserve.
 /// </summary>
-public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy) : IGuide
+public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy) : ITrajectoryGuide
 {
     public string Name => "trajectory";
 

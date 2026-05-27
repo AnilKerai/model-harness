@@ -252,16 +252,28 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
         return this;
     }
 
+    /// <summary>
+    /// Replaces the default <see cref="ITrajectoryGuide"/> with a custom implementation.
+    /// The trajectory guide always runs last — this is enforced by <see cref="DefaultGuideRunner"/>,
+    /// not by registration order.
+    /// </summary>
+    public ModelHarnessBuilder WithTrajectoryGuide<TImpl>() where TImpl : class, ITrajectoryGuide
+    {
+        Services.Replace(ServiceDescriptor.Singleton<ITrajectoryGuide, TImpl>());
+        return this;
+    }
+
+    /// <summary>Replaces the default <see cref="ITrajectoryGuide"/> with a custom implementation via factory.</summary>
+    public ModelHarnessBuilder WithTrajectoryGuide(Func<IServiceProvider, ITrajectoryGuide> factory)
+    {
+        Services.Replace(ServiceDescriptor.Singleton(factory));
+        return this;
+    }
+
     internal void ApplyGuides()
     {
         foreach (var factory in _customGuides)
-            Services.AddSingleton(factory);
-
-        // TrajectoryGuide is always registered last so it can measure the token cost
-        // of all prior guide contributions (system prompt, memory, tool catalogue, etc.)
-        // and compute an accurate context budget rather than relying on a fixed reserve.
-        Services.AddSingleton<IGuide>(sp =>
-            new TrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
+            Services.AddSingleton<IGuide>(factory);
     }
 
     internal void ApplyTracers()
