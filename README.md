@@ -473,26 +473,27 @@ is reserved for tools or sub-agents that violate budget from underneath the loop
 
 ### The three layers
 
-The framework is layered so you can take exactly as much as you need.
+The framework is structured in three layers. This is also the pattern we recommend if you
+build a platform or shared agent library on top of it.
 
-**Layer 1 — Framework** (`AddModelHarness`): pure abstractions and no-op defaults.
-The harness runs without any infrastructure packages — tools, sensors, a model, and a
-tracer can all be wired in via the builder callback.
+**Layer 1 — Ports and core loop** (`Framework`): the loop, all port interfaces, and no-op
+defaults. Zero infrastructure dependencies — the harness runs with whatever adapters you wire
+in. This is the stable core everything else builds on.
 
-**Layer 2 — Infrastructure packages**: each package adds `With*` extension methods on
-`ModelHarnessBuilder`. Install only the packages you need; each one is independent.
+**Layer 2 — Common adapters** (the `Infrastructure.*` packages): ready-made implementations
+of the framework ports — model clients, tracing, persistence, resilience, MCP, and so on.
+Consumers pick the packages they need; each is independent. If a built-in adapter doesn't fit,
+replace it by implementing the port directly.
 
-**Layer 3 — Opinionated defaults** (`AddStandardModelHarness`): shipped in `Infrastructure`,
-this thin wrapper pre-wires `InMemoryToolRegistry`, `StuckDetector`, `ProgressCheckSensor`,
-`PromptInjectionSensor`, and OpenTelemetry tracing. Pass the configuration callback to supply
-your model, tools, and any overrides — the defaults are applied first and your additions layer
-on top.
+**Layer 3 — Standard agent** (`AddStandardModelHarness` in `Infrastructure`): pre-wires the
+common adapters into a sensible out-of-the-box experience. Engineering consumers who don't
+want to make every wiring decision can call this and just supply a model, their tools, and any
+overrides. Defaults are applied first; anything you add layers on top.
 
 ### Minimal setup
 
-`AddStandardModelHarness` is the recommended entry point. It pre-wires the common defaults
-(`InMemoryToolRegistry`, `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor`,
-OpenTelemetry tracing) — supply your model, tools, and any overrides:
+`AddStandardModelHarness` is the recommended entry point — supply your model, tools, and any
+overrides:
 
 ```csharp
 var services = new ServiceCollection();
