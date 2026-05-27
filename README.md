@@ -46,7 +46,7 @@ Most agent complexity is a composition of these six — not something fundamenta
 
 In 2025 "context engineering" emerged as the umbrella term for what this framework is built around. Andrej Karpathy's framing is the clearest: *"the delicate art and science of filling the context window with just the right information for the next step"* — with the analogy that the LLM is the CPU, the context window is RAM, and the context engineer is the OS deciding what to load. Shopify CEO Tobi Lütke puts it plainly: *"the art of providing all the context for the task to be plausibly solvable by the LLM."*
 
-If your team is coming from context engineering literature, here is the direct mapping to harness primitives. The four standard operations — **write, select, compress, isolate** — each have a named home:
+The four standard CE operations — **write, select, compress, isolate** — each have a named home in the harness:
 
 | CE operation | What it means | Where it lives in the harness |
 |---|---|---|
