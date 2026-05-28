@@ -1,15 +1,15 @@
-# model-harness
+# Model Harness
 
-A reusable model harness framework for .NET 10, structured around Clean / Onion
+A reusable model harness framework for .NET 10, structured around clean / onion
 architecture with ports and adapters at every extension point.
 
 > **Why "model harness"?** An *Agent* = Model + Harness. The harness
 > is the scaffolding (loop, guides, sensors, budget) that wraps a model and
 > turns it into an agent.
 
-## The thesis: do more with less
+## Thesis: Do More With Less
 
-The prevailing assumption is that better results require a bigger model. This project
+The prevailing assumption is that better results require a bigger / better (frontier) model. This project
 tests a different hypothesis: **a well-structured harness can close much of that gap**.
 
 Sensors catch errors and route the model back before they compound. Guides keep context
