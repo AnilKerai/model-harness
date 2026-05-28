@@ -1,6 +1,6 @@
 # Extending the framework
 
-Code recipes for implementing and registering each extension point. Start with the [extension points map](README.md#extension-points) to understand what exists before choosing what to implement.
+Code recipes for implementing and registering each extension point. Start with the [extension points map](../README.md#extension-points) to understand what exists before choosing what to implement.
 
 ## Customising the harness
 
@@ -114,7 +114,7 @@ builder.WithSensor<MySensor>()
 ```
 
 `DefaultSensorRunner` picks it up automatically and runs it in parallel with other sensors
-at the same hookpoint. See the [sensor pattern](README.md#the-sensor-pattern--observing-and-intervening) for how to implement `ISensor`.
+at the same hookpoint. See the [sensor pattern](../README.md#the-sensor-pattern--observing-and-intervening) for how to implement `ISensor`.
 
 ## Add a guide
 
@@ -122,7 +122,7 @@ at the same hookpoint. See the [sensor pattern](README.md#the-sensor-pattern--ob
 builder.WithGuide<MyGuide>() // runs after the seven built-in guides
 ```
 
-See the [guide pattern](README.md#the-guide-pattern--shaping-perception) for how to implement `IGuide`.
+See the [guide pattern](../README.md#the-guide-pattern--shaping-perception) for how to implement `IGuide`.
 
 ## Replace the trajectory guide
 
@@ -248,7 +248,7 @@ builder.WithBudgetEnforcer<MyBudgetEnforcer>()
 
 Implement `IBudgetEnforcer` to replace the default policy with dynamic limits — per-user
 quotas, cost allocation, or anything driven by runtime state. See the
-[Budget enforcement](README.md#budget-enforcement) section for how exhaustion works.
+[Budget enforcement](../README.md#budget-enforcement) section for how exhaustion works.
 
 ## Rate limiting
 
@@ -293,7 +293,7 @@ the full body on demand. No separate tool wiring needed.
 ## Learning
 
 Enable the agent to accumulate its own skills over time. See the
-[Agent Learning](README.md#agent-learning-experimental) section for the full explanation.
+[Agent Learning](../README.md#agent-learning-experimental) section for the full explanation.
 
 ```csharp
 builder.WithLearning("~/.skills/learned")

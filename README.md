@@ -61,7 +61,7 @@ Most agent complexity is a composition of these six — not something fundamenta
 
 ---
 
-See **[RUNNING.md](RUNNING.md)** for setup and run instructions for each sample.
+See **[RUNNING.md](docs/RUNNING.md)** for setup and run instructions for each sample.
 
 ---
 
@@ -108,7 +108,7 @@ writes into one or more of the draft's fields:
 
 Every field is an explicit choice about what the model sees on this turn — the `ContextDraft` is the harness's concrete representation of a context engineering decision. Implement `IGuide` to change any of those choices without touching the loop.
 
-See [EXTENDING.md](EXTENDING.md) for the `IGuide` interface and registration. The pipeline order is explicit and fixed. Two ordering constraints drive it:
+See [EXTENDING.md](docs/EXTENDING.md) for the `IGuide` interface and registration. The pipeline order is explicit and fixed. Two ordering constraints drive it:
 
 - **`ToolSelectorGuide` before `ToolCatalogueGuide`** — the catalogue renders whatever tools the selector has approved for this turn; reversing them would always render the full tool list regardless of filtering.
 - **`HeadEvictionTrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve. This constraint is enforced structurally: `HeadEvictionTrajectoryGuide` implements `ITrajectoryGuide` (not `IGuide`), and `DefaultGuideRunner` resolves it as a separate dependency and always invokes it after all `IGuide` instances — no reliance on DI registration order. Swap the default via `builder.WithTrajectoryGuide<T>()`.
@@ -159,7 +159,7 @@ prefixed `[HARNESS OBSERVATION — ...]`. `HarnessInstructionsGuide` tells the m
 this is the feedforward complement to the sensor's feedback. Intervention records are
 separate from tool-call history so tool history stays clean.
 
-See [EXTENDING.md](EXTENDING.md) for the `ISensor` interface and registration.
+See [EXTENDING.md](docs/EXTENDING.md) for the `ISensor` interface and registration.
 
 ### How guides and sensors work together
 
@@ -310,7 +310,7 @@ The key design points:
 - Sensors must **fail open**: if the model call throws or returns unparseable output, return
   `SensorResult.Pass` so a transient failure never blocks every agent response.
 
-See `samples/AiToneSensor` for a runnable example — the agent is prompted to respond rudely, and the tone sensor (Haiku) catches it and forces a professional retry. Wiring is in [EXTENDING.md](EXTENDING.md).
+See `samples/AiToneSensor` for a runnable example — the agent is prompted to respond rudely, and the tone sensor (Haiku) catches it and forces a professional retry. Wiring is in [EXTENDING.md](docs/EXTENDING.md).
 
 ---
 
@@ -484,14 +484,14 @@ var outcome = await provider.GetRequiredService<Agent>()
 Console.WriteLine(outcome.FinalAnswer);
 ```
 
-For the full set of how-to recipes — customising the harness, adding tools, sensors, guides, MCP, HITL, checkpoint/resume, rate limiting, compaction, and swapping the model client — see **[EXTENDING.md](EXTENDING.md)**.
+For the full set of how-to recipes — customising the harness, adding tools, sensors, guides, MCP, HITL, checkpoint/resume, rate limiting, compaction, and swapping the model client — see **[EXTENDING.md](docs/EXTENDING.md)**.
 
 ---
 
 ## Links
 
-- [RUNNING.md](RUNNING.md) — setup and run instructions for each sample
-- [EXTENDING.md](EXTENDING.md) — code recipes for every extension point
-- [GLOSSARY.md](GLOSSARY.md) — definitions of all framework terms
-- [ROADMAP.md](ROADMAP.md) — what's done and what's still to implement
+- [RUNNING.md](docs/RUNNING.md) — setup and run instructions for each sample
+- [EXTENDING.md](docs/EXTENDING.md) — code recipes for every extension point
+- [GLOSSARY.md](docs/GLOSSARY.md) — definitions of all framework terms
+- [ROADMAP.md](docs/ROADMAP.md) — what's done and what's still to implement
 - [FAQ.md](FAQ.md) — design decision FAQs
