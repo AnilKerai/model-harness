@@ -25,23 +25,6 @@ always a product decision, not a model decision.
 
 ---
 
-## Agentic primitives
-
-Every agent, no matter how capable it looks, is an assembly of the same small set of building blocks. Understanding these primitives makes it easier to read this code and reason about where a new concern belongs.
-
-| Primitive | What it is |
-|---|---|
-| **Tools** | The agent's hands — functions it can call to effect change or read state outside the context window. Tools are the only way an agent can act on the world. |
-| **Memory** | What the agent can remember. Four varieties: *in-context* (the current context window), *external / retrieved* (a vector store or knowledge graph queried each turn), *procedural* (named instructions the agent can load and follow), and *in-weights* (fine-tuning — lives outside the harness). The *procedural* variety is implemented here via **Agent Learning** — `SkillsGuide` surfaces saved skills into context each turn, and `skill_manage` / `skill_view` let the model write and read them. |
-| **Perception** | What the agent can see right now — the shaped view of world state it reasons over before each model call. Every prompt is an act of perception design. Getting this right matters more than most people expect: what you omit is as important as what you include. Implemented here via the **Guide pattern** — a sequential pipeline of guides that each contribute to a shared context draft before every model call. |
-| **Control flow** | The loop that decides what runs next and in what order: call model → act on response → repeat. Budget enforcement, rate limiting, and checkpoint/resume are all control-flow concerns. The loop is deceptively simple; almost all agent reliability problems are really control-flow problems in disguise. |
-| **Guardrails** | Checkpoints that intercept and shape agent behaviour at declared points in the loop — before the model call, after it, before a tool runs, after it, before the final answer is accepted. Guardrails observe and redirect; they do not take turns away from the model. Implemented here via the **Sensor pattern** — sensors run in parallel at five hookpoints and feed interventions back through the guide pipeline so the model can self-correct. |
-| **Sub-agents** | Agents calling other agents — an orchestrator delegates a sub-task to a specialist, gets a result back, and continues. From the calling agent's perspective a sub-agent is just a tool: it takes a task and returns a result. The isolation contract is what makes this composable — each agent runs in its own container with its own model, sensors, and budget. Implemented here via **`AgentFactory`** and **`AgentTool`** — see the [Multi-agent setup](#multi-agent-setup) section. |
-
-Most agent complexity is a composition of these six — not something fundamentally new. A "research agent" is control flow + tools + memory. An "orchestrated pipeline" adds sub-agents. Building the framework around named primitives keeps the ports obvious: when a new concern arrives, there is usually a clear home for it.
-
----
-
 ## Context engineering
 
 In 2025 "context engineering" emerged as the umbrella term for what this framework is built around. Andrej Karpathy's framing is the clearest: *"the delicate art and science of filling the context window with just the right information for the next step"* — with the analogy that the LLM is the CPU, the context window is RAM, and the context engineer is the OS deciding what to load. Shopify CEO Tobi Lütke puts it plainly: *"the art of providing all the context for the task to be plausibly solvable by the LLM."*
@@ -58,6 +41,25 @@ The four standard CE operations — **write, select, compress, isolate** — eac
 The `ContextDraft` that guides build before each model call is the harness's representation of a context engineering decision. Every field — `SystemPrompt`, `TrajectoryMessages`, `MemorySnippets`, `AvailableTools`, `SystemSections` — is an explicit choice about what the model sees on this turn. Implement `IGuide` to change any of those choices without touching the loop.
 
 > **Known gap:** the select operation for long-term retrieval (`IMemoryStore`) ships as a no-op (`NullMemoryStore`). The port and `MemoryGuide` are the right shape — replace with a vector store or knowledge graph to close this.
+
+The primitives below name the building blocks the harness provides for each of these operations; the core patterns sections show how they are implemented.
+
+---
+
+## Agentic primitives
+
+Every agent, no matter how capable it looks, is an assembly of the same small set of building blocks. Understanding these primitives makes it easier to read this code and reason about where a new concern belongs.
+
+| Primitive | What it is |
+|---|---|
+| **Tools** | The agent's hands — functions it can call to effect change or read state outside the context window. Tools are the only way an agent can act on the world. |
+| **Memory** | What the agent can remember. Four varieties: *in-context* (the current context window), *external / retrieved* (a vector store or knowledge graph queried each turn), *procedural* (named instructions the agent can load and follow), and *in-weights* (fine-tuning — lives outside the harness). The *procedural* variety is implemented here via **Agent Learning** — `SkillsGuide` surfaces saved skills into context each turn, and `skill_manage` / `skill_view` let the model write and read them. |
+| **Perception** | What the agent can see right now — the shaped view of world state it reasons over before each model call. Every prompt is an act of perception design. Getting this right matters more than most people expect: what you omit is as important as what you include. Implemented here via the **Guide pattern** — a sequential pipeline of guides that each contribute to a shared context draft before every model call. |
+| **Control flow** | The loop that decides what runs next and in what order: call model → act on response → repeat. Budget enforcement, rate limiting, and checkpoint/resume are all control-flow concerns. The loop is deceptively simple; almost all agent reliability problems are really control-flow problems in disguise. |
+| **Guardrails** | Checkpoints that intercept and shape agent behaviour at declared points in the loop — before the model call, after it, before a tool runs, after it, before the final answer is accepted. Guardrails observe and redirect; they do not take turns away from the model. Implemented here via the **Sensor pattern** — sensors run in parallel at five hookpoints and feed interventions back through the guide pipeline so the model can self-correct. |
+| **Sub-agents** | Agents calling other agents — an orchestrator delegates a sub-task to a specialist, gets a result back, and continues. From the calling agent's perspective a sub-agent is just a tool: it takes a task and returns a result. The isolation contract is what makes this composable — each agent runs in its own container with its own model, sensors, and budget. Implemented here via **`AgentFactory`** and **`AgentTool`** — see the [Multi-agent setup](#multi-agent-setup) section. |
+
+Most agent complexity is a composition of these six — not something fundamentally new. A "research agent" is control flow + tools + memory. An "orchestrated pipeline" adds sub-agents. Building the framework around named primitives keeps the ports obvious: when a new concern arrives, there is usually a clear home for it.
 
 ---
 
