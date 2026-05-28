@@ -492,26 +492,9 @@ is reserved for tools or sub-agents that violate budget from underneath the loop
 
 ---
 
-## Extending the framework
+## Extension points
 
-### The three layers
-
-The framework is structured in three layers. This is also the pattern we recommend if you
-build a platform or shared agent library on top of it.
-
-**Layer 1 — Ports and core loop** (`Framework`): the loop, all port interfaces, and no-op
-defaults. Zero infrastructure dependencies — the harness runs with whatever adapters you wire
-in. This is the stable core everything else builds on.
-
-**Layer 2 — Common adapters** (the `Infrastructure.*` packages): ready-made implementations
-of the framework ports — model clients, tracing, persistence, resilience, MCP, and so on.
-Consumers pick the packages they need; each is independent. If a built-in adapter doesn't fit,
-replace it by implementing the port directly.
-
-**Layer 3 — Standard agent** (`AddStandardModelHarness` in `Infrastructure`): pre-wires the
-common adapters into a sensible out-of-the-box experience. Engineering consumers who don't
-want to make every wiring decision can call this and just supply a model, their tools, and any
-overrides. Defaults are applied first; anything you add layers on top.
+Every port in the framework ships with a working default — swap any of them by registering your own implementation via the builder. The distinction below is between concerns the framework manages automatically (override when needed) and concerns the framework exposes a port for but leaves entirely to the caller.
 
 ```mermaid
 flowchart LR
@@ -534,6 +517,60 @@ flowchart LR
     TG --- CS["ICompactionStrategy\ncompaction"]
     TL --- HN["IHumanNotifier\nhuman-in-the-loop"]
 ```
+
+### Harness concerns
+
+The framework manages these in every agent. Defaults work out of the box — replace via the builder when needed.
+
+| Concern | Port | Default | What it is |
+|---|---|---|---|
+| Model transport | `IModelClient` | `FakeModelClient` (no external deps) | Sends messages to the model and returns responses. Swap for any provider — Anthropic, Azure, Ollama, or custom. |
+| Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` | Checks turn, token, cost, and wall-clock limits at the top of each turn. Returns `PartialResult` on exhaustion rather than throwing. |
+| Rate limiting | `IRateLimiter` | `NullRateLimiter` (no limiting) | Checks provider sliding-window limits before each model call. Waits and retries; degrades to `PartialResult` if the wait would exceed `MaxWallClock`. |
+| Context assembly | `IContextBuilder` | `DefaultContextBuilder` | Assembles the final prompt from the `ContextDraft` that guides produce. Rarely needs replacing. |
+| Trajectory rendering & compaction | `ITrajectoryGuide` | `HeadEvictionTrajectoryGuide` (bare omission note on eviction) | Renders turn history into the context window, evicting oldest steps when the token budget is tight. Always runs last in the guide pipeline. |
+| Tool registry | `IToolRegistry` | `InMemoryToolRegistry` | Holds all registered tools and dispatches tool calls to the right implementation. Replace for dynamic or gateway-backed tool sets (e.g. MCP). |
+| Skills & learning storage | `ISkillStore` | `NullSkillStore` (no-op until opted in) | Persists `SKILL.md` files the agent reads (skills) or writes (learning). No-op until opted in via `WithSkills` or `WithLearning`. |
+| Human-in-the-loop notification | `IHumanNotifier` | none | Delivers `ask_human` questions to a human via any channel. The loop suspends with `AwaitingHuman` until resumed. |
+| Tracing & metrics | `ITracer` | `NullTracer`; use `WithConsoleTracer()` / `WithOtelTracer()` | Receives loop events for logging, spans, and metrics. Multiple tracers are composed automatically. |
+| Checkpoint / resume | `ICheckpointStore` | `NullCheckpointStore` (no persistence) | Saves `AgentState` at the start of each turn. Load the latest checkpoint to resume after a crash or restart. |
+
+### User concerns
+
+The framework provides the port; the caller provides the adapter. Defaults are no-ops or dev-time stubs.
+
+| Concern | Port | Default | What it is |
+|---|---|---|---|
+| Domain tools | `ITool` | none | Functions the model can invoke. The only way an agent acts on the world. |
+| Domain sensors | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` via `AddStandardModelHarness` | Observe the loop at declared hookpoints and intervene. Run in parallel; the loop's response depends on the hookpoint. |
+| Custom guides | `IGuide` | none (seven built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the seven built-in guides, before the trajectory guide. |
+| Long-term memory | `IMemoryStore` | `NullMemoryStore` | Supplies retrieved snippets to `MemoryGuide` each turn. Replace with a vector store or knowledge graph for long-term retrieval. |
+| Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note) | Decides what replaces evicted trajectory steps. Default inserts a bare note; `AiCompactionStrategy` generates a prose summary instead. |
+| Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) | Filters `AvailableTools` in `ContextDraft` before the catalogue is rendered. Controls what the model *sees*, not what the registry *holds*. |
+| Sub-agents / A2A | `ITool` wrapping a nested `HarnessLoop` or remote endpoint | none | A sub-agent is a tool whose `ExecuteAsync` runs another `HarnessLoop` or calls a remote A2A endpoint. Fully isolated — own model, sensors, and budget. |
+
+---
+
+## Extending the framework
+
+### The three layers
+
+The framework is structured in three layers. This is also the pattern we recommend if you
+build a platform or shared agent library on top of it.
+
+**Layer 1 — Ports and core loop** (`Framework`): the loop, all port interfaces, and no-op
+defaults. Zero infrastructure dependencies — the harness runs with whatever adapters you wire
+in. This is the stable core everything else builds on.
+
+**Layer 2 — Common adapters** (the `Infrastructure.*` packages): ready-made implementations
+of the framework ports — model clients, tracing, persistence, resilience, MCP, and so on.
+Consumers pick the packages they need; each is independent. If a built-in adapter doesn't fit,
+replace it by implementing the port directly.
+
+**Layer 3 — Standard agent** (`AddStandardModelHarness` in `Infrastructure`): pre-wires the
+common adapters into a sensible out-of-the-box experience. Engineering consumers who don't
+want to make every wiring decision can call this and just supply a model, their tools, and any
+overrides. Defaults are applied first; anything you add layers on top.
 
 ### Minimal setup
 
@@ -903,43 +940,6 @@ builder.WithAiCompaction(new ClaudeModelClient(new ClaudeClientOptions
 ```
 
 The strategy fails open — if the model call fails or returns empty text, the bare omission note is used instead, so a compaction failure never blocks the run. Use a fast, cheap model (Haiku-class); compaction calls are infrequent on well-scoped runs but could stack up on very long ones.
-
----
-
-## Extension points
-
-Every port in the framework ships with a working default — swap any of them by registering your own implementation via the builder. The distinction below is between concerns the framework manages automatically (override when needed) and concerns the framework exposes a port for but leaves entirely to the caller.
-
-### Harness concerns
-
-The framework manages these in every agent. Defaults work out of the box — replace via the builder when needed.
-
-| Concern | Port | Default |
-|---|---|---|
-| Model transport | `IModelClient` | `FakeModelClient` (no external deps) |
-| Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` |
-| Rate limiting | `IRateLimiter` | `NullRateLimiter` (no limiting) |
-| Context assembly | `IContextBuilder` | `DefaultContextBuilder` |
-| Trajectory rendering & compaction | `ITrajectoryGuide` | `HeadEvictionTrajectoryGuide` (bare omission note on eviction) |
-| Tool registry | `IToolRegistry` | `InMemoryToolRegistry` |
-| Skills & learning storage | `ISkillStore` | `NullSkillStore` (no-op until opted in) |
-| Human-in-the-loop notification | `IHumanNotifier` | none |
-| Tracing & metrics | `ITracer` | `NullTracer`; use `WithConsoleTracer()` / `WithOtelTracer()` |
-| Checkpoint / resume | `ICheckpointStore` | `NullCheckpointStore` (no persistence) |
-
-### User concerns
-
-The framework provides the port; the caller provides the adapter. Defaults are no-ops or dev-time stubs.
-
-| Concern | Port | Default |
-|---|---|---|
-| Domain tools | `ITool` | none |
-| Domain sensors | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` via `AddStandardModelHarness` |
-| Custom guides | `IGuide` | none (seven built-in guides always run) |
-| Long-term memory | `IMemoryStore` | `NullMemoryStore` |
-| Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note) |
-| Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) |
-| Sub-agents / A2A | `ITool` wrapping a nested `HarnessLoop` or remote endpoint | none |
 
 ---
 
