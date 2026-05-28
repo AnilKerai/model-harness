@@ -108,31 +108,7 @@ writes into one or more of the draft's fields:
 | `AvailableTools` | Tool list for this turn — guides can filter or reorder |
 | `SystemSections` | Pre-rendered system-prompt sections (tool catalogue, skill catalogue) appended after the prompt |
 
-Implement `IGuide` to create a custom guide:
-
-```csharp
-public sealed class MyGuide : IGuide
-{
-    public string Name => "my-guide";
-
-    public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
-    {
-        // e.g. filter tools based on the current turn count
-        if (state.Trajectory.Count > 4)
-            draft.AvailableTools.RemoveAll(t => t.Name == "search");
-
-        return Task.CompletedTask;
-    }
-}
-```
-
-Register it in the builder:
-
-```csharp
-services.AddModelHarness(builder => builder.WithGuide<MyGuide>());
-```
-
-The pipeline order is explicit and fixed. Two ordering constraints drive it:
+See [EXTENDING.md](EXTENDING.md) for the `IGuide` interface and registration. The pipeline order is explicit and fixed. Two ordering constraints drive it:
 
 - **`ToolSelectorGuide` before `ToolCatalogueGuide`** — the catalogue renders whatever tools the selector has approved for this turn; reversing them would always render the full tool list regardless of filtering.
 - **`HeadEvictionTrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve. This constraint is enforced structurally: `HeadEvictionTrajectoryGuide` implements `ITrajectoryGuide` (not `IGuide`), and `DefaultGuideRunner` resolves it as a separate dependency and always invokes it after all `IGuide` instances — no reliance on DI registration order. Swap the default via `builder.WithTrajectoryGuide<T>()`.
@@ -183,31 +159,7 @@ prefixed `[HARNESS OBSERVATION — ...]`. `HarnessInstructionsGuide` tells the m
 this is the feedforward complement to the sensor's feedback. Intervention records are
 separate from tool-call history so tool history stays clean.
 
-Implement `ISensor` to create a custom sensor:
-
-```csharp
-public sealed class MySensor : ISensor
-{
-    public string Name => "my-sensor";
-    public IReadOnlySet<HookPoint> HookPoints { get; } =
-        new HashSet<HookPoint> { HookPoint.PreToolCall };
-
-    public Task<SensorResult> CheckAsync(
-        HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
-    {
-        if (triggeringStep is ToolCallStep tc && tc.Call.ToolName == "dangerous-tool")
-            return Task.FromResult(SensorResult.Intervene("dangerous-tool is not permitted."));
-
-        return Task.FromResult(SensorResult.Pass);
-    }
-}
-```
-
-Register it in the builder:
-
-```csharp
-services.AddModelHarness(builder => builder.WithSensor<MySensor>());
-```
+See [EXTENDING.md](EXTENDING.md) for the `ISensor` interface and registration.
 
 ### How guides and sensors work together
 
@@ -358,17 +310,7 @@ The key design points:
 - Sensors must **fail open**: if the model call throws or returns unparseable output, return
   `SensorResult.Pass` so a transient failure never blocks every agent response.
 
-```csharp
-builder.WithSensor(sp => new ToneSensor(
-    new ClaudeModelClient(new ClaudeClientOptions
-    {
-        ApiKey = apiKey,
-        ModelId = "claude-haiku-4-5-20251001"   // dedicated sensor model
-    })));
-```
-
-See `samples/AiToneSensor` for a runnable example: the agent is prompted to respond rudely,
-and the tone sensor (Haiku) catches it and forces a professional retry.
+See `samples/AiToneSensor` for a runnable example — the agent is prompted to respond rudely, and the tone sensor (Haiku) catches it and forces a professional retry. Wiring is in [EXTENDING.md](EXTENDING.md).
 
 ---
 
