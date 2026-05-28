@@ -884,49 +884,60 @@ The strategy fails open — if the model call fails or returns empty text, the b
 
 ---
 
-## Harness concerns vs. user concerns
+## Extension points
 
-Understanding what the framework owns and what it deliberately leaves to the user is key to extending it correctly.
+Every port in the framework ships with a working default — swap any of them by registering your own implementation via the builder. The distinction below is between concerns the framework manages automatically (override when needed) and concerns the framework exposes a port for but leaves entirely to the caller.
 
-### Harness concerns — the framework owns these
+```mermaid
+flowchart LR
+    MC["IModelClient\nmodel transport"] --- LOOP
+    BE["IBudgetEnforcer\nbudget policy"] --- LOOP
+    RL["IRateLimiter\nrate policy"] --- LOOP
+    CP["ICheckpointStore\ncheckpoint / resume"] --- LOOP
+    TR["ITracer\ntracing & metrics"] --- LOOP
 
-These are things every agent needs, regardless of domain. The framework provides them and they are always present.
+    LOOP(["HarnessLoop"])
 
-| Concern | Where it lives | Status |
-| ------- | -------------- | ------ |
-| Turn-by-turn loop orchestration | `HarnessLoop` | ✅ |
-| Budget enforcement (turns, tokens, cost, wall clock) | `IBudgetEnforcer` / `DefaultBudgetEnforcer` | ✅ |
-| Context assembly — what the model sees each turn | Guide pipeline / `IContextBuilder` | ✅ |
-| Trajectory rendering and compaction | `ITrajectoryGuide` / `HeadEvictionTrajectoryGuide` | ✅ |
-| Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
-| Tool dispatch | `IToolRegistry` | ✅ |
-| Skills plumbing — listing and loading pre-authored skill documents | `SkillsGuide` / `ISkillStore` / `skill_view` | ✅ |
-| Learning plumbing — persisting agent-saved skills across episodes, with version history | `ISkillStore` / `FileSkillStore` / `skill_manage` | ✅ |
-| Human-in-the-loop plumbing — suspend on `ask_human`, resume via `ResumeWithHumanAnswer` | `AskHumanTool` / `IHumanNotifier` | ✅ |
-| Model transport | `IModelClient` | ✅ |
-| Tracing and metrics | `ITracer` / `CompositeTracer` | ✅ |
-| Checkpoint / resume | `ICheckpointStore` / `FileCheckpointStore` | ✅ |
+    LOOP --- GP["IGuide\ncontext shaping"]
+    LOOP --- SN["ISensor\nobservation & intervention"]
+    LOOP --- TL["ITool / IToolRegistry\ntool dispatch"]
 
-Infrastructure projects ship concrete implementations of these ports. They are conveniences — a user could write their own — but they are implementations of harness-level abstractions and belong in this repo.
+    GP --- MS["IMemoryStore\nmemory retrieval"]
+    GP --- TS["IToolSelector\ntool filtering"]
+    GP --- SS["ISkillStore\nskills & learning"]
+    TL --- HN["IHumanNotifier\nhuman-in-the-loop"]
+```
 
-### User concerns — the framework does not own these
+### Harness concerns
 
-These are things that vary by agent, deployment, or domain. The framework provides the port; the user provides the adapter.
+The framework manages these in every agent. Defaults work out of the box — replace via the builder when needed.
 
-| Concern | Port | Notes |
-| ------- | ---- | ----- |
-| Sub-agents / A2A | `ITool` | A local sub-agent is an `ITool` whose `ExecuteAsync` runs another `HarnessLoop`. A remote one calls an A2A endpoint. The framework has no opinion on which — it just dispatches the tool call. |
-| Long-term memory | `IMemoryStore` → `MemoryGuide` | Replace `NullMemoryStore` with a vector store or knowledge graph. |
-| Skills | `ISkillStore` → `SkillsGuide` + `skill_view` | Pre-authored `SKILL.md` instructions surfaced to the agent via `WithSkills(dir)`. The harness lists and loads them; the agent reads them. |
-| Learning | `ISkillStore` → `skill_manage` | Enable via `WithLearning(dir)`. The agent saves procedures it works out at runtime; the harness dispatches the call and persists the file. The **model** decides when to save — the harness never forces it. Any cross-episode automation is the user's concern. |
-| Trajectory compaction | `ICompactionStrategy` → `HeadEvictionTrajectoryGuide` | `NullCompactionStrategy` (default) inserts a bare omission note when steps are evicted. Replace with `AiCompactionStrategy` via `builder.WithAiCompaction(modelClient)` to produce an AI-generated prose summary instead — the caller supplies the model client so the framework stays provider-neutral. Use a fast, cheap model (Haiku-class) to keep compaction overhead low; the strategy fails open. |
-| Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. **Design decision:** building a tool router into the framework would paper over an agent design problem. If a model struggles to pick from 20+ tools, the correct fix is to decompose the agent into multiple focused agents with smaller, coherent tool sets — not to add a routing layer that incurs an extra LLM call per turn, extra cost, and a false-negative failure mode (hiding a tool the model legitimately needed). The port exists for legitimate per-turn filtering — e.g. a custom guide that removes destructive tools after a certain step — not to compensate for an overloaded tool catalogue. |
-| Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
-| Domain tools | `ITool` | Everything the model can invoke. |
-| Human-in-the-loop | `IHumanNotifier` → `AskHumanTool` | The harness provides the port (`IHumanNotifier`) and suspends with `AwaitingHuman`; `ConsoleHumanChannel` is the dev-time adapter. How a question is dispatched — HTTP, Slack, a bus message — and how the answer is routed back are system design decisions the harness cannot make. See the [Human-in-the-loop](#human-in-the-loop) section. |
-| Authenticated HTTP clients for tools | Standard .NET DI | Tools that call external APIs (including MCP servers backed by domain services) need authenticated `HttpClient` instances. The harness does not provide this because the authentication mechanism, token lifecycle, and target services are all deployment concerns. The correct pattern is to register a named `HttpClient` with a `DelegatingHandler` for token acquisition and refresh in the composition root, alongside `AddModelHarness`. Tools declare `IHttpClientFactory` as a constructor dependency and call `CreateClient("name")` — the factory and handler are resolved from the same DI container. This means all tools registered with the harness share the same token cache and renewal logic with no harness changes required. For MCP-backed tools specifically, authentication to the MCP server is a transport-layer concern that belongs in how `IMcpClient` connections are established, not in tool implementations. |
-| Irreversible action gate | `PreToolCall` sensor + `IHumanNotifier` + checkpoint/resume | Blocking dispatch of dangerous tools until a human approves only makes sense when a human is available and reachable — something an ambient agent cannot guarantee. For chat agents, a `PreToolCall` sensor can block and trigger `ask_human`; the suspend/resume port handles the wait. For ambient agents, the right pattern is to structure the task so the human approves a plan *before* the agent has authority to take destructive actions — not to intercept at dispatch time. Both patterns are user-side compositions of existing ports; the harness cannot decide which applies. |
-| Rate limiting | `IRateLimiter` (in loop) or a decorator on `IModelClient` | Provider sliding-window limits (calls/min, tokens/min) are a transport concern — the natural home is a `RateLimitingModelClientDecorator` alongside `ResilientModelClientDecorator`. The harness currently provides `IRateLimiter` as a loop-level port (with `CallsPerMinuteRateLimiter` and `TokensPerMinuteRateLimiter` in Infrastructure) because the loop is the only layer with access to `MaxWallClock`, enabling graceful `PartialResult` instead of an unbounded wait. A decorator would need to either block blindly or throw a typed exception for the loop to catch. Both placements are defensible; the current one is pragmatic. Configure via `WithRateLimiter` — no-op by default. |
+| Concern | Port | Default |
+|---|---|---|
+| Model transport | `IModelClient` | `FakeModelClient` (no external deps) |
+| Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` |
+| Rate limiting | `IRateLimiter` | `NullRateLimiter` (no limiting) |
+| Context assembly | `IContextBuilder` | `DefaultContextBuilder` |
+| Trajectory rendering & compaction | `ITrajectoryGuide` | `HeadEvictionTrajectoryGuide` (bare omission note on eviction) |
+| Tool registry | `IToolRegistry` | `InMemoryToolRegistry` |
+| Skills & learning storage | `ISkillStore` | `NullSkillStore` (no-op until opted in) |
+| Human-in-the-loop notification | `IHumanNotifier` | none |
+| Tracing & metrics | `ITracer` | `NullTracer`; use `WithConsoleTracer()` / `WithOtelTracer()` |
+| Checkpoint / resume | `ICheckpointStore` | `NullCheckpointStore` (no persistence) |
+
+### User concerns
+
+The framework provides the port; the caller provides the adapter. Defaults are no-ops or dev-time stubs.
+
+| Concern | Port | Default |
+|---|---|---|
+| Domain tools | `ITool` | none |
+| Domain sensors | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` via `AddStandardModelHarness` |
+| Custom guides | `IGuide` | none (seven built-in guides always run) |
+| Long-term memory | `IMemoryStore` | `NullMemoryStore` |
+| Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note) |
+| Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) |
+| Sub-agents / A2A | `ITool` wrapping a nested `HarnessLoop` or remote endpoint | none |
 
 ---
 
