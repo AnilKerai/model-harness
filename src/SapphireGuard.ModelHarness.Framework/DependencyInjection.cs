@@ -39,6 +39,7 @@ public static class DependencyInjection
             .AddToolRegistryDefault()
             .AddCompactionStrategyDefault()
             .AddTrajectoryGuideDefault()
+            .AddHumanNotifierDefault()
             .AddDefaultGuidePipeline()
             .AddSensorRunnerDefault();
 
@@ -151,6 +152,12 @@ public static class DependencyInjection
         services.AddSingleton<IGuide, ToolSelectorGuide>();
         services.AddSingleton<IGuide, ToolCatalogueGuide>();
         services.AddSingleton<IGuide, SkillsGuide>();
+        return services;
+    }
+
+    private static IServiceCollection AddHumanNotifierDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IHumanNotifier, NullHumanNotifier>();
         return services;
     }
 
