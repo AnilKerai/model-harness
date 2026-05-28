@@ -27,20 +27,18 @@ always a product decision, not a model decision.
 
 ## Context engineering
 
-In 2025 "context engineering" emerged as the umbrella term for what this framework is built around. Andrej Karpathy's framing is the clearest: *"the delicate art and science of filling the context window with just the right information for the next step"* — with the analogy that the LLM is the CPU, the context window is RAM, and the context engineer is the OS deciding what to load. Shopify CEO Tobi Lütke puts it plainly: *"the art of providing all the context for the task to be plausibly solvable by the LLM."*
+Context engineering — as I understand it — is the practice of shaping model perception: deciding what information goes into the context window at each step, what gets left out, and how it's structured. The guide pattern in this framework is a concrete implementation of that idea.
 
-The four standard CE operations — **write, select, compress, isolate** — each have a named home in the harness:
+The four standard CE operations each have a named home here:
 
-| CE operation | What it means | Where it lives in the harness |
+| CE operation | What it means | Port |
 |---|---|---|
-| **Write** | Externalise information outside the window for later retrieval | Sensor interventions write `[HARNESS OBSERVATION]` notes into the trajectory; `skill_manage` externalises agent-derived procedures to disk; `ICheckpointStore` externalises full run state |
-| **Select** | Pull relevant information into the window when needed | `MemoryGuide` → `IMemoryStore` (replace `NullMemoryStore` with a vector store or knowledge graph); `ToolSelectorGuide` → `IToolSelector`; `SkillsGuide` progressive disclosure — catalogue summary in every prompt, full body loaded on demand via `skill_view`; `HeadEvictionTrajectoryGuide` re-injects `[ORIGINAL GOAL]` every turn so the goal survives compaction |
-| **Compress** | Reduce token count while preserving signal | `HeadEvictionTrajectoryGuide` token-aware compaction evicts oldest steps when the estimated token count approaches `MaxContextTokens`; the `ICompactionStrategy` port decides what replaces them — `NullCompactionStrategy` (default) inserts a bare omission note, `AiCompactionStrategy` (opt-in, provider-neutral) calls a lightweight model to produce a prose summary of the evicted segment so the agent retains more signal across long runs; skills use two-tier disclosure (name + when-to-use only, full body on demand) so cost stays low even with many skills |
-| **Isolate** | Partition context so sub-agents don't pollute each other | `AgentFactory` gives each named agent a fully isolated `ServiceProvider` — no trajectory, sensors, or state shared between agents; the HITL suspend/resume boundary is a clean context break |
+| **Write** | Externalise information outside the window for later retrieval | `ICheckpointStore`, `ISkillStore` |
+| **Select** | Pull relevant information into the window when needed | `IMemoryStore`, `IToolSelector`, `ISkillStore` |
+| **Compress** | Reduce token count while preserving signal | `ITrajectoryGuide`, `ICompactionStrategy` |
+| **Isolate** | Partition context so sub-agents don't pollute each other | `AgentFactory` |
 
-The `ContextDraft` that guides build before each model call is the harness's representation of a context engineering decision. Every field — `SystemPrompt`, `TrajectoryMessages`, `MemorySnippets`, `AvailableTools`, `SystemSections` — is an explicit choice about what the model sees on this turn. Implement `IGuide` to change any of those choices without touching the loop.
-
-> **Known gap:** the select operation for long-term retrieval (`IMemoryStore`) ships as a no-op (`NullMemoryStore`). The port and `MemoryGuide` are the right shape — replace with a vector store or knowledge graph to close this.
+Each port is listed in the [extension points](#extension-points) section below.
 
 The primitives below name the building blocks the harness provides for each of these operations; the core patterns sections show how they are implemented.
 
@@ -107,6 +105,8 @@ writes into one or more of the draft's fields:
 | `MemorySnippets` | Long-term knowledge surfaced from a retrieval system |
 | `AvailableTools` | Tool list for this turn — guides can filter or reorder |
 | `SystemSections` | Pre-rendered system-prompt sections (tool catalogue, skill catalogue) appended after the prompt |
+
+Every field is an explicit choice about what the model sees on this turn — the `ContextDraft` is the harness's concrete representation of a context engineering decision. Implement `IGuide` to change any of those choices without touching the loop.
 
 See [EXTENDING.md](EXTENDING.md) for the `IGuide` interface and registration. The pipeline order is explicit and fixed. Two ordering constraints drive it:
 
