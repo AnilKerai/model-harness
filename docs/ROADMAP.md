@@ -100,6 +100,21 @@ where the implementation would live.
 
 ---
 
+### Deliberately adapter-local — lives inside the provider adapter
+
+These are provider-specific wire-format optimisations. The harness does not annotate
+`ContextDraft` with caching hints or other provider semantics — doing so would pollute
+`Framework` with concepts that only some providers support. Each adapter owns its own
+optimisation decisions.
+
+- **Token / prompt caching** (`cache_control` breakpoints in `ClaudeModelClient`,
+  equivalent mechanisms in other adapters) — the system prompt and tool catalogue are
+  stable across turns and are natural cache targets; the adapter can identify and mark
+  them without any harness involvement. If a shared abstraction ever earns its keep
+  (three adapters with diverging caching semantics), revisit then.
+
+---
+
 ### Deliberately out of scope — lives above the harness
 
 These are **cross-episode** concerns. A harness runs **one episode**; anything that
