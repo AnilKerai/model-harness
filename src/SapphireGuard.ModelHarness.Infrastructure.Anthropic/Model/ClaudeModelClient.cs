@@ -124,7 +124,7 @@ public sealed class ClaudeModelClient : IModelClient
 
     private static ToolUseBlockParam ParseToolUse(string content)
     {
-        // Content format written by TrajectoryGuide:
+        // Content format written by HeadEvictionTrajectoryGuide:
         // "[tool_call name={name} id={callId}] {argsJson}"
         string name = "";
         string callId = "";
@@ -154,7 +154,7 @@ public sealed class ClaudeModelClient : IModelClient
 
     private static ToolResultBlockParam ParseToolResult(string content)
     {
-        // Content format written by TrajectoryGuide:
+        // Content format written by HeadEvictionTrajectoryGuide:
         // "[tool_result id={callId} error={bool}] {resultText}"
         string callId = "";
         bool isError = false;

@@ -22,7 +22,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 /// Mapping notes:
 ///   • Ollama tool calls have no call ID in the protocol; OllamaSharp v5 exposes an Id
 ///     property that may be null. We use it when present, otherwise synthesise a GUID.
-///   • TrajectoryGuide emits interleaved ToolUse/Tool pairs
+///   • HeadEvictionTrajectoryGuide emits interleaved ToolUse/Tool pairs
 ///     (ToolUse1, Tool1, ToolUse2, Tool2) for a single model turn, but Ollama expects
 ///     all calls from one turn in a single assistant message followed by separate tool
 ///     result messages. <see cref="BuildMessages"/> groups them with a stateful pass.
@@ -112,7 +112,7 @@ public sealed class OllamaModelClient : IModelClient
                     // Only the first system message is used as the Ollama system prompt.
                     // Subsequent ones are sensor intervention notes — same treatment as
                     // the Anthropic adapter (they are dropped here; the suppression of
-                    // flagged model responses by TrajectoryGuide is the primary mechanism).
+                    // flagged model responses by HeadEvictionTrajectoryGuide is the primary mechanism).
                     systemText ??= msg.Content;
                     break;
 

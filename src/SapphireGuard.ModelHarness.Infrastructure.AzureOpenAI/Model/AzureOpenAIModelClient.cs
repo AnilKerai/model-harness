@@ -112,7 +112,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
 
     private static ChatToolCall ParseToolUse(string content)
     {
-        // Format written by TrajectoryGuide: "[tool_call name={name} id={callId}] {argsJson}"
+        // Format written by HeadEvictionTrajectoryGuide: "[tool_call name={name} id={callId}] {argsJson}"
         string name = "";
         string callId = "";
         string argsJson = "{}";
@@ -137,7 +137,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
 
     private static (string CallId, string ResultText) ParseToolResult(string content)
     {
-        // Format written by TrajectoryGuide: "[tool_result id={callId} error={bool}] {resultText}"
+        // Format written by HeadEvictionTrajectoryGuide: "[tool_result id={callId} error={bool}] {resultText}"
         string callId = "";
         string resultText = content;
 

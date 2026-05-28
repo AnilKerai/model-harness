@@ -17,19 +17,19 @@ where the implementation would live.
 - [x] `IGuide` / `IGuideRunner` / `ContextDraft` — sequential pipeline that shapes what the model sees
 - [x] `SystemPromptGuide` — injects agent identity and standing instructions
 - [x] `HarnessInstructionsGuide` — appends harness conventions to the system prompt; teaches the model to treat `[HARNESS OBSERVATION — ...]` notes as directives (feedforward complement to sensor feedback)
-- [x] `TrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt; sensor notes use `[HARNESS OBSERVATION — ...]` prefix matching what `HarnessInstructionsGuide` declares
-- [x] Token-aware trajectory compaction — `TrajectoryGuide` trims oldest steps when estimated token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped
-- [x] Explicit guide pipeline with `TrajectoryGuide` pinned last — built-in guides registered in visible, ordered sequence in `AddDefaultGuidePipeline`; `WithGuide()` accumulates custom guides (deferred, like tracers); `ApplyGuides()` registers custom guides then `TrajectoryGuide` last so it can measure all prior guide contributions (`SystemPrompt`, `MemorySnippets`, `SystemSections`) and compute an accurate token budget rather than relying on a fixed reserve
-- [x] Smarter compaction via summarisation — `ICompactionStrategy` port on `TrajectoryGuide`; `NullCompactionStrategy` default (bare omission note, no extra model call); `AiCompactionStrategy` in `Infrastructure` takes any `IModelClient` and produces a 3–5 sentence prose summary of the evicted segment; fails open (falls back to omission note if the model call fails or returns empty); opt in via `builder.WithAiCompaction(modelClient)` — caller supplies the model so the framework stays provider-neutral. Note: compaction calls are not yet surfaced in traces as a separate cost line; can be added to `ITracer` if operators need the breakdown.
+- [x] `HeadEvictionTrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt; sensor notes use `[HARNESS OBSERVATION — ...]` prefix matching what `HarnessInstructionsGuide` declares
+- [x] Token-aware trajectory compaction — `HeadEvictionTrajectoryGuide` trims oldest steps when estimated token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped
+- [x] Explicit guide pipeline with `HeadEvictionTrajectoryGuide` pinned last — built-in guides registered in visible, ordered sequence in `AddDefaultGuidePipeline`; `WithGuide()` accumulates custom guides (deferred, like tracers); `ApplyGuides()` registers custom guides then `HeadEvictionTrajectoryGuide` last so it can measure all prior guide contributions (`SystemPrompt`, `MemorySnippets`, `SystemSections`) and compute an accurate token budget rather than relying on a fixed reserve
+- [x] Smarter compaction via summarisation — `ICompactionStrategy` port on `HeadEvictionTrajectoryGuide`; `NullCompactionStrategy` default (bare omission note, no extra model call); `AiCompactionStrategy` in `Infrastructure` takes any `IModelClient` and produces a 3–5 sentence prose summary of the evicted segment; fails open (falls back to omission note if the model call fails or returns empty); opt in via `builder.WithAiCompaction(modelClient)` — caller supplies the model so the framework stays provider-neutral. Note: compaction calls are not yet surfaced in traces as a separate cost line; can be added to `ITracer` if operators need the breakdown.
 - [x] `MemoryGuide` — port for long-term memory; default is `NullMemoryStore` (no-op); replace with a vector store or knowledge graph
 - [x] `ToolSelectorGuide` — port for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
 - [ ] ~~Progressive tool discovery~~ — removed from backlog; see the ADR in README.md (tool relevance ranking row). Short version: a routing layer papers over an agent design problem. An agent with 20+ tools is already a smell; the right fix is decomposition, not a router.
-- [x] ReAct loop / goal reiteration — `TrajectoryGuide` re-injects the original `state.TaskText` as a `[ORIGINAL GOAL]` system note on every turn; prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns, especially after compaction drops early history
+- [x] ReAct loop / goal reiteration — `HeadEvictionTrajectoryGuide` re-injects the original `state.TaskText` as a `[ORIGINAL GOAL]` system note on every turn; prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns, especially after compaction drops early history
 - [x] Intermediate validation gate — `ProgressCheckSensor` fires at `PreModelCall` every N completed turns (configurable, default 5) and annotates the trajectory with a structured checkpoint prompt; included in `AddStandardModelHarness` by default
 
 ### Sensor pattern
 - [x] `ISensor` / `ISensorRunner` / `HookPoint` — parallel observation at five lifecycle positions
-- [x] `SensorResult.Intervene(reason)` → `SensorInterventionStep` fed back through `TrajectoryGuide`
+- [x] `SensorResult.Intervene(reason)` → `SensorInterventionStep` fed back through `HeadEvictionTrajectoryGuide`
 - [x] `StuckDetector` — built-in sensor; blocks repeated identical tool calls
 - [x] `PiiRedactionSensor` — PostModelCall; regex scan for email, phone, credit card, NI, SSN
 - [x] `ToolResultSanityCheckSensor` — PostToolCall; validates result shape and per-tool custom rules
@@ -95,7 +95,7 @@ where the implementation would live.
 - [x] DI smoke tests — builder methods and `DependencyInjection.cs` files are `[ExcludeFromCodeCoverage]`; smoke tests live in `tests/.../Smoke/DiSmokeTests.cs`; resolve the container, run one turn against `FakeModelClient` to catch wiring regressions without testing implementation detail
 
 ### Testing
-- [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 209 unit tests covering `HarnessLoop`, `TrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
+- [x] `SapphireGuard.ModelHarness.Framework.Tests.Unit` — 209 unit tests covering `HarnessLoop`, `HeadEvictionTrajectoryGuide`, `DefaultBudgetEnforcer`, `DefaultSensorRunner`, `StuckDetector`, `DefaultContextBuilder`, all three production sensors, `InMemoryToolRegistry`, `CalculatorTool`
 - [x] `[ExcludeFromCodeCoverage]` applied to trivial delegation classes
 
 ---

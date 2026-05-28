@@ -212,7 +212,7 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
 
     /// <summary>
     /// Adds a custom guide by type. Multiple calls are additive. Custom guides run after
-    /// the built-in guides and before <see cref="TrajectoryGuide"/>, which is always last.
+    /// the built-in guides and before <see cref="HeadEvictionTrajectoryGuide"/>, which is always last.
     /// </summary>
     public ModelHarnessBuilder WithGuide<TImpl>() where TImpl : class, IGuide
     {
@@ -223,7 +223,7 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
 
     /// <summary>
     /// Adds a custom guide via factory. Multiple calls are additive. Custom guides run after
-    /// the built-in guides and before <see cref="TrajectoryGuide"/>, which is always last.
+    /// the built-in guides and before <see cref="HeadEvictionTrajectoryGuide"/>, which is always last.
     /// </summary>
     public ModelHarnessBuilder WithGuide(Func<IServiceProvider, IGuide> factory)
     {

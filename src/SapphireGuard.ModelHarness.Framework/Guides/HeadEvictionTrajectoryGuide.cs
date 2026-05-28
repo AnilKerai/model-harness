@@ -15,7 +15,7 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// Must run last in the guide pipeline so it can measure all prior guide contributions
 /// and compute an accurate token budget rather than relying on a fixed reserve.
 /// </summary>
-public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy) : ITrajectoryGuide
+public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionStrategy) : ITrajectoryGuide
 {
     public string Name => "trajectory";
 
@@ -99,7 +99,7 @@ public sealed class TrajectoryGuide(ICompactionStrategy compactionStrategy) : IT
 
     // Sums the estimated token cost of everything already written to the draft by prior guides
     // (system prompt, memory snippets, system sections such as tool catalogue and skills).
-    // TrajectoryMessages is empty at this point — TrajectoryGuide hasn't written yet.
+    // TrajectoryMessages is empty at this point — HeadEvictionTrajectoryGuide hasn't written yet.
     private static int EstimateDraftTokens(ContextDraft draft)
     {
         var total = EstimateTokens(draft.SystemPrompt);

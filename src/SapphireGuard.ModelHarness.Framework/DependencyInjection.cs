@@ -131,17 +131,16 @@ public static class DependencyInjection
     private static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services)
     {
         services.TryAddSingleton<ITrajectoryGuide>(sp =>
-            new TrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
+            new HeadEvictionTrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
         return services;
     }
 
     /// <summary>
     /// Registers the built-in guide pipeline in explicit execution order.
-    /// TrajectoryGuide is intentionally absent — it is always pinned last by
-    /// ModelHarnessBuilder.ApplyGuides() so it can measure all prior guide
-    /// contributions when computing its token budget.
+    /// The ITrajectoryGuide (HeadEvictionTrajectoryGuide by default) is absent —
+    /// DefaultGuideRunner resolves it as a separate dependency and always runs it last.
     /// Custom guides registered via builder.WithGuide() are inserted between
-    /// these built-ins and TrajectoryGuide.
+    /// these built-ins and the trajectory guide.
     /// </summary>
     private static IServiceCollection AddDefaultGuidePipeline(this IServiceCollection services)
     {

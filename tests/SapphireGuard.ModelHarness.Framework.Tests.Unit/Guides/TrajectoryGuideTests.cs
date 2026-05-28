@@ -8,7 +8,7 @@ using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
 
 namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Guides;
 
-public sealed class TrajectoryGuideTests
+public sealed class HeadEvictionTrajectoryGuideTests
 {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ public sealed class TrajectoryGuideTests
     private static async Task<ContextDraft> ContributeAsync(AgentState state)
     {
         var draft = new ContextDraft();
-        await new TrajectoryGuide(new NullCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+        await new HeadEvictionTrajectoryGuide(new NullCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
         return draft;
     }
 

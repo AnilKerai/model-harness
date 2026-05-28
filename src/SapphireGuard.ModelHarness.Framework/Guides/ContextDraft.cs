@@ -23,7 +23,7 @@ public sealed class ContextDraft
     public List<string> MemorySnippets { get; } = [];
 
     /// <summary>
-    /// Rendered trajectory messages. Populated by <see cref="TrajectoryGuide"/>;
+    /// Rendered trajectory messages. Populated by <see cref="HeadEvictionTrajectoryGuide"/>;
     /// any guide can append additional framing messages here.
     /// </summary>
     public List<Message> TrajectoryMessages { get; } = [];

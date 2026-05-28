@@ -34,8 +34,8 @@ The four standard CE operations — **write, select, compress, isolate** — eac
 | CE operation | What it means | Where it lives in the harness |
 |---|---|---|
 | **Write** | Externalise information outside the window for later retrieval | Sensor interventions write `[HARNESS OBSERVATION]` notes into the trajectory; `skill_manage` externalises agent-derived procedures to disk; `ICheckpointStore` externalises full run state |
-| **Select** | Pull relevant information into the window when needed | `MemoryGuide` → `IMemoryStore` (replace `NullMemoryStore` with a vector store or knowledge graph); `ToolSelectorGuide` → `IToolSelector`; `SkillsGuide` progressive disclosure — catalogue summary in every prompt, full body loaded on demand via `skill_view`; `TrajectoryGuide` re-injects `[ORIGINAL GOAL]` every turn so the goal survives compaction |
-| **Compress** | Reduce token count while preserving signal | `TrajectoryGuide` token-aware compaction evicts oldest steps when the estimated token count approaches `MaxContextTokens`; the `ICompactionStrategy` port decides what replaces them — `NullCompactionStrategy` (default) inserts a bare omission note, `AiCompactionStrategy` (opt-in, provider-neutral) calls a lightweight model to produce a prose summary of the evicted segment so the agent retains more signal across long runs; skills use two-tier disclosure (name + when-to-use only, full body on demand) so cost stays low even with many skills |
+| **Select** | Pull relevant information into the window when needed | `MemoryGuide` → `IMemoryStore` (replace `NullMemoryStore` with a vector store or knowledge graph); `ToolSelectorGuide` → `IToolSelector`; `SkillsGuide` progressive disclosure — catalogue summary in every prompt, full body loaded on demand via `skill_view`; `HeadEvictionTrajectoryGuide` re-injects `[ORIGINAL GOAL]` every turn so the goal survives compaction |
+| **Compress** | Reduce token count while preserving signal | `HeadEvictionTrajectoryGuide` token-aware compaction evicts oldest steps when the estimated token count approaches `MaxContextTokens`; the `ICompactionStrategy` port decides what replaces them — `NullCompactionStrategy` (default) inserts a bare omission note, `AiCompactionStrategy` (opt-in, provider-neutral) calls a lightweight model to produce a prose summary of the evicted segment so the agent retains more signal across long runs; skills use two-tier disclosure (name + when-to-use only, full body on demand) so cost stays low even with many skills |
 | **Isolate** | Partition context so sub-agents don't pollute each other | `AgentFactory` gives each named agent a fully isolated `ServiceProvider` — no trajectory, sensors, or state shared between agents; the HITL suspend/resume boundary is a clean context break |
 
 The `ContextDraft` that guides build before each model call is the harness's representation of a context engineering decision. Every field — `SystemPrompt`, `TrajectoryMessages`, `MemorySnippets`, `AvailableTools`, `SystemSections` — is an explicit choice about what the model sees on this turn. Implement `IGuide` to change any of those choices without touching the loop.
@@ -187,11 +187,11 @@ services.AddModelHarness(builder => builder.WithGuide<MyGuide>());
 The pipeline order is explicit and fixed. Two ordering constraints drive it:
 
 - **`ToolSelectorGuide` before `ToolCatalogueGuide`** — the catalogue renders whatever tools the selector has approved for this turn; reversing them would always render the full tool list regardless of filtering.
-- **`TrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve. This constraint is enforced structurally: `TrajectoryGuide` implements `ITrajectoryGuide` (not `IGuide`), and `DefaultGuideRunner` resolves it as a separate dependency and always invokes it after all `IGuide` instances — no reliance on DI registration order. Swap the default via `builder.WithTrajectoryGuide<T>()`.
+- **`HeadEvictionTrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve. This constraint is enforced structurally: `HeadEvictionTrajectoryGuide` implements `ITrajectoryGuide` (not `IGuide`), and `DefaultGuideRunner` resolves it as a separate dependency and always invokes it after all `IGuide` instances — no reliance on DI registration order. Swap the default via `builder.WithTrajectoryGuide<T>()`.
 
-Custom guides registered via `builder.WithGuide<T>()` slot in after the built-ins and before `TrajectoryGuide`.
+Custom guides registered via `builder.WithGuide<T>()` slot in after the built-ins and before `HeadEvictionTrajectoryGuide`.
 
-`TrajectoryGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
+`HeadEvictionTrajectoryGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
 
 ### The Sensor pattern — observing and intervening
 
@@ -229,7 +229,7 @@ always gets the next call so it can self-correct. Each hookpoint has a precise v
 annotate (`PreModelCall`), reject (`PostModelCall`), block (`PreToolCall`), flag
 (`PostToolCall`), challenge (`PreReturn`). An intervention wraps the sensor's reason
 in a `SensorInterventionStep` and appends it to the trajectory. On the next turn
-(or the same turn for `PreModelCall`), `TrajectoryGuide` renders it as an assistant-role message
+(or the same turn for `PreModelCall`), `HeadEvictionTrajectoryGuide` renders it as an assistant-role message
 prefixed `[HARNESS OBSERVATION — ...]`. `HarnessInstructionsGuide` tells the model upfront
 (in the system prompt) what these notes mean and that they must be treated as directives —
 this is the feedforward complement to the sensor's feedback. Intervention records are
@@ -844,7 +844,7 @@ argument to override the default policy.
 
 ### Enable AI-powered compaction
 
-By default, when the trajectory is trimmed to fit the context window, `TrajectoryGuide` inserts a bare omission note (`[N earlier step(s) omitted — context window limit]`). On long runs this loses signal the model may still need. `AiCompactionStrategy` replaces the note with a prose summary generated by a lightweight model:
+By default, when the trajectory is trimmed to fit the context window, `HeadEvictionTrajectoryGuide` inserts a bare omission note (`[N earlier step(s) omitted — context window limit]`). On long runs this loses signal the model may still need. `AiCompactionStrategy` replaces the note with a prose summary generated by a lightweight model:
 
 ```csharp
 builder.WithAiCompaction(new ClaudeModelClient(new ClaudeClientOptions
@@ -871,7 +871,7 @@ These are things every agent needs, regardless of domain. The framework provides
 | Turn-by-turn loop orchestration | `HarnessLoop` | ✅ |
 | Budget enforcement (turns, tokens, cost, wall clock) | `IBudgetEnforcer` / `DefaultBudgetEnforcer` | ✅ |
 | Context assembly — what the model sees each turn | Guide pipeline / `IContextBuilder` | ✅ |
-| Trajectory rendering and compaction | `ITrajectoryGuide` / `TrajectoryGuide` | ✅ |
+| Trajectory rendering and compaction | `ITrajectoryGuide` / `HeadEvictionTrajectoryGuide` | ✅ |
 | Sensor observation and intervention routing | `ISensorRunner` / hookpoints | ✅ |
 | Tool dispatch | `IToolRegistry` | ✅ |
 | Skills plumbing — listing and loading pre-authored skill documents | `SkillsGuide` / `ISkillStore` / `skill_view` | ✅ |
@@ -893,7 +893,7 @@ These are things that vary by agent, deployment, or domain. The framework provid
 | Long-term memory | `IMemoryStore` → `MemoryGuide` | Replace `NullMemoryStore` with a vector store or knowledge graph. |
 | Skills | `ISkillStore` → `SkillsGuide` + `skill_view` | Pre-authored `SKILL.md` instructions surfaced to the agent via `WithSkills(dir)`. The harness lists and loads them; the agent reads them. |
 | Learning | `ISkillStore` → `skill_manage` | Enable via `WithLearning(dir)`. The agent saves procedures it works out at runtime; the harness dispatches the call and persists the file. The **model** decides when to save — the harness never forces it. Any cross-episode automation is the user's concern. |
-| Trajectory compaction | `ICompactionStrategy` → `TrajectoryGuide` | `NullCompactionStrategy` (default) inserts a bare omission note when steps are evicted. Replace with `AiCompactionStrategy` via `builder.WithAiCompaction(modelClient)` to produce an AI-generated prose summary instead — the caller supplies the model client so the framework stays provider-neutral. Use a fast, cheap model (Haiku-class) to keep compaction overhead low; the strategy fails open. |
+| Trajectory compaction | `ICompactionStrategy` → `HeadEvictionTrajectoryGuide` | `NullCompactionStrategy` (default) inserts a bare omission note when steps are evicted. Replace with `AiCompactionStrategy` via `builder.WithAiCompaction(modelClient)` to produce an AI-generated prose summary instead — the caller supplies the model client so the framework stays provider-neutral. Use a fast, cheap model (Haiku-class) to keep compaction overhead low; the strategy fails open. |
 | Tool relevance ranking | `IToolSelector` → `ToolSelectorGuide` | Filter or rerank `ContextDraft.AvailableTools` per turn. **Design decision:** building a tool router into the framework would paper over an agent design problem. If a model struggles to pick from 20+ tools, the correct fix is to decompose the agent into multiple focused agents with smaller, coherent tool sets — not to add a routing layer that incurs an extra LLM call per turn, extra cost, and a false-negative failure mode (hiding a tool the model legitimately needed). The port exists for legitimate per-turn filtering — e.g. a custom guide that removes destructive tools after a certain step — not to compensate for an overloaded tool catalogue. |
 | Domain sensors | `ISensor` | Business rules, authorisation checks, output quality gates — all per-agent. |
 | Domain tools | `ITool` | Everything the model can invoke. |
