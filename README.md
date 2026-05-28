@@ -513,6 +513,28 @@ common adapters into a sensible out-of-the-box experience. Engineering consumers
 want to make every wiring decision can call this and just supply a model, their tools, and any
 overrides. Defaults are applied first; anything you add layers on top.
 
+```mermaid
+flowchart LR
+    MC["IModelClient\nmodel transport"] --- LOOP
+    BE["IBudgetEnforcer\nbudget policy"] --- LOOP
+    RL["IRateLimiter\nrate policy"] --- LOOP
+    CP["ICheckpointStore\ncheckpoint / resume"] --- LOOP
+    TR["ITracer\ntracing & metrics"] --- LOOP
+
+    LOOP(["HarnessLoop"])
+
+    LOOP --- GP["IGuide\ncontext shaping"]
+    LOOP --- SN["ISensor\nobservation & intervention"]
+    LOOP --- TL["ITool / IToolRegistry\ntool dispatch"]
+
+    GP --- MS["IMemoryStore\nmemory retrieval"]
+    GP --- TS["IToolSelector\ntool filtering"]
+    GP --- SS["ISkillStore\nskills & learning"]
+    GP --- TG["ITrajectoryGuide\ntrajectory rendering"]
+    TG --- CS["ICompactionStrategy\ncompaction"]
+    TL --- HN["IHumanNotifier\nhuman-in-the-loop"]
+```
+
 ### Minimal setup
 
 `AddStandardModelHarness` is the recommended entry point — supply your model, tools, and any
@@ -887,28 +909,6 @@ The strategy fails open — if the model call fails or returns empty text, the b
 ## Extension points
 
 Every port in the framework ships with a working default — swap any of them by registering your own implementation via the builder. The distinction below is between concerns the framework manages automatically (override when needed) and concerns the framework exposes a port for but leaves entirely to the caller.
-
-```mermaid
-flowchart LR
-    MC["IModelClient\nmodel transport"] --- LOOP
-    BE["IBudgetEnforcer\nbudget policy"] --- LOOP
-    RL["IRateLimiter\nrate policy"] --- LOOP
-    CP["ICheckpointStore\ncheckpoint / resume"] --- LOOP
-    TR["ITracer\ntracing & metrics"] --- LOOP
-
-    LOOP(["HarnessLoop"])
-
-    LOOP --- GP["IGuide\ncontext shaping"]
-    LOOP --- SN["ISensor\nobservation & intervention"]
-    LOOP --- TL["ITool / IToolRegistry\ntool dispatch"]
-
-    GP --- MS["IMemoryStore\nmemory retrieval"]
-    GP --- TS["IToolSelector\ntool filtering"]
-    GP --- SS["ISkillStore\nskills & learning"]
-    GP --- TG["ITrajectoryGuide\ntrajectory rendering"]
-    TG --- CS["ICompactionStrategy\ncompaction"]
-    TL --- HN["IHumanNotifier\nhuman-in-the-loop"]
-```
 
 ### Harness concerns
 
