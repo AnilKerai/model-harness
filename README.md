@@ -657,6 +657,32 @@ builder.WithGuide<MyGuide>() // runs after the seven built-in guides
 
 See the guide pattern section above for how to implement `IGuide`.
 
+### Replace the trajectory guide
+
+The default `HeadEvictionTrajectoryGuide` evicts the oldest steps when the trajectory exceeds the context budget, replacing them with a placeholder via `ICompactionStrategy`. Swap it for a different eviction or rendering strategy via `builder.WithTrajectoryGuide<T>()`:
+
+```csharp
+public sealed class MyTrajectoryGuide(ICompactionStrategy compactionStrategy) : ITrajectoryGuide
+{
+    public string Name => "my-trajectory";
+
+    public async Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+    {
+        // Write rendered steps into draft.TrajectoryMessages however you like.
+        // draft.TrajectoryMessages is empty when this is called — write everything here.
+        // Use state.Budget.MaxContextTokens and state.Trajectory for inputs.
+    }
+}
+```
+
+Register it:
+
+```csharp
+builder.WithTrajectoryGuide<MyTrajectoryGuide>()
+```
+
+`ITrajectoryGuide` is kept separate from `IGuide` so `DefaultGuideRunner` can guarantee it always runs last — after all supporting guides have written to `ContextDraft` — without relying on DI registration order. Any implementation can structure `ContributeAsync` however it needs to; there is no shared base class forcing a particular eviction or compaction shape. `ICompactionStrategy` is available as a constructor dependency if the implementation evicts steps and wants to delegate the replacement text, but it is not required.
+
 ### Tracers
 
 Tracers are additive — call `WithTracer` (or its convenience variants) multiple times and
