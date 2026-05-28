@@ -905,6 +905,8 @@ flowchart LR
     GP --- MS["IMemoryStore\nmemory retrieval"]
     GP --- TS["IToolSelector\ntool filtering"]
     GP --- SS["ISkillStore\nskills & learning"]
+    GP --- TG["ITrajectoryGuide\ntrajectory rendering"]
+    TG --- CS["ICompactionStrategy\ncompaction"]
     TL --- HN["IHumanNotifier\nhuman-in-the-loop"]
 ```
 
