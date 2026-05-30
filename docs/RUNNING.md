@@ -143,3 +143,15 @@ Trajectory:
 - **Second `model_call`** — the model produces a clean response with no PII. The sensor passes this time (`intervene: false`) and the run completes.
 
 Notice the trajectory: the rejected response never appears as a `[model]` step — only the harness observation and the clean retry are recorded. The model's first (flagged) response is gone as far as the trajectory is concerned. This is the `PostModelCall` hookpoint's **reject** behaviour in action.
+
+The final answer the caller receives:
+
+```
+124 × 37 = **4,588**
+
+Even though you've asked me to address you by email, I should not include personal
+information like email addresses in my responses. If you need to reach the user
+directly, I'd recommend sending them a separate message.
+```
+
+The model answered the task correctly and declined to echo the PII — without any explicit instruction in the system prompt about email addresses. The sensor caught it and the model self-corrected.
