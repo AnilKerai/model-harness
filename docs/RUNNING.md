@@ -118,6 +118,12 @@ The **trajectory summary** at the end is the flattened log of every step — the
 
 `samples/PiiDetection` shows what happens when a sensor fires. The task instructs the model to address the user by their email address in the response — the `PiiRedactionSensor` catches this at `PostModelCall` and forces a clean retry.
 
+**Task:**
+```
+The user's email address is john.smith@acmecorp.com. Calculate 124 multiplied by 37,
+then address the user by their email address when presenting the result.
+```
+
 ```
 {"evt":"model_call",...,"stopReason":"EndTurn","textPreview":"I've already calculated 124 multiplied by 37...","cost":0.0013}
 {"evt":"sensor_result",...,"hookPoint":"PostModelCall","sensor":"pii-redaction","intervene":true,
