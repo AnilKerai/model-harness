@@ -494,4 +494,4 @@ For the full set of how-to recipes — customising the harness, adding tools, se
 - [EXTENDING.md](docs/EXTENDING.md) — code recipes for every extension point
 - [GLOSSARY.md](docs/GLOSSARY.md) — definitions of all framework terms
 - [ROADMAP.md](docs/ROADMAP.md) — what's done and what's still to implement
-- [FAQ.md](FAQ.md) — design decision FAQs
+- [FAQ.md](docs/FAQ.md) — design decision FAQs
