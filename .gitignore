@@ -16,7 +16,7 @@
 appsettings.local.json
 .ai
 .claude
-.DS_Store
+**/.DS_Store
 .idea
 
 # Mono auto generated files
