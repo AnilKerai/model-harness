@@ -77,6 +77,47 @@ retry + circuit-breaking via the Resilience package:
 builder.WithResilientTool<MyApiTool>()
 ```
 
+## Replace the tool registry
+
+`IToolRegistry` is the port that sits between the loop and your tools. It has two jobs: supply the tool list to the guide pipeline each turn (`List()`), and route model-issued tool calls to the right implementation (`DispatchAsync()`).
+
+The default `InMemoryToolRegistry` is a static collection — tools are registered at startup via `builder.WithTool<T>()` and the list never changes while the agent is running. That is fine for most agents, but there are two situations where you want to swap it:
+
+**Dynamic tool sets** — the available tools depend on runtime state (the current user, a feature flag, a remote capability query). A custom registry can compute `List()` and resolve `Get()` dynamically on each call.
+
+**Remote / MCP tooling** — rather than wrapping individual MCP tools as `ITool` instances at startup (see the next section), a registry-backed approach lets the agent discover tools from a remote server at runtime. This is more appropriate when the tool set is large, changes frequently, or is not fully known when the agent is composed.
+
+Replace via the builder:
+
+```csharp
+builder.WithToolRegistry<MyToolRegistry>()
+// or via factory:
+builder.WithToolRegistry(_ => new MyToolRegistry(config))
+```
+
+Implement the interface:
+
+```csharp
+public sealed class MyToolRegistry : IToolRegistry
+{
+    public IReadOnlyList<ITool> List()
+        // return whatever tools are available right now
+
+    public ITool? Get(string name)
+        // resolve by name — return null if not found
+
+    public async Task<ToolResult> DispatchAsync(ToolCall call, ToolContext ctx, CancellationToken ct)
+    {
+        var tool = Get(call.ToolName);
+        if (tool is null)
+            return new ToolResult(call.CallId, $"Tool '{call.ToolName}' not found.", IsError: true);
+        return await tool.ExecuteAsync(call, ctx, ct);
+    }
+}
+```
+
+`DispatchAsync` should return an error `ToolResult` for unknown tool names rather than throwing — the loop treats an error result as a clean signal the model can replan from.
+
 ## Expose MCP tools
 
 Add a reference to the [ModelContextProtocol NuGet package](https://www.nuget.org/packages/ModelContextProtocol), create an `McpClient` for your server, then wrap each `McpClientTool` in a thin `ITool` adapter:
