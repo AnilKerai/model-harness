@@ -1,9 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SapphireGuard.ModelHarness</PackageId>
+    <Description>Core abstractions and harness loop for structured LLM agents in .NET. An agent = model + harness; this package is the harness.</Description>
   </PropertyGroup>
 
   <ItemGroup>

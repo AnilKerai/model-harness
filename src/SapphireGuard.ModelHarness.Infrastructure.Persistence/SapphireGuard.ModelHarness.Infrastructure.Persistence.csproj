@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SapphireGuard.ModelHarness.Persistence</PackageId>
+    <Description>File-based checkpoint and resume for SapphireGuard.ModelHarness. Save agent state to disk and resume after a crash or restart.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Framework\SapphireGuard.ModelHarness.Framework.csproj" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
 
 </Project>

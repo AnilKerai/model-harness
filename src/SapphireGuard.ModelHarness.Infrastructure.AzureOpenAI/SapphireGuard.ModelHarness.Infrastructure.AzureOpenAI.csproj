@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SapphireGuard.ModelHarness.AzureOpenAI</PackageId>
+    <Description>Azure OpenAI / Azure AI Foundry adapter for SapphireGuard.ModelHarness. Supports API key and DefaultAzureCredential authentication.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Framework\SapphireGuard.ModelHarness.Framework.csproj" />
   </ItemGroup>
@@ -8,11 +15,5 @@
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
     <PackageReference Include="Azure.Identity" Version="1.13.2" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
 
 </Project>

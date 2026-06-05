@@ -1,6 +1,6 @@
 # Model Harness
 
-A reusable model harness framework for .NET 10, structured around clean / onion
+A reusable model harness framework for .NET 8 and .NET 10, structured around clean / onion
 architecture with ports and adapters at every extension point.
 
 > **Why "model harness"?** An *Agent* = Model + Harness. The harness

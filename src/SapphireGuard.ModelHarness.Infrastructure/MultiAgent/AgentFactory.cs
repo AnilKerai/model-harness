@@ -14,7 +14,7 @@ public sealed class AgentFactory : IAsyncDisposable
 {
     private readonly Dictionary<string, Action<ModelHarnessBuilder>> _definitions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (ServiceProvider Provider, Framework.Agent Agent)> _built = new(StringComparer.Ordinal);
-    private readonly Lock _lock = new();
+    private readonly object _lock = new();
 
     /// <summary>
     /// Registers a named agent with a bare <see cref="ModelHarnessBuilder"/> configure callback.

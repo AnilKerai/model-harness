@@ -1,4 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SapphireGuard.ModelHarness.Anthropic</PackageId>
+    <Description>Anthropic Claude adapter for SapphireGuard.ModelHarness. Wires ClaudeModelClient into the harness via the IModelClient port.</Description>
+  </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Framework\SapphireGuard.ModelHarness.Framework.csproj" />
@@ -7,11 +14,5 @@
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="12.22.0" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
 
 </Project>

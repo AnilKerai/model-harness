@@ -1,5 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SapphireGuard.ModelHarness.Resilience</PackageId>
+    <Description>Polly-backed retry and circuit breaker decorator for SapphireGuard.ModelHarness. Wraps any IModelClient with resilience policies.</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\SapphireGuard.ModelHarness.Framework\SapphireGuard.ModelHarness.Framework.csproj" />
   </ItemGroup>
@@ -7,11 +14,5 @@
   <ItemGroup>
     <PackageReference Include="Polly" Version="8.6.6" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
 
 </Project>

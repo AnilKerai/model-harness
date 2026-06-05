@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using SapphireGuard.ModelHarness.Framework.State;
 
@@ -44,7 +45,7 @@ public sealed class StepJsonConverter : JsonConverter<Step>
         };
 
         var obj = node!.AsObject();
-        obj.Insert(0, TypeProperty, value.GetType().Name);
+        obj[TypeProperty] = JsonValue.Create(value.GetType().Name);
         obj.WriteTo(writer, options);
     }
 }
