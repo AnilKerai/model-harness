@@ -7,11 +7,13 @@ on:
     paths-ignore:
       - 'samples/**'
       - 'docs/**'
+      - 'getting-started/**'
   pull_request:
     branches: [ main ]
     paths-ignore:
       - 'samples/**'
       - 'docs/**'
+      - 'getting-started/**'
 
 jobs:
   build-and-test:

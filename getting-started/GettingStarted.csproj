@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SapphireGuard.ModelHarness" Version="0.1.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness.Infrastructure" Version="0.1.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness.Anthropic" Version="0.1.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness.Resilience" Version="0.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json" CopyToOutputDirectory="Always" />
+    <Content Include="appsettings.local.json" CopyToOutputDirectory="Always" Condition="Exists('appsettings.local.json')" />
+  </ItemGroup>
+
+</Project>
