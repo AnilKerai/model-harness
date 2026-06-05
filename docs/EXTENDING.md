@@ -120,6 +120,8 @@ public sealed class MyToolRegistry : IToolRegistry
 
 ## Expose MCP tools
 
+This approach enumerates the MCP server's tools at startup and registers them statically. It is the right choice when the tool set is known upfront and does not change while the agent is running. If your MCP server's tools are dynamic or not fully known at composition time, replace the tool registry instead — see [Replace the tool registry](#replace-the-tool-registry) above.
+
 Add a reference to the [ModelContextProtocol NuGet package](https://www.nuget.org/packages/ModelContextProtocol), create an `McpClient` for your server, then wrap each `McpClientTool` in a thin `ITool` adapter:
 
 ```csharp
