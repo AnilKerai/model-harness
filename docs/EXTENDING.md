@@ -116,6 +116,43 @@ builder.WithSensor<MySensor>()
 `DefaultSensorRunner` picks it up automatically and runs it in parallel with other sensors
 at the same hookpoint. See the [sensor pattern](../README.md#the-sensor-pattern--observing-and-intervening) for how to implement `ISensor`.
 
+## Taint tracking *(Experimental)*
+
+Taint tracking guards against prompt injection attacks that attempt to use external content to trigger privileged side-effecting actions. See the [Prompt injection and taint tracking](../README.md#prompt-injection-and-taint-tracking-experimental) section in the README for the theory and threat model.
+
+**Wiring:**
+
+```csharp
+builder.WithTaintTracking(
+    untrustedSources: ["fetch_webpage", "read_document", "query_database"],
+    privilegedActions: ["send_email",   "execute_code",  "make_payment"]);
+```
+
+`untrustedSources` — tools whose results should be treated as potentially hostile external content. As a rule of thumb: any tool that reads content you do not control belongs here. MCP tools should be listed as untrusted sources unless you have explicitly verified and trust the server author.
+
+`privilegedActions` — tools that have real-world side effects and must not run while tainted content is in the trajectory. If a tool can send data somewhere, modify state outside the agent, or execute arbitrary logic, it belongs here.
+
+> ⚠️ **This sensor fails closed.**
+>
+> Once a result from an untrusted source enters the trajectory, **all** privileged actions are blocked for the remainder of that agent run — regardless of how many turns have passed or how unrelated the subsequent reasoning appears to be. The sensor has no way to determine whether the model's reasoning has been influenced by the tainted content, so it assumes the worst.
+>
+> **You must account for this in your agent design.** Concretely:
+>
+> - If your agent legitimately needs to fetch external content *and* take a privileged action in the same run, the blocked action will surface as a tool error. The model will replan — but it cannot complete the task without human intervention.
+> - The intended escape hatch is `ask_human`: if `WithAskHumanTool` is configured, instruct the model in the system prompt to call it when a privileged action is blocked, so a human can review and authorise the action in context.
+> - If no human channel is available, the model will return whatever partial answer it can — callers should be prepared to receive an incomplete result.
+
+**System prompt guidance:**
+
+Because the sensor blocks at the tool level but cannot force the model to escalate correctly, your system prompt should tell the model what to do when a block fires. For example:
+
+```
+If a privileged action is blocked by the harness, do not retry it.
+If a human operator is available, call ask_human with full context
+so they can review and authorise the action. Otherwise, return what
+you have found so far and explain why you could not complete the task.
+```
+
 ## Add a guide
 
 ```csharp
