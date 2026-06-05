@@ -12,7 +12,6 @@
     <Authors>Anil Kerai</Authors>
     <Company>SapphireGuard</Company>
     <Copyright>Copyright © Anil Kerai</Copyright>
-    <Version>0.1.0</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/AnilKerai/model-harness</PackageProjectUrl>
     <RepositoryUrl>https://github.com/AnilKerai/model-harness.git</RepositoryUrl>
@@ -25,6 +24,10 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="All" />
+  </ItemGroup>
 
   <ItemGroup Condition="'$(IsPackable)' == 'true'">
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
