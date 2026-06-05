@@ -314,7 +314,7 @@ See `samples/AiToneSensor` for a runnable example — the agent is prompted to r
 
 ---
 
-## Prompt injection and taint tracking
+## Prompt injection and taint tracking *(Experimental)*
 
 Prompt injection is the most serious security threat specific to agentic systems. In a chat interface, a hostile instruction embedded in external content is annoying but contained — the model might say something wrong. In an agent with tools, the same hostile instruction can *cause the agent to act*: send an email, execute code, exfiltrate data. The threat scales directly with what the agent can do.
 
@@ -340,7 +340,7 @@ Taint tracking is a technique borrowed from systems security. The idea:
 2. Taint propagates forward: any computation that *uses* tainted data produces tainted output.
 3. Tainted data is never permitted to flow into a **privileged action** — an operation with real-world side effects.
 
-This is exactly what the [CaMeL framework](https://arxiv.org/pdf/2506.08837) (Google DeepMind, 2025) proposes for LLM agents: track the provenance of every value flowing through the system, and gate privileged tool calls based on whether their arguments trace back to untrusted sources.
+This is exactly what the [CaMeL framework](https://arxiv.org/abs/2503.18813) (Google DeepMind, 2025) proposes for LLM agents: track the provenance of every value flowing through the system, and gate privileged tool calls based on whether their arguments trace back to untrusted sources.
 
 The challenge is that LLMs are opaque — you cannot instrument the model's reasoning to track which parts of its output derived from which parts of its input. Full CaMeL-style taint tracking is an active research problem.
 
