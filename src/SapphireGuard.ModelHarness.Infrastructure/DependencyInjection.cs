@@ -4,9 +4,11 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Compaction;
 using SapphireGuard.ModelHarness.Infrastructure.MultiAgent;
+using SapphireGuard.ModelHarness.Infrastructure.Security;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure.Skills;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
@@ -132,6 +134,25 @@ public static class DependencyInjection
             .WithSensor<ProgressCheckSensor>()
             .WithSensor<PromptInjectionSensor>()
             .WithOtelTracer();
+
+    // ── Security ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Enables trajectory-level taint tracking. Tool results from <paramref name="untrustedSources"/>
+    /// are flagged as tainted; subsequent calls to <paramref name="privilegedActions"/> are blocked
+    /// while any tainted step remains in the trajectory. MCP tools and any remote tool whose author
+    /// cannot be verified should be listed as untrusted sources.
+    /// </summary>
+    public static ModelHarnessBuilder WithTaintTracking(
+        this ModelHarnessBuilder builder,
+        IEnumerable<string> untrustedSources,
+        IEnumerable<string> privilegedActions)
+    {
+        var policy = new TrustPolicy(untrustedSources, privilegedActions);
+        builder.Services.Replace(ServiceDescriptor.Singleton<ITrustPolicy>(policy));
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ISensor, TaintTrackingSensor>());
+        return builder;
+    }
 
     // ── Multi-agent ──────────────────────────────────────────────────────────
 
