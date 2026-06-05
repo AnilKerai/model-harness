@@ -28,6 +28,20 @@ HITL is about what happens *outside* the model loop: how a question is surfaced 
 
 The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is entirely the user's implementation. The harness ships `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
 
+## Why not make `ask_human` and `give_up` mutually exclusive to prevent the model picking the wrong one?
+
+The tempting solution is to make them exclusive by registration — agents with a human channel get `ask_human`, agents without one get `give_up`, so the model can never confuse them. This works for the scenario that motivates it, but it over-constrains the design.
+
+A well-designed agent might legitimately want both. An orchestrator could abandon some failed sub-tasks outright while escalating others to a human — depending on severity, cost, or domain logic that only the operator understands. Making the tools mutually exclusive forces the operator to choose one mode for the entire agent, which is a policy decision the harness has no business making.
+
+The actual problem is a **system prompt concern, not a structural one**. The harness cannot reason about whether this particular situation warrants escalation versus abandonment — only the operator can draw that line, and the right place to encode it is in the agent's instructions. For example:
+
+> *"If a privileged action is blocked and you have enough to return a partial answer, call `give_up` with what you have. If you need a human decision to make meaningful progress, call `ask_human` with full context."*
+
+The distinction the operator is drawing is: *do you have something useful to return, or do you need input to continue?* That is domain-specific; the harness should not decide it.
+
+The structural contribution the harness can make is limited but real: tool signatures that force the model to articulate its reasoning (`reason` on `give_up`, `question` on `ask_human`) help the model self-select correctly by making it form the argument before committing to the call. Beyond that, reliable selection is an empirical question validated per deployment through testing, not a constraint the framework can enforce.
+
 ## Should a harness even have a skills system — isn't "learning" out of scope?
 
 The harness doesn't do the learning. It just provides a few simple building blocks,
