@@ -80,9 +80,8 @@ public sealed class EvidenceGroundingSensor(IModelClient modelClient) : ISensor
                 ? string.Join("; ", issuesEl.EnumerateArray().Select(i => i.GetString() ?? ""))
                 : "unspecified grounding issues";
 
-            return SensorResult.Intervene(
+            return SensorResult.InterveneWithToolSuppression(
                 $"Evidence grounding check failed: {issues} " +
-                "Do NOT call any tools — all evidence is already in your context from earlier tool calls. " +
                 "Respond with ONLY the two tables. For any check where the evidence does not directly support a 🟢 Pass verdict, change it to 🟡 Inconclusive.");
         }
         catch

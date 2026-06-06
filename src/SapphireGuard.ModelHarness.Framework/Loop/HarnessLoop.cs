@@ -35,6 +35,7 @@ public sealed class HarnessLoop(
         var runId = Guid.NewGuid().ToString("n");
         var turn = 0;
         var consecutiveInterventions = 0;
+        var suppressTools = false;
         const int maxConsecutiveInterventions = 3;
         tracer.StartTrace(state.TaskId, state.TaskText);
 
@@ -70,15 +71,17 @@ public sealed class HarnessLoop(
 
                 // PreModelCall sensors annotate the trajectory; the model call proceeds
                 // regardless so the model can act on the note immediately.
-                (state, _) = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
+                (state, _, _) = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
 
-                var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct);
+                var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct, suppressTools);
                 state = newState;
+                suppressTools = false;
 
-                var (postModelState, rejected) = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct);
+                var (postModelState, rejected, suppressToolsOnRetry) = await RunSensorsAsync(state, HookPoint.PostModelCall, state.Trajectory[^1], ct);
                 state = postModelState;
                 if (rejected)
                 {
+                    suppressTools = suppressToolsOnRetry;
                     if (++consecutiveInterventions >= maxConsecutiveInterventions)
                         return await FinaliseOnBudgetAsync(state,
                             $"Sensor intervention limit ({maxConsecutiveInterventions}) reached — the model repeatedly produced a response that was rejected.", ct);
@@ -87,10 +90,11 @@ public sealed class HarnessLoop(
 
                 if (response.ToolCalls.Count == 0)
                 {
-                    var (preReturnState, challenged) = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct);
+                    var (preReturnState, challenged, suppressToolsOnChallenge) = await RunSensorsAsync(state, HookPoint.PreReturn, state.Trajectory[^1], ct);
                     state = preReturnState;
                     if (challenged)
                     {
+                        suppressTools = suppressToolsOnChallenge;
                         if (++consecutiveInterventions >= maxConsecutiveInterventions)
                             return await FinaliseOnBudgetAsync(state,
                                 $"Sensor intervention limit ({maxConsecutiveInterventions}) reached — the model repeatedly returned an answer that was challenged.", ct);
@@ -178,17 +182,19 @@ public sealed class HarnessLoop(
         }
     }
 
-    private async Task<(AgentState State, bool Intervened)> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
+    private async Task<(AgentState State, bool Intervened, bool SuppressTools)> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
     {
         var results = await sensorRunner.RunAsync(hookPoint, state, triggeringStep, ct);
         var next = state;
         var intervened = false;
+        var suppressTools = false;
         foreach (var (sensor, result) in results)
         {
             tracer.LogSensorResult(state.TaskId, hookPoint, sensor.Name, result);
             if (result.IsIntervene)
             {
                 intervened = true;
+                suppressTools |= result.SuppressTools;
                 next = next.AppendStep(new SensorInterventionStep(
                     Id: Guid.NewGuid(),
                     Timestamp: DateTimeOffset.UtcNow,
@@ -198,10 +204,10 @@ public sealed class HarnessLoop(
                     TriggeringStep: triggeringStep));
             }
         }
-        return (next, intervened);
+        return (next, intervened, suppressTools);
     }
 
-    private async Task<(AgentState State, ModelResponse Response)> CallModelAsync(AgentState state, bool forceFinalise, CancellationToken ct)
+    private async Task<(AgentState State, ModelResponse Response)> CallModelAsync(AgentState state, bool forceFinalise, CancellationToken ct, bool suppressTools = false)
     {
         var buildResult = await contextBuilder.BuildAsync(state, toolRegistry.List(), ct);
 
@@ -210,7 +216,7 @@ public sealed class HarnessLoop(
                 "Budget is exhausted. Produce your best final answer now using only what you already know. Do not request more tools.")]
             : buildResult.Messages;
 
-        var modelTools = forceFinalise
+        var modelTools = forceFinalise || suppressTools
             ? []
             : (IReadOnlyList<ToolDefinition>)buildResult.SelectedTools
                 .Select(t => new ToolDefinition(t.Name, t.Description, t.InputSchema))
@@ -238,7 +244,7 @@ public sealed class HarnessLoop(
             Call: call,
             Result: new ToolResult(call.CallId, "(pending)"));
 
-        var (afterPre, toolBlocked) = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct);
+        var (afterPre, toolBlocked, _) = await RunSensorsAsync(state, HookPoint.PreToolCall, preStep, ct);
         if (toolBlocked)
         {
             var lastIntervention = afterPre.Trajectory.OfType<SensorInterventionStep>().Last();
@@ -272,7 +278,7 @@ public sealed class HarnessLoop(
             Result: result);
 
         var afterExec = afterPre.AppendStep(executed);
-        var (afterPost, _) = await RunSensorsAsync(afterExec, HookPoint.PostToolCall, executed, ct);
+        var (afterPost, _, _) = await RunSensorsAsync(afterExec, HookPoint.PostToolCall, executed, ct);
         return afterPost;
     }
 
