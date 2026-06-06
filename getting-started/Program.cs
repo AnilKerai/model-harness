@@ -96,7 +96,7 @@ var outcome = await provider.GetRequiredService<Agent>()
         new Budget
         {
             MaxTurns = 20,
-            MaxContextTokens = 50_000,
+            MaxContextTokens = 80_000,
             MaxCost = 0.50m,
             MaxWallClock = TimeSpan.FromMinutes(3)
         });

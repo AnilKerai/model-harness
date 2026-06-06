@@ -23,6 +23,16 @@ public sealed class EvidenceGroundingSensor(IModelClient modelClient) : ISensor
         You are an evidence auditor for a credit control verification system.
         You will be given tool call results gathered during a debtor verification, and the agent's final verification table.
         Your job is to check whether each 🟢 Pass verdict is actually supported by the evidence.
+
+        Some results come from deterministic check tools (check_email_domain_match, check_ap_email_pattern,
+        check_company_name_match, check_phone_format). These are authoritative — a Pass returned by one of
+        these tools is sufficient evidence for that check. Do not challenge verdicts that are directly backed
+        by a matching deterministic tool result.
+
+        For checks that rely on web or database evidence (web_search, web_fetch, fetch_query_results),
+        verify that the Pass verdict is directly supported by the content of those results.
+        Only use the evidence provided — do not use any prior knowledge about the company.
+
         Reply with a JSON object only — no other text: {"grounded": true, "issues": []}
         grounded=true  → all Pass verdicts are supported by the evidence.
         grounded=false → at least one Pass verdict is not supported or is contradicted by the evidence.
@@ -94,7 +104,10 @@ public sealed class EvidenceGroundingSensor(IModelClient modelClient) : ISensor
     {
         var parts = state.Trajectory
             .OfType<ToolCallStep>()
-            .Where(t => !t.Result.IsError && t.Call.ToolName is "web_search" or "web_fetch" or "fetch_query_results")
+            .Where(t => !t.Result.IsError && t.Call.ToolName is
+                "web_search" or "web_fetch" or "fetch_query_results" or
+                "check_email_domain_match" or "check_ap_email_pattern" or
+                "check_company_name_match" or "check_phone_format")
             .Select(t =>
             {
                 var content = t.Result.Content;
