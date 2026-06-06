@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
-namespace SapphireGuard.ModelHarness.Samples.DebtorVerification.Tools;
+namespace GettingStarted.Tools;
 
 [ExcludeFromCodeCoverage]
 public sealed partial class WebFetchTool(HttpClient http) : ITool
@@ -53,11 +53,8 @@ public sealed partial class WebFetchTool(HttpClient http) : ITool
 
     private static string StripHtml(string html)
     {
-        // Remove script and style blocks entirely
         var s = ScriptStylePattern().Replace(html, " ");
-        // Remove all remaining tags
         s = TagPattern().Replace(s, " ");
-        // Collapse whitespace
         s = WhitespacePattern().Replace(s, " ").Trim();
         return s;
     }

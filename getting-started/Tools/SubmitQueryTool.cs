@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
-namespace SapphireGuard.ModelHarness.Samples.DebtorVerification.Tools;
+namespace GettingStarted.Tools;
 
 [ExcludeFromCodeCoverage]
 public sealed class SubmitQueryTool(QueryStore store) : ITool

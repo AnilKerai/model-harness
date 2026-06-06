@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 
-namespace SapphireGuard.ModelHarness.Samples.DebtorVerification;
+namespace GettingStarted;
 
 [ExcludeFromCodeCoverage]
 public sealed class QueryStore

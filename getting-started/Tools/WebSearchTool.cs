@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
-namespace SapphireGuard.ModelHarness.Samples.DebtorVerification.Tools;
+namespace GettingStarted.Tools;
 
 [ExcludeFromCodeCoverage]
 public sealed class WebSearchTool(string apiKey, HttpClient http) : ITool
