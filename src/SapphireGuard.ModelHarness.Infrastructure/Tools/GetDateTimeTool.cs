@@ -3,10 +3,8 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 
-public sealed class GetDateTimeTool(Func<DateTimeOffset>? clock = null) : ITool
+public sealed class GetDateTimeTool(TimeProvider timeProvider) : ITool
 {
-    private readonly Func<DateTimeOffset> _clock = clock ?? (() => DateTimeOffset.UtcNow);
-
     private static readonly JsonElement Schema = JsonDocument.Parse(
         """{"type":"object","properties":{}}""").RootElement;
 
@@ -20,7 +18,7 @@ public sealed class GetDateTimeTool(Func<DateTimeOffset>? clock = null) : ITool
 
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
     {
-        var utc = _clock().UtcDateTime;
+        var utc = timeProvider.GetUtcNow().UtcDateTime;
         return Task.FromResult(new ToolResult(call.CallId, utc.ToString("s") + "Z"));
     }
 }

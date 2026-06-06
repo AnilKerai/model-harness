@@ -130,7 +130,7 @@ public static class DependencyInjection
     internal static void ApplyStandardDefaults(ModelHarnessBuilder builder) =>
         builder
             .WithToolRegistry<InMemoryToolRegistry>()
-            .WithTool(_ => new GetDateTimeTool())
+            .WithTool(_ => new GetDateTimeTool(TimeProvider.System))
             .WithSensor<StuckDetector>()
             .WithSensor<ProgressCheckSensor>()
             .WithSensor<PromptInjectionSensor>()

@@ -16,8 +16,7 @@ public sealed class GetDateTimeToolTests
     [Fact]
     public async Task Execute_ReturnsIso8601UtcString()
     {
-        var frozen = new DateTimeOffset(2026, 6, 6, 14, 30, 0, TimeSpan.Zero);
-        var sut = new GetDateTimeTool(() => frozen);
+        var sut = new GetDateTimeTool(new StubTimeProvider(new DateTimeOffset(2026, 6, 6, 14, 30, 0, TimeSpan.Zero)));
 
         var result = await sut.ExecuteAsync(EmptyCall(), Ctx, CancellationToken.None);
 
@@ -29,7 +28,7 @@ public sealed class GetDateTimeToolTests
     public async Task Execute_NormalisesNonUtcOffsetToUtc()
     {
         var bst = new DateTimeOffset(2026, 6, 6, 15, 30, 0, TimeSpan.FromHours(1));
-        var sut = new GetDateTimeTool(() => bst);
+        var sut = new GetDateTimeTool(new StubTimeProvider(bst));
 
         var result = await sut.ExecuteAsync(EmptyCall(), Ctx, CancellationToken.None);
 
@@ -37,10 +36,10 @@ public sealed class GetDateTimeToolTests
     }
 
     [Fact]
-    public async Task Execute_DefaultClock_ReturnsCurrentUtcTime()
+    public async Task Execute_SystemTimeProvider_ReturnsCurrentUtcTime()
     {
         var before = DateTime.UtcNow;
-        var sut = new GetDateTimeTool();
+        var sut = new GetDateTimeTool(TimeProvider.System);
 
         var result = await sut.ExecuteAsync(EmptyCall(), Ctx, CancellationToken.None);
         var after = DateTime.UtcNow;
@@ -49,5 +48,10 @@ public sealed class GetDateTimeToolTests
         var parsed = DateTime.Parse(result.Content, null, System.Globalization.DateTimeStyles.RoundtripKind);
         // "s" format truncates sub-seconds, so allow one second below before
         Assert.InRange(parsed, before.AddSeconds(-1), after);
+    }
+
+    private sealed class StubTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }
