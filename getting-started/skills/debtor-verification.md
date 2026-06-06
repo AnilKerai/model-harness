@@ -76,7 +76,9 @@ After fetching the Companies House overview page (in Check 3), call `check_compa
 
 Use the `result`, `confidence`, and `reason` returned by the tool directly in the checks table row.
 
-### Check 5: Telephone Number Format
+### Check 5: Telephone Number is a Valid UK Landline
+
+**Purpose**: Format check only — no web research required. If a telephone number is on file, confirm it is a valid UK landline. If no number is on file, mark Inconclusive.
 
 Call `check_phone_format` with:
 - `phone_number`: the CONTACT_TELEPHONE from the contacts record
@@ -110,7 +112,7 @@ After running all checks, assign an overall status based on the verdicts:
 
 - **No website provided**: Mark Check 1 as INCONCLUSIVE — no website to compare against
 - **Non-UK company**: Apply same logic but search appropriate company registration database (OpenCorps, etc.)
-- **Mobile number as AP contact**: `check_phone_format` will return Inconclusive — unusual but not a hard red flag
+- **Mobile number as AP contact**: `check_phone_format` will return Fail — AP contact numbers should be landlines
 - **Abbreviations in company name**: `check_company_name_match` handles normalisation; use its verdict
 - **Multiple valid AP emails found**: PASS if at least one follows expected pattern
 - **No AP email found**: Not an automatic fail — move to REVIEW REQUIRED if all other checks pass
@@ -140,7 +142,7 @@ The checks table must contain exactly seven data rows:
 | AP/Finance contact email matches company name (fuzzy) | <Pass\|Fail\|Inconclusive> | <High\|Medium\|Low> | <brief evidence-based reason> |
 | Company Registration Number is authentic (Companies House) | <Pass\|Fail\|Inconclusive> | <High\|Medium\|Low> | <brief evidence-based reason> |
 | Companies House company name matches debtor name in full (fuzzy) | <Pass\|Fail\|Inconclusive> | <High\|Medium\|Low> | <brief evidence-based reason> |
-| Telephone number is authentic/operational | <Pass\|Fail\|Inconclusive> | <High\|Medium\|Low> | <brief evidence-based reason> |
+| Telephone number is a valid UK landline | <Pass\|Fail\|Inconclusive> | <High\|Medium\|Low> | <brief evidence-based reason> |
 | [Experimental] Registered company name on debtor website matches records | <Pass\|Fail\|Inconclusive> | <High\|Medium\|Low> | <brief evidence-based reason> |
 | Concerns requiring further investigation | <brief note, or "None"> | — | — |
 

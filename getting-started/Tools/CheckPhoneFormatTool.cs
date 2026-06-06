@@ -74,10 +74,10 @@ public sealed class CheckPhoneFormatTool : ITool
                 $"'{phone}' is a valid UK geographic landline ({prefix3}x prefix)."),
             "03" => CheckResult.Build(call.CallId, "Pass", "High",
                 $"'{phone}' is a valid UK non-geographic landline ({prefix3} prefix)."),
-            "07" => CheckResult.Build(call.CallId, "Inconclusive", "Medium",
-                $"'{phone}' is a UK mobile number — unusual for an AP contact but not a hard red flag."),
-            "08" or "09" => CheckResult.Build(call.CallId, "Inconclusive", "Medium",
-                $"'{phone}' is a UK special-rate number ({prefix3} prefix) — may not be a standard business line."),
+            "07" => CheckResult.Build(call.CallId, "Fail", "High",
+                $"'{phone}' is a UK mobile number — AP contact numbers should be landlines."),
+            "08" or "09" => CheckResult.Build(call.CallId, "Fail", "High",
+                $"'{phone}' is a UK special-rate number ({prefix3} prefix) — not a standard business landline."),
             _ => CheckResult.Build(call.CallId, "Fail", "High",
                 $"'{phone}' does not match any recognised UK phone number prefix.")
         };
