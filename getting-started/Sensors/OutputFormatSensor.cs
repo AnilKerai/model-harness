@@ -5,9 +5,10 @@ using SapphireGuard.ModelHarness.Framework.State;
 namespace GettingStarted.Sensors;
 
 /// <summary>
-/// Structural guard at PreReturn: confirms the agent produced exactly two markdown
-/// tables, that the checks table has exactly seven data rows, and that result values
-/// in the first six rows are one of the three allowed emoji verdicts. No LLM required.
+/// Structural guard at PostModelCall: fires only on final (EndTurn) responses,
+/// confirming the agent produced exactly two markdown tables, that the checks table
+/// has exactly seven data rows, and that result values in the first six rows are one
+/// of the three allowed emoji verdicts. No LLM required.
 /// </summary>
 [ExcludeFromCodeCoverage]
 public sealed class OutputFormatSensor : ISensor
@@ -19,7 +20,12 @@ public sealed class OutputFormatSensor : ISensor
 
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
     {
-        var text = state.Trajectory.OfType<ModelCallStep>().LastOrDefault()?.Response.Text;
+        // Only check final answers — skip mid-task responses that include tool calls.
+        var lastModel = state.Trajectory.OfType<ModelCallStep>().LastOrDefault();
+        if (lastModel is null || lastModel.Response.ToolCalls.Count > 0)
+            return Task.FromResult(SensorResult.Pass);
+
+        var text = lastModel.Response.Text;
         if (string.IsNullOrWhiteSpace(text))
             return Task.FromResult(SensorResult.Pass);
 
