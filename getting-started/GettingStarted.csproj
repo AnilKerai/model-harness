@@ -19,6 +19,7 @@
   <ItemGroup>
     <Content Include="appsettings.json" CopyToOutputDirectory="Always" />
     <Content Include="appsettings.local.json" CopyToOutputDirectory="Always" Condition="Exists('appsettings.local.json')" />
+    <Content Include="skills\*" CopyToOutputDirectory="Always" />
   </ItemGroup>
 
 </Project>
