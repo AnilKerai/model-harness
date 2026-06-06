@@ -73,6 +73,7 @@ public sealed class HarnessLoop(
                 // regardless so the model can act on the note immediately.
                 (state, _, _) = await RunSensorsAsync(state, HookPoint.PreModelCall, triggeringStep: null, ct);
 
+                var prevSuppressTools = suppressTools;
                 var (newState, response) = await CallModelAsync(state, forceFinalise: false, ct, suppressTools);
                 state = newState;
                 suppressTools = false;
@@ -81,7 +82,10 @@ public sealed class HarnessLoop(
                 state = postModelState;
                 if (rejected)
                 {
-                    suppressTools = suppressToolsOnRetry;
+                    // Preserve suppression from the current turn if the PostModelCall sensor
+                    // didn't explicitly request it — a format rejection doesn't restore tools
+                    // that a PreReturn challenge already removed.
+                    suppressTools = suppressToolsOnRetry || prevSuppressTools;
                     if (++consecutiveInterventions >= maxConsecutiveInterventions)
                         return await FinaliseOnBudgetAsync(state,
                             $"Sensor intervention limit ({maxConsecutiveInterventions}) reached — the model repeatedly produced a response that was rejected.", ct);

@@ -32,7 +32,7 @@ public sealed class OutputFormatSensor : ISensor
         var tables = ParseTables(text);
 
         if (tables.Count != 2)
-            return Task.FromResult(SensorResult.Intervene(
+            return Task.FromResult(SensorResult.InterveneWithToolSuppression(
                 $"Your response contained {tables.Count} markdown table(s) but must contain exactly 2. " +
                 "All evidence is already in your context from the tool calls earlier in this conversation — do not call any tools. " +
                 "Respond with ONLY the two tables, nothing else: " +
@@ -45,7 +45,7 @@ public sealed class OutputFormatSensor : ISensor
             .ToList();
 
         if (dataRows.Count != 7)
-            return Task.FromResult(SensorResult.Intervene(
+            return Task.FromResult(SensorResult.InterveneWithToolSuppression(
                 $"The checks table must have exactly 7 data rows but found {dataRows.Count}. " +
                 "Do not call any tools. Respond with ONLY the two tables using evidence already in your context: " +
                 "all six verification check rows plus the concerns row, followed immediately by the supporting links table."));
@@ -58,7 +58,7 @@ public sealed class OutputFormatSensor : ISensor
             if (cols.Length < 2) continue;
             var result = cols[1].Trim();
             if (!result.Contains("🟢") && !result.Contains("🔴") && !result.Contains("🟡"))
-                return Task.FromResult(SensorResult.Intervene(
+                return Task.FromResult(SensorResult.InterveneWithToolSuppression(
                     $"Row {i + 1} result value '{result}' is invalid. " +
                     "Do not call any tools. Respond with ONLY the two tables: each check row must use exactly one of 🟢 Pass, 🔴 Fail, or 🟡 Inconclusive."));
         }
