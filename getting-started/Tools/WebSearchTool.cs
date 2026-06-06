@@ -1,12 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace GettingStarted.Tools;
 
 [ExcludeFromCodeCoverage]
-public sealed class WebSearchTool(string apiKey, HttpClient http) : ITool
+public sealed class WebSearchTool(IOptions<WebSearchOptions> options, HttpClient http) : ITool
 {
     private static readonly JsonElement Schema = JsonDocument.Parse(
         """
@@ -42,7 +43,7 @@ public sealed class WebSearchTool(string apiKey, HttpClient http) : ITool
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("Accept", "application/json");
-        request.Headers.Add("X-Subscription-Token", apiKey);
+        request.Headers.Add("X-Subscription-Token", options.Value.ApiKey);
 
         HttpResponseMessage response;
         try

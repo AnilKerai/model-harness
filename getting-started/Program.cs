@@ -35,6 +35,15 @@ var skillsDir = Path.Combine(AppContext.BaseDirectory, "skills");
 
 var services = new ServiceCollection();
 
+// Register shared infrastructure so DI can resolve tool and sensor dependencies.
+services.AddSingleton(http);
+services.Configure<WebSearchOptions>(o => o.ApiKey = config["Brave:ApiKey"] ?? "");
+
+// OutputFormatSensor and EvidenceGroundingSensor are composed by VerificationReportSensor;
+// registered as concrete types rather than ISensor so they are not fired independently.
+services.AddSingleton<OutputFormatSensor>();
+services.AddSingleton<EvidenceGroundingSensor>();
+
 services.AddStandardModelHarness(builder =>
 {
     builder
@@ -49,8 +58,8 @@ services.AddStandardModelHarness(builder =>
         .WithSkills(skillsDir)
         .WithTool(_ => new SubmitQueryTool(queryStore))
         .WithTool(_ => new FetchQueryResultsTool(queryStore))
-        .WithTool(_ => new WebSearchTool(braveKey ?? "", http))
-        .WithTool(_ => new WebFetchTool(http))
+        .WithResilientTool<WebSearchTool>()
+        .WithResilientTool<WebFetchTool>()
         .WithTool<CreateJiraTicketTool>()
         .WithConsoleTracer()
         // Infrastructure sensors
@@ -60,10 +69,9 @@ services.AddStandardModelHarness(builder =>
         .WithSensor(_ => new TaintTrackingSensor(new TrustPolicy(
             untrustedSources:  ["web_search", "web_fetch"],
             privilegedActions: [])))
-        // Domain sensors
-        .WithSensor<OutputFormatSensor>()
+        // Domain sensors — format check gates evidence grounding inside the composite
         .WithSensor<HardRedFlagSensor>()
-        .WithSensor<EvidenceGroundingSensor>();
+        .WithSensor<VerificationReportSensor>();
 
     if (usingRealModel)
         builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions

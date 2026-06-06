@@ -27,8 +27,11 @@ public sealed class OutputFormatSensor : ISensor
 
         if (tables.Count != 2)
             return Task.FromResult(SensorResult.Intervene(
-                $"Output format error: expected exactly 2 markdown tables but found {tables.Count}. " +
-                "Produce only the checks table followed by the supporting links table — no prose, no headings."));
+                $"Output format error: found {tables.Count} markdown table(s) but exactly 2 are required. " +
+                "You must produce BOTH tables with no prose or headings between them: " +
+                "(1) the checks table (7 rows: the 6 verification checks plus the concerns row), " +
+                "then immediately (2) the supporting links table with columns | Link type | URL | Notes |. " +
+                "Do not omit, merge, or reorder them."));
 
         var dataRows = tables[0]
             .Skip(1)                          // skip header row

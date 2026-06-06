@@ -54,7 +54,7 @@ public sealed class FetchQueryResultsTool(QueryStore store) : ITool
               "AGENCY_NAME": "Beacon Recruitment Solutions Ltd",
               "CLIENT_ID": "CLT-7342",
               "CLIENT_REGISTERED_NAME": "Marks and Spencer Group PLC",
-              "CLIENT_REGISTRATION_NUMBER": "00214436",
+              "CLIENT_REGISTRATION_NUMBER": "04256886",
               "CLIENT_COUNTRY_JURISDICTION": "England and Wales",
               "CLIENT_ORGANISATION_TYPE": "Public Limited Company"
             }
@@ -69,7 +69,7 @@ public sealed class FetchQueryResultsTool(QueryStore store) : ITool
           "rows": [
             {
               "CLIENT_REGISTERED_NAME": "Marks and Spencer Group PLC",
-              "CLIENT_REGISTRATION_NUMBER": "00214436",
+              "CLIENT_REGISTRATION_NUMBER": "04256886",
               "CLIENT_COUNTRY_JURISDICTION": "England and Wales",
               "CLIENT_ORGANISATION_TYPE": "Public Limited Company",
               "CONTACT_NAME": "Accounts Payable Team",
