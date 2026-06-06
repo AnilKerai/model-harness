@@ -2,26 +2,27 @@
 name: debtor-verification
 description: Validate and verify debtors found on customer accounts. Use this skill whenever you need to check if a debtor is legitimate by verifying company details, contact information, and registration records. Flags suspicious patterns and confirms authenticity.
 when_to_use: When asked to verify a debtor — confirm company identity, registration, and contact authenticity before any funding decision.
-version: 1.0.0
+version: 2.0.0
 ---
 
 # Debtor Verification
 
 You help a credit controller perform an initial debtor verification check before proceeding with any potential funding.
-- Company identity matches across multiple sources
-- Contact information is authentic and consistent
-- Company registration is genuine
-- No obvious red flags or mismatches
 
 ## Required Tools
 
+**Data retrieval:**
 - `submit_query` / `fetch_query_results` — internal client database (async: submit then poll until status is "ready")
 - `web_search` — search the public web
 - `web_fetch` — fetch a web page by URL; only call after `web_search` has returned the URL — do not guess URLs
 
-## Validation Workflow
+**Deterministic checks — call these tools and use their returned verdict directly. Do not override or reinterpret the result:**
+- `check_email_domain_match` — Check 1: domain from website URL vs domain from contact email
+- `check_ap_email_pattern` — Check 2: whether the email local-part is a recognised AP/finance pattern
+- `check_company_name_match` — Checks 4 & 6: normalised fuzzy name comparison
+- `check_phone_format` — Check 5: phone number format validation for the company's jurisdiction
 
-For each debtor, gather the following information and run through these checks in order.
+## Validation Workflow
 
 ### Information Gathering
 
@@ -40,86 +41,64 @@ Once you have a CLIENT_ID, call `submit_query` using `query_id` of `get_client_c
 
 ### Check 1: Company Website Domain vs. Primary Contact Email
 
-**Purpose**: Verify the primary contact is actually associated with the company.
+Call `check_email_domain_match` with:
+- `website_url`: the COMPANY_WEBSITE from the contacts record
+- `contact_email`: the CONTACT_EMAIL from the contacts record
 
-1. Extract the domain from the company website (e.g., www.company.com → company.com)
-2. Extract the domain from the primary contact email (e.g., ap@company.com → company.com)
-3. Compare these domains
-
-**Results**:
-
-- **PASS**: Domains match exactly
-- **FAIL**: Domains don't match — red flag: contact isn't using company email address
-- **INCONCLUSIVE**: No website could be found via web_search; or close match but not exact (different country suffix, subsidiary)
+Use the `result`, `confidence`, and `reason` returned by the tool directly in the checks table row.
 
 ### Check 2: AP/Finance Contact Email Validation
 
-**Purpose**: Confirm the AP/Finance contact is authentic, not a sales or personal email.
+Call `check_ap_email_pattern` with:
+- `email`: the CONTACT_EMAIL from the contacts record
 
-**Expected patterns for PASS**:
-- invoices@company.com, ap@company.com, accounts-payable@company.com, finance@company.com, and similar
-
-**Results**:
-
-- **PASS**: Email matches known AP/Finance patterns
-- **FAIL**: Email is sales-focused or a personal address — hard red flag
-- **INCONCLUSIVE**: Unable to determine function from local-part alone
+Use the `result`, `confidence`, and `reason` returned by the tool directly in the checks table row.
 
 ### Check 3: Company Registration Verification
 
-**Purpose**: Confirm the registration number exists and is active in Companies House. Name matching is handled separately by Check 4.
+Search Companies House (or the equivalent register for non-UK companies) to confirm the registration number exists and the company is active.
 
-1. Search the UK Companies House database (or equivalent if non-UK) using the registration number
-2. Confirm whether an active record exists for that number
+1. Use `web_search` to find the Companies House record for the CLIENT_REGISTRATION_NUMBER
+2. Use `web_fetch` to retrieve the Companies House company overview page
+3. Confirm whether an active record exists for that number
 
 **Results**:
 
-- **PASS**: A record is found for the registration number and the company is active
-- **FAIL**: Registration number does not exist in Companies House — hard red flag
+- **PASS**: A record is found and the company status is Active
+- **FAIL**: Registration number does not exist — hard red flag
 - **INCONCLUSIVE**: No registration number available, or Companies House could not be reached
 
-### Check 4: Web Research for Supporting Information
+### Check 4: Companies House Company Name vs. Debtor Record
 
-While validating, gather supporting information:
+After fetching the Companies House overview page (in Check 3), call `check_company_name_match` with:
+- `name_a`: CLIENT_REGISTERED_NAME from the internal database record
+- `name_b`: the company name as shown on the Companies House page
 
-- **Finding the company website**: Always use `web_search` to locate the official website URL first. Only call `web_fetch` after `web_search` has returned the URL.
-- **Trading names/aliases**: Search the company website for alternative trading names
-- **Companies House name match**: Check whether the name on the Companies House record matches CLIENT_REGISTERED_NAME (fuzzy match acceptable)
+Use the `result`, `confidence`, and `reason` returned by the tool directly in the checks table row.
 
-**Results**:
+### Check 5: Telephone Number Format
 
-- **PASS**: Companies House name matches CLIENT_REGISTERED_NAME (exact or near-exact)
-- **FAIL**: Material mismatch between Companies House name and debtor record
-- **INCONCLUSIVE**: Could not retrieve Companies House record, or name is ambiguous
+Call `check_phone_format` with:
+- `phone_number`: the CONTACT_TELEPHONE from the contacts record
+- `jurisdiction`: the CLIENT_COUNTRY_JURISDICTION from the database record
 
-### Check 5: Telephone Number
-
-**Purpose**: Assess whether a telephone number is present and appears to be a legitimate business number.
-
-1. Check the debtor record for a telephone number on the AP/Finance contact
-2. If no number is present, mark as **INCONCLUSIVE** — absence alone is not a red flag
-
-**Results**:
-
-- **PASS**: A number is present and appears to be a valid UK landline (01xxx, 02xxx, 03xxx prefix)
-- **INCONCLUSIVE**: No number present, or the number is a mobile (07xxx)
-- **FAIL**: The number is obviously invalid or cannot be a real business number
+Use the `result`, `confidence`, and `reason` returned by the tool directly in the checks table row.
 
 ### Check 6: Registered Company Name on Website (Experimental)
 
-**Purpose**: Cross-reference the registered company name published on the debtor's official website against CLIENT_REGISTERED_NAME.
+Fetch the company's website (using `web_search` to find it, then `web_fetch`). Look for any explicit mention of a registered company name (e.g. "Registered in England as…", footer registration notices).
 
-From the `web_fetch` content, look for any mention of a registered company name (e.g. "Registered in England as…", footer registration notices).
+If a registered name is found, call `check_company_name_match` with:
+- `name_a`: CLIENT_REGISTERED_NAME from the database record
+- `name_b`: the registered name as stated on the website
 
-**Results**:
+Use the `result`, `confidence`, and `reason` returned by the tool directly in the checks table row.
 
-- **PASS**: A registered name is explicitly stated on the website and matches CLIENT_REGISTERED_NAME (exact or near-exact)
-- **FAIL**: A registered name is explicitly stated but differs materially
-- **INCONCLUSIVE**: No registered name found on the fetched page, or website was not fetched
+If no registered name is found on the fetched page, record **INCONCLUSIVE** with reason "No registered company name found on the fetched page."
 
 ### Final Classification
 
-After running all checks, assign an overall status:
+After running all checks, assign an overall status based on the verdicts:
 
 **PASS (Verified Legitimate)**: Company domain matches contact email; AP/Finance contact validated; registration confirmed; no red flags.
 
@@ -129,10 +108,10 @@ After running all checks, assign an overall status:
 
 ## Edge Cases & Notes
 
-- **No website provided**: Mark as REVIEW REQUIRED
+- **No website provided**: Mark Check 1 as INCONCLUSIVE — no website to compare against
 - **Non-UK company**: Apply same logic but search appropriate company registration database (OpenCorps, etc.)
-- **Mobile number as AP contact**: Mark telephone check as Inconclusive — unusual but not a hard red flag
-- **Abbreviations in company name**: Note as inconclusive, not failure
+- **Mobile number as AP contact**: `check_phone_format` will return Inconclusive — unusual but not a hard red flag
+- **Abbreviations in company name**: `check_company_name_match` handles normalisation; use its verdict
 - **Multiple valid AP emails found**: PASS if at least one follows expected pattern
 - **No AP email found**: Not an automatic fail — move to REVIEW REQUIRED if all other checks pass
 
@@ -140,7 +119,7 @@ After running all checks, assign an overall status:
 
 Use one of these values in the **Confidence** column: `High`, `Medium`, `Low`.
 
-Choose confidence based on the quality and completeness of the evidence you actually have.
+For checks using deterministic tools, use the confidence returned by the tool. For checks requiring your own judgement (Check 3), choose based on the quality and completeness of the evidence you actually have.
 
 ## Output Format
 

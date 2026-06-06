@@ -60,6 +60,10 @@ services.AddStandardModelHarness(builder =>
         .WithResilientTool<WebSearchTool>()
         .WithResilientTool<WebFetchTool>()
         .WithTool<CreateJiraTicketTool>()
+        .WithTool<CheckEmailDomainMatchTool>()
+        .WithTool<CheckApEmailPatternTool>()
+        .WithTool<CheckCompanyNameMatchTool>()
+        .WithTool<CheckPhoneFormatTool>()
         .WithConsoleTracer()
         // Infrastructure sensors
         .WithSensor<PromptInjectionSensor>()
