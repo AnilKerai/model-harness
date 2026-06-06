@@ -71,7 +71,7 @@ public sealed class OutputFormatSensor : ISensor
         var tables = new List<List<string>>();
         List<string>? current = null;
 
-        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in text.Split('\n'))
         {
             if (line.TrimStart().StartsWith('|'))
             {
