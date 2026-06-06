@@ -81,7 +81,8 @@ public sealed class EvidenceGroundingSensor(IModelClient modelClient) : ISensor
 
             return SensorResult.Intervene(
                 $"Evidence grounding check failed: {issues} " +
-                "Review the tool results gathered during verification and ensure each 🟢 Pass verdict is directly supported by the evidence before resubmitting.");
+                "Do NOT call any tools — all evidence is already in your context from earlier tool calls. " +
+                "Respond with ONLY the two tables. For any check where the evidence does not directly support a 🟢 Pass verdict, change it to 🟡 Inconclusive.");
         }
         catch
         {
