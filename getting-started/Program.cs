@@ -45,7 +45,9 @@ services.AddStandardModelHarness(builder =>
         .WithTool(_ => new SubmitQueryTool(queryStore))
         .WithTool(_ => new FetchQueryResultsTool(queryStore))
         .WithTool(_ => new WebSearchTool(braveKey ?? "", http))
-        .WithTool(_ => new WebFetchTool(http));
+        .WithTool(_ => new WebFetchTool(http))
+        .WithConsoleTracer()
+        ;
 
     if (usingRealModel)
         builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
