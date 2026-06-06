@@ -27,11 +27,12 @@ public sealed class OutputFormatSensor : ISensor
 
         if (tables.Count != 2)
             return Task.FromResult(SensorResult.Intervene(
-                $"Output format error: found {tables.Count} markdown table(s) but exactly 2 are required. " +
-                "You must produce BOTH tables with no prose or headings between them: " +
-                "(1) the checks table (7 rows: the 6 verification checks plus the concerns row), " +
-                "then immediately (2) the supporting links table with columns | Link type | URL | Notes |. " +
-                "Do not omit, merge, or reorder them."));
+                $"FORMAT CORRECTION — do not call any tools or reload the skill. " +
+                $"Your response contained {tables.Count} markdown table(s) but must contain exactly 2. " +
+                "All evidence is already in your context from earlier in this conversation. " +
+                "Output only the two tables now, back to back, with no prose, no headings, and no tool calls: " +
+                "(1) the checks table with all 7 rows, " +
+                "then immediately (2) the supporting links table with columns | Link type | URL | Notes |."));
 
         var dataRows = tables[0]
             .Skip(1)                          // skip header row
@@ -40,8 +41,9 @@ public sealed class OutputFormatSensor : ISensor
 
         if (dataRows.Count != 7)
             return Task.FromResult(SensorResult.Intervene(
-                $"Output format error: the checks table must have exactly 7 data rows but found {dataRows.Count}. " +
-                "Ensure all six verification checks plus the concerns row are present."));
+                $"FORMAT CORRECTION — do not call any tools or reload the skill. " +
+                $"The checks table must have exactly 7 data rows but found {dataRows.Count}. " +
+                "All evidence is in your context. Output both tables now with all six verification check rows plus the concerns row."));
 
         // Validate result column (index 2 after splitting on |) for the first six rows.
         // The seventh row (Concerns) intentionally has no emoji verdict.
@@ -52,8 +54,9 @@ public sealed class OutputFormatSensor : ISensor
             var result = cols[1].Trim();
             if (!result.Contains("🟢") && !result.Contains("🔴") && !result.Contains("🟡"))
                 return Task.FromResult(SensorResult.Intervene(
-                    $"Output format error: row {i + 1} result value '{result}' is invalid. " +
-                    "Each check row must use exactly one of 🟢 Pass, 🔴 Fail, or 🟡 Inconclusive."));
+                    $"FORMAT CORRECTION — do not call any tools or reload the skill. " +
+                    $"Row {i + 1} result value '{result}' is invalid. " +
+                    "Each check row must use exactly one of 🟢 Pass, 🔴 Fail, or 🟡 Inconclusive. Output both tables now with corrected values."));
         }
 
         return Task.FromResult(SensorResult.Pass);
