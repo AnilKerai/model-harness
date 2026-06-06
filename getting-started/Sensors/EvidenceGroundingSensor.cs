@@ -15,7 +15,8 @@ namespace GettingStarted.Sensors;
 [ExcludeFromCodeCoverage]
 public sealed class EvidenceGroundingSensor(IModelClient modelClient) : ISensor
 {
-    private const int MaxToolSummaryChars = 6_000;
+    private const int MaxToolSummaryChars = 20_000;
+    private const int MaxPerResultChars   =  3_000;
 
     private static readonly Message SystemMessage = new(MessageRole.System,
         """
@@ -95,7 +96,13 @@ public sealed class EvidenceGroundingSensor(IModelClient modelClient) : ISensor
         var parts = state.Trajectory
             .OfType<ToolCallStep>()
             .Where(t => !t.Result.IsError && t.Call.ToolName is "web_search" or "web_fetch" or "fetch_query_results")
-            .Select(t => $"[{t.Call.ToolName}]\n{t.Result.Content}");
+            .Select(t =>
+            {
+                var content = t.Result.Content;
+                if (content.Length > MaxPerResultChars)
+                    content = content[..MaxPerResultChars] + "[truncated]";
+                return $"[{t.Call.ToolName}]\n{content}";
+            });
 
         var summary = string.Join("\n\n---\n\n", parts);
 
