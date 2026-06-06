@@ -1,4 +1,5 @@
 using GettingStarted;
+using GettingStarted.Sensors;
 using GettingStarted.Tools;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +9,8 @@ using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Resilience;
+using SapphireGuard.ModelHarness.Infrastructure.Security;
+using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 
 var config = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
@@ -40,14 +43,27 @@ services.AddStandardModelHarness(builder =>
             You are a credit control assistant. You help credit controllers verify debtor legitimacy and support funding decisions.
 
             Before starting any verification task, load the relevant skill with skill_view and follow its procedure exactly.
+
+            If you identify a hard red flag during verification — a failed Companies House registration, a mismatched domain, or an invalid AP email — raise a Jira ticket with create_jira_ticket before completing your report.
             """)
         .WithSkills(skillsDir)
         .WithTool(_ => new SubmitQueryTool(queryStore))
         .WithTool(_ => new FetchQueryResultsTool(queryStore))
         .WithTool(_ => new WebSearchTool(braveKey ?? "", http))
         .WithTool(_ => new WebFetchTool(http))
+        .WithTool<CreateJiraTicketTool>()
         .WithConsoleTracer()
-        ;
+        // Infrastructure sensors
+        .WithSensor<PromptInjectionSensor>()
+        .WithSensor<StuckDetector>()
+        .WithSensor(_ => new ToolResultSanityCheckSensor())
+        .WithSensor(_ => new TaintTrackingSensor(new TrustPolicy(
+            untrustedSources:  ["web_search", "web_fetch"],
+            privilegedActions: [])))
+        // Domain sensors
+        .WithSensor<OutputFormatSensor>()
+        .WithSensor<HardRedFlagSensor>()
+        .WithSensor<EvidenceGroundingSensor>();
 
     if (usingRealModel)
         builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
