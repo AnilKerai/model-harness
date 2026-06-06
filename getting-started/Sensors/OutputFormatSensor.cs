@@ -27,10 +27,9 @@ public sealed class OutputFormatSensor : ISensor
 
         if (tables.Count != 2)
             return Task.FromResult(SensorResult.Intervene(
-                $"FORMAT CORRECTION — do not call any tools or reload the skill. " +
                 $"Your response contained {tables.Count} markdown table(s) but must contain exactly 2. " +
-                "All evidence is already in your context from earlier in this conversation. " +
-                "Output only the two tables now, back to back, with no prose, no headings, and no tool calls: " +
+                "All evidence is already in your context from the tool calls earlier in this conversation — do not call any tools. " +
+                "Respond with ONLY the two tables, nothing else: " +
                 "(1) the checks table with all 7 rows, " +
                 "then immediately (2) the supporting links table with columns | Link type | URL | Notes |."));
 
@@ -41,9 +40,9 @@ public sealed class OutputFormatSensor : ISensor
 
         if (dataRows.Count != 7)
             return Task.FromResult(SensorResult.Intervene(
-                $"FORMAT CORRECTION — do not call any tools or reload the skill. " +
                 $"The checks table must have exactly 7 data rows but found {dataRows.Count}. " +
-                "All evidence is in your context. Output both tables now with all six verification check rows plus the concerns row."));
+                "Do not call any tools. Respond with ONLY the two tables using evidence already in your context: " +
+                "all six verification check rows plus the concerns row, followed immediately by the supporting links table."));
 
         // Validate result column (index 2 after splitting on |) for the first six rows.
         // The seventh row (Concerns) intentionally has no emoji verdict.
@@ -54,9 +53,8 @@ public sealed class OutputFormatSensor : ISensor
             var result = cols[1].Trim();
             if (!result.Contains("🟢") && !result.Contains("🔴") && !result.Contains("🟡"))
                 return Task.FromResult(SensorResult.Intervene(
-                    $"FORMAT CORRECTION — do not call any tools or reload the skill. " +
                     $"Row {i + 1} result value '{result}' is invalid. " +
-                    "Each check row must use exactly one of 🟢 Pass, 🔴 Fail, or 🟡 Inconclusive. Output both tables now with corrected values."));
+                    "Do not call any tools. Respond with ONLY the two tables: each check row must use exactly one of 🟢 Pass, 🔴 Fail, or 🟡 Inconclusive."));
         }
 
         return Task.FromResult(SensorResult.Pass);

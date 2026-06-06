@@ -17,14 +17,17 @@ public sealed class VerificationReportSensor(
     public string Name => "verification-report";
 
     public IReadOnlySet<HookPoint> HookPoints { get; } =
-        new HashSet<HookPoint> { HookPoint.PreReturn };
+        new HashSet<HookPoint> { HookPoint.PostModelCall, HookPoint.PreReturn };
 
-    public async Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
-    {
-        var formatResult = await outputFormat.CheckAsync(hookPoint, state, triggeringStep, ct);
-        if (formatResult.IsIntervene)
-            return formatResult;
-
-        return await evidenceGrounding.CheckAsync(hookPoint, state, triggeringStep, ct);
-    }
+    public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct) =>
+        hookPoint switch
+        {
+            // Format check at PostModelCall: bad response is suppressed from context so the model
+            // cannot anchor on a partial response and restarts data-gathering instead of fixing format.
+            HookPoint.PostModelCall => outputFormat.CheckAsync(hookPoint, state, triggeringStep, ct),
+            // Evidence grounding at PreReturn: model sees its (correctly formatted) answer and can
+            // self-correct specific verdicts without re-running the full workflow.
+            HookPoint.PreReturn     => evidenceGrounding.CheckAsync(hookPoint, state, triggeringStep, ct),
+            _                       => Task.FromResult(SensorResult.Pass)
+        };
 }

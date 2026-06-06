@@ -9,7 +9,6 @@ using SapphireGuard.ModelHarness.Infrastructure;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Model;
 using SapphireGuard.ModelHarness.Infrastructure.Resilience;
-using SapphireGuard.ModelHarness.Infrastructure.Security;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 
 var config = new ConfigurationBuilder()
@@ -66,9 +65,6 @@ services.AddStandardModelHarness(builder =>
         .WithSensor<PromptInjectionSensor>()
         .WithSensor<StuckDetector>()
         .WithSensor(_ => new ToolResultSanityCheckSensor())
-        .WithSensor(_ => new TaintTrackingSensor(new TrustPolicy(
-            untrustedSources:  ["web_search", "web_fetch"],
-            privilegedActions: [])))
         // Domain sensors — format check gates evidence grounding inside the composite
         .WithSensor<HardRedFlagSensor>()
         .WithSensor<VerificationReportSensor>();
