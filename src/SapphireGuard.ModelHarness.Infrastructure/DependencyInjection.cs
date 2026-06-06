@@ -127,14 +127,17 @@ public static class DependencyInjection
     /// Single source of truth shared by <see cref="AddStandardModelHarness"/> and
     /// <see cref="AgentFactory.AddStandardAgent"/> — add new standard sensors here only.
     /// </summary>
-    internal static void ApplyStandardDefaults(ModelHarnessBuilder builder) =>
+    internal static void ApplyStandardDefaults(ModelHarnessBuilder builder)
+    {
+        builder.Services.TryAddSingleton(TimeProvider.System);
         builder
             .WithToolRegistry<InMemoryToolRegistry>()
-            .WithTool(_ => new GetDateTimeTool(TimeProvider.System))
+            .WithTool<GetDateTimeTool>()
             .WithSensor<StuckDetector>()
             .WithSensor<ProgressCheckSensor>()
             .WithSensor<PromptInjectionSensor>()
             .WithOtelTracer();
+    }
 
     // ── Security ─────────────────────────────────────────────────────────────
 
