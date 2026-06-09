@@ -46,3 +46,36 @@ public sealed class AlwaysPassSensor : ISensor
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
         => Task.FromResult(SensorResult.Pass);
 }
+
+/// <summary>
+/// Reports Usage and Cost on every check. Intervenes for the first N calls
+/// (controlled by blockCount), then passes — always with usage.
+/// </summary>
+public sealed class UsageReportingSensor : ISensor
+{
+    private readonly Usage _usage;
+    private readonly decimal _cost;
+    private int _blocksRemaining;
+
+    public string Name { get; }
+    public IReadOnlySet<HookPoint> HookPoints { get; }
+
+    public UsageReportingSensor(HookPoint hookPoint, Usage usage, decimal cost, int blockCount = 0, string name = "usage-sensor")
+    {
+        HookPoints = new HashSet<HookPoint> { hookPoint };
+        Name = name;
+        _usage = usage;
+        _cost = cost;
+        _blocksRemaining = blockCount;
+    }
+
+    public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
+    {
+        if (_blocksRemaining > 0)
+        {
+            _blocksRemaining--;
+            return Task.FromResult(SensorResult.InterveneWithUsage("test intervention", _usage, _cost));
+        }
+        return Task.FromResult(SensorResult.PassWithUsage(_usage, _cost));
+    }
+}

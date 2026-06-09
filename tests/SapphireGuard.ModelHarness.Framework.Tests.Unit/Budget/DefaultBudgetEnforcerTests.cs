@@ -164,4 +164,45 @@ public sealed class DefaultBudgetEnforcerTests
         Assert.True(result.IsExhausted);
         Assert.Contains("MaxCost", result.Reason);
     }
+
+    [Fact]
+    public void Check_SensorCostAtLimit_ReturnsExhausted()
+    {
+        var budget = Generous with { MaxCost = 1m };
+        var state = EmptyState(budget) with { SensorCost = 1m };
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
+    }
+
+    [Fact]
+    public void Check_SensorUsageAtLimit_ReturnsExhausted()
+    {
+        var budget = Generous with { MaxContextTokens = 100 };
+        var state = EmptyState(budget) with { SensorUsage = new Usage(60, 40) };
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxContextTokens", result.Reason);
+    }
+
+    [Fact]
+    public void Check_SensorModelAndToolCostsCombined_AggregatesCorrectly()
+    {
+        var budget = Generous with { MaxCost = 1m };
+        // 0.3 from sensor + 0.4 from model call + 0.4 from delegated tool = 1.1 ≥ 1.0
+        var state = (EmptyState(budget) with { SensorCost = 0.3m })
+            .AppendStep(ModelStep(cost: 0.4m))
+            .AppendStep(new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
+                new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+                new Tools.ToolResult("id", "ok", Cost: 0.4m)));
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
+    }
 }

@@ -33,6 +33,12 @@ public sealed record AgentState
     /// <summary>Arbitrary key-value metadata forwarded to tools via <see cref="SapphireGuard.ModelHarness.Framework.Tools.ToolContext"/>.</summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>Cumulative token usage incurred by AI-powered sensors during this run.</summary>
+    public Usage SensorUsage { get; init; } = Usage.Zero;
+
+    /// <summary>Cumulative cost incurred by AI-powered sensors during this run.</summary>
+    public decimal SensorCost { get; init; } = 0m;
+
     /// <summary>Creates an initial state for a new task with a generated task ID and <see cref="AgentStatus.Running"/> status.</summary>
     public static AgentState NewTask(string taskText, Budget budget, IReadOnlyDictionary<string, string>? metadata = null) =>
         new()

@@ -192,9 +192,19 @@ public sealed class HarnessLoop(
         var next = state;
         var intervened = false;
         var suppressTools = false;
+        var accruedInputTokens = 0;
+        var accruedOutputTokens = 0;
+        var accruedCost = 0m;
         foreach (var (sensor, result) in results)
         {
             tracer.LogSensorResult(state.TaskId, hookPoint, sensor.Name, result);
+            if (result.Usage is { } usage)
+            {
+                accruedInputTokens += usage.InputTokens;
+                accruedOutputTokens += usage.OutputTokens;
+            }
+            if (result.Cost is { } cost)
+                accruedCost += cost;
             if (result.IsIntervene)
             {
                 intervened = true;
@@ -207,6 +217,16 @@ public sealed class HarnessLoop(
                     Reason: result.Reason ?? "(no reason given)",
                     TriggeringStep: triggeringStep));
             }
+        }
+        if (accruedInputTokens > 0 || accruedOutputTokens > 0 || accruedCost > 0m)
+        {
+            next = next with
+            {
+                SensorUsage = new Usage(
+                    next.SensorUsage.InputTokens + accruedInputTokens,
+                    next.SensorUsage.OutputTokens + accruedOutputTokens),
+                SensorCost = next.SensorCost + accruedCost
+            };
         }
         return (next, intervened, suppressTools);
     }

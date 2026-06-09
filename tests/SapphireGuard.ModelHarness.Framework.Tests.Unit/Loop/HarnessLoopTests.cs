@@ -270,6 +270,58 @@ public sealed class HarnessLoopTests
     }
 
 
+    // ── Sensor usage propagation ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task RunAsync_PassingSensorWithUsage_AccumulatesSensorCostAndUsageOnState()
+    {
+        var sensor = new UsageReportingSensor(HookPoint.PreModelCall, new Usage(100, 50), cost: 0.25m);
+        var client = new ScriptedModelClient(EndTurnResponse("ok"));
+
+        var harness = BuildHarness(client, sensors: [sensor]);
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal(100, outcome.FinalState.SensorUsage.InputTokens);
+        Assert.Equal(50, outcome.FinalState.SensorUsage.OutputTokens);
+        Assert.Equal(0.25m, outcome.FinalState.SensorCost);
+    }
+
+    [Fact]
+    public async Task RunAsync_InterveningSensorWithUsage_AccumulatesSensorCostAndUsageOnState()
+    {
+        // Sensor intervenes once then passes — reports usage on both fires.
+        var sensor = new UsageReportingSensor(HookPoint.PreReturn, new Usage(80, 20), cost: 0.10m, blockCount: 1);
+        var client = new ScriptedModelClient(
+            EndTurnResponse("attempt 1"),  // PreReturn blocks this
+            EndTurnResponse("attempt 2")); // PreReturn passes
+
+        var harness = BuildHarness(client, sensors: [sensor]);
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        // Sensor fires twice (once per model call), so usage doubles
+        Assert.Equal(160, outcome.FinalState.SensorUsage.InputTokens);
+        Assert.Equal(40, outcome.FinalState.SensorUsage.OutputTokens);
+        Assert.Equal(0.20m, outcome.FinalState.SensorCost);
+    }
+
+    [Fact]
+    public async Task RunAsync_MultipleSensorsWithUsage_TotalsAreSummedCorrectly()
+    {
+        var s1 = new UsageReportingSensor(HookPoint.PreModelCall, new Usage(50, 10), cost: 0.05m, name: "s1");
+        var s2 = new UsageReportingSensor(HookPoint.PreModelCall, new Usage(30, 20), cost: 0.03m, name: "s2");
+        var client = new ScriptedModelClient(EndTurnResponse("ok"));
+
+        var harness = BuildHarness(client, sensors: [s1, s2]);
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal(80, outcome.FinalState.SensorUsage.InputTokens);
+        Assert.Equal(30, outcome.FinalState.SensorUsage.OutputTokens);
+        Assert.Equal(0.08m, outcome.FinalState.SensorCost);
+    }
+
     // ── Cancellation and exceptions ───────────────────────────────────────────
 
     [Fact]

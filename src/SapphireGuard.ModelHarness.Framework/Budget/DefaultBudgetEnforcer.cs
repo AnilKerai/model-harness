@@ -14,8 +14,8 @@ public sealed class DefaultBudgetEnforcer : IBudgetEnforcer
         var budget = state.Budget;
 
         var turns = 0;
-        var totalCost = 0m;
-        var totalTokens = 0;
+        var totalCost = state.SensorCost;
+        var totalTokens = state.SensorUsage.TotalTokens;
         foreach (var step in state.Trajectory)
         {
             if (step is ModelCallStep call)
