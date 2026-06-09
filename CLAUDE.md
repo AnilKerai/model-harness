@@ -45,6 +45,8 @@ Guides run **sequentially** before each model call, each contributing to a share
 ### Sensor pattern
 Sensors run **in parallel** at five hookpoints (`PreModelCall`, `PostModelCall`, `PreToolCall`, `PostToolCall`, `PreReturn`). A `SensorResult.Intervene(reason)` appends a `SensorInterventionStep` to the trajectory, which `HeadEvictionTrajectoryGuide` renders as a `[HARNESS OBSERVATION — ...]` assistant-role message on the next turn. `HarnessInstructionsGuide` primes the model in the system prompt to treat these notes as directives — feedforward and feedback working together.
 
+AI-powered sensors that call a model internally should return `SensorResult.PassWithUsage(usage, cost)` or `SensorResult.InterveneWithUsage(reason, usage, cost)` so the harness can accumulate the spend on `AgentState.SensorUsage` / `AgentState.SensorCost`. `DefaultBudgetEnforcer` includes these totals in its `MaxCost` and `MaxContextTokens` checks.
+
 Sensors may block actions but must never take turns away from the model — the model always gets the next call so it can self-correct. The loop decides what each intervention means per hookpoint:
 - **PreModelCall**: **annotates** — injects the note into the trajectory then proceeds with the model call on the same turn; use for conditional pre-reasoning guidance (e.g. goal-drift warnings, error-streak alerts)
 - **PostModelCall**: **rejects** — response is suppressed from trajectory so the model cannot re-see flagged content (e.g. PII); model gets a fresh turn to produce a clean response

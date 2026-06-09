@@ -309,6 +309,11 @@ The key design points:
   `WithSensor` — no framework changes are required.
 - Sensors must **fail open**: if the model call throws or returns unparseable output, return
   `SensorResult.Pass` so a transient failure never blocks every agent response.
+- **Model usage is propagated to the run budget.** Return `SensorResult.PassWithUsage(usage, cost)` or
+  `SensorResult.InterveneWithUsage(reason, usage, cost)` instead of the plain variants and the
+  harness accumulates the tokens and cost on `AgentState.SensorUsage` / `AgentState.SensorCost`.
+  `DefaultBudgetEnforcer` includes these totals when checking `MaxCost` and `MaxContextTokens`, so
+  an AI-powered sensor cannot spend outside the run's budget envelope.
 
 See `samples/AiToneSensor` for a runnable example — the agent is prompted to respond rudely, and the tone sensor (Haiku) catches it and forces a professional retry. Wiring is in [EXTENDING.md](docs/EXTENDING.md).
 
