@@ -198,7 +198,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
     };
 
     /// <summary>
-    /// Approximate cost based on Azure AI Foundry published pricing (May 2026).
+    /// Approximate cost based on Azure AI Foundry published pricing (June 2026).
     /// Inferred from deployment name — update from https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/ when stale.
     /// </summary>
     private static decimal CalculateCost(string deploymentName, FrameworkUsage usage)
@@ -206,11 +206,14 @@ public sealed class AzureOpenAIModelClient : IModelClient
         var name = deploymentName.ToLowerInvariant();
         var (inputPer1M, outputPer1M) = name switch
         {
-            _ when name.Contains("gpt-4o-mini") => (0.15m, 0.60m),
-            _ when name.Contains("o1-mini")     => (3.00m, 12.00m),
+            _ when name.Contains("gpt-4o-mini")  => (0.15m,  0.60m),
+            _ when name.Contains("gpt-4.1-mini") => (0.40m,  1.60m),
+            _ when name.Contains("gpt-4.1-nano") => (0.10m,  0.40m),
+            _ when name.Contains("gpt-4.1")      => (2.00m,  8.00m),
+            _ when name.Contains("o1-mini")      => (3.00m, 12.00m),
             _ when name.Contains("o1")
-                || name.Contains("o3")          => (15.00m, 60.00m),
-            _                                   => (2.50m, 10.00m)  // gpt-4o default
+                || name.Contains("o3")           => (15.00m, 60.00m),
+            _                                    => (2.50m, 10.00m)  // gpt-4o default
         };
 
         return (usage.InputTokens * inputPer1M / 1_000_000m)
