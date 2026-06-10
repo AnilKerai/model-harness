@@ -520,6 +520,23 @@ common adapters into a sensible out-of-the-box experience. Engineering consumers
 want to make every wiring decision can call this and just supply a model, their tools, and any
 overrides. Defaults are applied first; anything you add layers on top.
 
+### Packages
+
+Each layer ships as an independent NuGet package — take only what you need:
+
+```
+dotnet add package SapphireGuard.ModelHarness           # core loop + port interfaces
+dotnet add package SapphireGuard.ModelHarness.Infrastructure  # sensors, tracing, DI wiring
+dotnet add package SapphireGuard.ModelHarness.Anthropic  # Claude adapter
+dotnet add package SapphireGuard.ModelHarness.AzureOpenAI # Azure AI Foundry / Azure OpenAI adapter
+dotnet add package SapphireGuard.ModelHarness.Ollama     # Ollama adapter (local inference)
+dotnet add package SapphireGuard.ModelHarness.Resilience # Polly retry + circuit breaker
+dotnet add package SapphireGuard.ModelHarness.Persistence # checkpoint / resume
+```
+
+A runnable getting-started project is in [`getting-started/`](getting-started/) — open
+`GettingStarted.slnx`, drop an `appsettings.local.json` with your API key, and run.
+
 ### Minimal setup
 
 `AddStandardModelHarness` is the recommended entry point — supply your model, tools, and any
@@ -548,6 +565,7 @@ For the full set of how-to recipes — customising the harness, adding tools, se
 
 ## Links
 
+- [getting-started/](getting-started/) — minimal runnable project using the published NuGet packages
 - [RUNNING.md](docs/RUNNING.md) — setup and run instructions for each sample
 - [EXTENDING.md](docs/EXTENDING.md) — code recipes for every extension point
 - [GLOSSARY.md](docs/GLOSSARY.md) — definitions of all framework terms

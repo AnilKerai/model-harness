@@ -60,6 +60,12 @@ where the implementation would live.
 - [x] Graceful fallback to `FakeModelClient` when no API key is configured
 - [x] Multi-agent support — `AgentFactory` builds an isolated `ServiceProvider` per named agent (fresh `ServiceCollection`, no shared services); `AgentTool` exposes any named agent as an `ITool` so orchestrators delegate via the standard tool primitive; `AddAgentFactory` + `AddStandardAgent` / `AddAgent` DI extensions in Infrastructure; `AddSubAgentAsTool` builder extension wires sub-agents without shared services; `samples/SubAgent` scripted no-API-key demo
 
+### Packaging and release
+- [x] NuGet packages — one package per `src/` project; `IsPackable=true`, `PackageId`, `Description`, `MIT` licence, SourceLink, `.snupkg` symbols, multi-target `net8.0` + `net10.0`
+- [x] MinVer — version derived from `v*` git tags; pre-release builds produce `{next-patch}-alpha.0.{height}` automatically
+- [x] GitHub Actions CI/CD — build + test on every `src/`/`tests/` push; publish to NuGet on every commit to `main` (pre-release) and on `v*` tags (stable release)
+- [x] `getting-started/` — standalone project + `.slnx` referencing published NuGet packages; excluded from CI path triggers
+
 ### Persistence
 - [x] `ICheckpointStore` / `Checkpoint` / `NullCheckpointStore` — port in `Framework.Persistence`; `HarnessLoop` auto-saves at the top of every turn (captures the fully-completed prior turn)
 - [x] `FileCheckpointStore` — writes `{dir}/{taskId}/{timestamp}_{id}.json`; lexicographic filename order makes `LoadLatestAsync` a trivial sort
