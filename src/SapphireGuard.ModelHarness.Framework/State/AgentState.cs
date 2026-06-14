@@ -39,6 +39,14 @@ public sealed record AgentState
     /// <summary>Cumulative cost incurred by AI-powered sensors during this run.</summary>
     public decimal SensorCost { get; init; } = 0m;
 
+    /// <summary>
+    /// Set when <see cref="Status"/> is <see cref="AgentStatus.AwaitingHuman"/>. Identifies the
+    /// pending <c>ask_human</c> call so a checkpoint loaded from disk is fully self-describing —
+    /// callers can read this to know which call to resolve before passing the state back to
+    /// <see cref="ResumeWithHumanAnswer"/>. <see langword="null"/> for all other statuses.
+    /// </summary>
+    public PendingHumanInput? PendingHumanInput { get; init; }
+
     /// <summary>Creates an initial state for a new task with a generated task ID and <see cref="AgentStatus.Running"/> status.</summary>
     public static AgentState NewTask(string taskText, Budget budget, IReadOnlyDictionary<string, string>? metadata = null) =>
         new()
@@ -70,6 +78,6 @@ public sealed record AgentState
             else
                 updated.Add(step);
         }
-        return this with { Trajectory = updated, Status = AgentStatus.Running };
+        return this with { Trajectory = updated, Status = AgentStatus.Running, PendingHumanInput = null };
     }
 }

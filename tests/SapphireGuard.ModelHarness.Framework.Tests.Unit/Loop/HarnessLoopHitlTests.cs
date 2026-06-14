@@ -86,6 +86,23 @@ public sealed class HarnessLoopHitlTests
         Assert.Equal("Approve this action?", step.Result.Content);
     }
 
+    [Fact]
+    public async Task RunAsync_ToolReturnsPending_FinalStateCarriesPendingHumanInput()
+    {
+        var callId = Guid.NewGuid().ToString("n");
+        var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your age?", IsPending: true));
+        var client = new ScriptedModelClient(ToolUseResponse(toolCall));
+
+        var harness = BuildHarness(client, registry);
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.AwaitingHuman, outcome.FinalState.Status);
+        Assert.NotNull(outcome.FinalState.PendingHumanInput);
+        Assert.Equal(callId, outcome.FinalState.PendingHumanInput.CallId);
+        Assert.Equal("What is your age?", outcome.FinalState.PendingHumanInput.Question);
+    }
+
     // ── Resume ────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -111,6 +128,28 @@ public sealed class HarnessLoopHitlTests
     }
 
     // ── AgentState.ResumeWithHumanAnswer ─────────────────────────────────────
+
+    [Fact]
+    public void ResumeWithHumanAnswer_ClearsPendingHumanInput()
+    {
+        var callId = Guid.NewGuid().ToString("n");
+        var pendingCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var pendingStep = new ToolCallStep(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, pendingCall,
+            new ToolResult(callId, "Ready?", IsPending: true));
+
+        var suspended = NewState()
+            .AppendStep(pendingStep) with
+            {
+                Status = AgentStatus.AwaitingHuman,
+                PendingHumanInput = new PendingHumanInput(callId, "Ready?")
+            };
+
+        var resumed = suspended.ResumeWithHumanAnswer(callId, "yes");
+
+        Assert.Equal(AgentStatus.Running, resumed.Status);
+        Assert.Null(resumed.PendingHumanInput);
+    }
 
     [Fact]
     public void ResumeWithHumanAnswer_ReplacesPendingStep()

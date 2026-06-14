@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Compaction;
@@ -66,6 +67,38 @@ public static class DependencyInjection
     {
         builder.Services.AddSingleton(factory);
         builder.Services.AddSingleton<ITool, AskHumanTool>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Registers HITL with durable suspend/resume: <c>ask_human</c> backed by
+    /// <typeparamref name="TNotifier"/>, and <typeparamref name="TStore"/> as the checkpoint
+    /// store. Use when <typeparamref name="TStore"/> is resolvable from DI without constructor
+    /// arguments. For stores that require configuration (e.g. a file path), use
+    /// <see cref="WithHITL{TNotifier}(ModelHarnessBuilder, ICheckpointStore)"/> instead.
+    /// </summary>
+    public static ModelHarnessBuilder WithHITL<TNotifier, TStore>(this ModelHarnessBuilder builder)
+        where TNotifier : class, IHumanNotifier
+        where TStore : class, ICheckpointStore
+    {
+        builder.WithAskHumanTool<TNotifier>();
+        builder.WithCheckpointStore<TStore>();
+        return builder;
+    }
+
+    /// <summary>
+    /// Registers HITL with durable suspend/resume: <c>ask_human</c> backed by
+    /// <typeparamref name="TNotifier"/>, and <paramref name="store"/> as the checkpoint store.
+    /// Use this when the store requires runtime configuration, e.g.:
+    /// <c>builder.WithHITL&lt;MyNotifier&gt;(new FileCheckpointStore(dir))</c>.
+    /// </summary>
+    public static ModelHarnessBuilder WithHITL<TNotifier>(
+        this ModelHarnessBuilder builder,
+        ICheckpointStore store)
+        where TNotifier : class, IHumanNotifier
+    {
+        builder.WithAskHumanTool<TNotifier>();
+        builder.WithCheckpointStore(_ => store);
         return builder;
     }
 

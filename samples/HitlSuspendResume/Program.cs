@@ -53,7 +53,9 @@ var answer = Console.ReadLine() ?? string.Empty;
 Console.WriteLine();
 Console.WriteLine("── Resuming with human answer ──────────────────────────────────────────");
 
-var resumedState = outcome.FinalState.ResumeWithHumanAnswer(outcome.PendingHumanInput.CallId, answer);
+// FinalState.PendingHumanInput is the durable form — it is saved in the checkpoint so a
+// process that crashes here and reloads from disk can resume without the AgentOutcome in memory.
+var resumedState = outcome.FinalState.ResumeWithHumanAnswer(outcome.FinalState.PendingHumanInput!.CallId, answer);
 var finalOutcome = await agent.RunAsync(resumedState);
 
 AgentConsoleWriter.PrintOutcome(finalOutcome);

@@ -126,15 +126,20 @@ public sealed class HarnessLoop(
                     var lastTool = state.Trajectory.OfType<ToolCallStep>().LastOrDefault();
                     if (lastTool?.Result.IsPending == true)
                     {
+                        var pending = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content);
+                        var suspended = state with
+                        {
+                            Status = AgentStatus.AwaitingHuman,
+                            PendingHumanInput = pending
+                        };
                         await checkpointStore.SaveAsync(new Checkpoint
                         {
                             CheckpointId = Guid.NewGuid().ToString("n"),
                             RunId = runId,
                             CreatedAt = DateTimeOffset.UtcNow,
                             TurnNumber = turn,
-                            State = state
+                            State = suspended
                         }, ct);
-                        var suspended = state with { Status = AgentStatus.AwaitingHuman };
                         tracer.Complete(suspended.TaskId, AgentStatus.AwaitingHuman, failureReason: null);
                         return new AgentOutcome
                         {
@@ -142,7 +147,7 @@ public sealed class HarnessLoop(
                             Status = AgentStatus.AwaitingHuman,
                             FinalAnswer = null,
                             FinalState = suspended,
-                            PendingHumanInput = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content)
+                            PendingHumanInput = pending
                         };
                     }
                 }
