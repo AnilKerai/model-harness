@@ -244,7 +244,18 @@ builder
 Implement `ITracer` and register via `WithTracer<T>()` or `WithTracer(factory)` for a
 custom backend.
 
-## Checkpoint / resume
+## Checkpoint / resume and human-in-the-loop
+
+These two features share the same underlying mechanism — `ICheckpointStore` — but serve
+different purposes. There are three distinct use cases:
+
+| Use case | API | When to use |
+|---|---|---|
+| Crash recovery only | `WithFileCheckpointStore(dir)` | Long-running tasks with no human involvement |
+| HITL without durability | `WithAskHumanTool<TNotifier>()` | In-process demos, or when the caller manages state externally |
+| HITL with durability *(most common)* | `WithHITL<TNotifier>(store)` | Production async human-in-the-loop |
+
+### Crash recovery only
 
 ```csharp
 builder.WithFileCheckpointStore("/var/checkpoints")
@@ -262,39 +273,69 @@ var outcome = await provider.GetRequiredService<Agent>()
 
 Implement `ICheckpointStore` to target blob storage, a database, or any other backend.
 
-## Human-in-the-loop
+### HITL without durability
 
-The harness uses a **suspend/resume** model rather than blocking for a human answer. When
-the model calls `ask_human`, the loop fires the notifier, saves a checkpoint, and immediately
-returns — the caller is free to wait however long the deployment requires before resuming.
-
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant HarnessLoop
-    participant Notifier as IHumanNotifier
-
-    Caller->>HarnessLoop: RunAsync(state)
-    HarnessLoop->>Notifier: NotifyAsync(question)
-    note right of Notifier: HTTP / Slack / stdin / queue...
-    Notifier-->>HarnessLoop: (returns immediately)
-    HarnessLoop-->>Caller: AgentOutcome { Status = AwaitingHuman }
-
-    note over Caller: human answers — seconds or days later
-
-    Caller->>Caller: state = outcome.FinalState<br/>.ResumeWithHumanAnswer(callId, answer)
-    Caller->>HarnessLoop: RunAsync(resumedState)
-    HarnessLoop-->>Caller: AgentOutcome { Status = Done }
-```
-
-**Wiring:**
+Use `WithAskHumanTool` when the caller manages state externally (e.g. in an orchestrator
+with its own persistence layer), or for in-process development demos where the original
+process stays alive for the duration of the human wait:
 
 ```csharp
 // Development — ConsoleHumanChannel prints the question; your loop reads stdin after RunAsync returns
 builder.WithAskHumanTool<ConsoleHumanChannel>()
 
-// Production — implement IHumanNotifier for your delivery mechanism
+// Production — implement IHumanNotifier for your delivery mechanism, and manage state yourself
 builder.WithAskHumanTool(_ => new SlackHumanNotifier(slackClient, channelId))
+```
+
+Without a checkpoint store, if the process dies while waiting for the human the run state
+is lost. Use `WithHITL` below if that is not acceptable.
+
+### HITL with durability *(most common)*
+
+HITL is inherently cross-process — the human answers minutes or days later, long after the
+original process may have exited. `WithHITL` registers the `ask_human` tool and a checkpoint
+store together, making the coupling explicit:
+
+```csharp
+// Most common: file-backed checkpoint store
+builder.WithHITL<SlackHumanNotifier>(new FileCheckpointStore("/var/checkpoints"))
+
+// Generic form — when TStore is DI-resolvable with no constructor arguments
+builder.WithHITL<SlackHumanNotifier, MyBlobCheckpointStore>()
+```
+
+When the model calls `ask_human`, the loop:
+1. Builds a suspended state with `Status = AwaitingHuman` and `PendingHumanInput` set
+2. Saves that state to the checkpoint store
+3. Fires `IHumanNotifier.NotifyAsync` (fire-and-forget)
+4. Returns `AgentOutcome { Status = AwaitingHuman }`
+
+The checkpoint is self-describing — `State.PendingHumanInput` carries the call ID and
+question, so a process that restarts can load the checkpoint and know exactly what to do
+without needing the original `AgentOutcome` in memory.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant HarnessLoop
+    participant Store as ICheckpointStore
+    participant Notifier as IHumanNotifier
+
+    Caller->>HarnessLoop: RunAsync(state)
+    HarnessLoop->>Store: SaveAsync(suspended state)
+    HarnessLoop->>Notifier: NotifyAsync(question)
+    note right of Notifier: HTTP / Slack / queue...
+    Notifier-->>HarnessLoop: (returns immediately)
+    HarnessLoop-->>Caller: AgentOutcome { Status = AwaitingHuman }
+
+    note over Caller: human answers — seconds or days later
+    note over Caller: process may have restarted
+
+    Caller->>Store: LoadLatestAsync(taskId)
+    Store-->>Caller: Checkpoint { State.Status = AwaitingHuman,<br/>State.PendingHumanInput = { CallId, Question } }
+    Caller->>Caller: state = checkpoint.State<br/>.ResumeWithHumanAnswer(callId, answer)
+    Caller->>HarnessLoop: RunAsync(resumedState)
+    HarnessLoop-->>Caller: AgentOutcome { Status = Done }
 ```
 
 **The suspend/resume cycle:**
@@ -304,21 +345,43 @@ var outcome = await agent.RunAsync(task, budget);
 
 while (outcome.Status == AgentStatus.AwaitingHuman)
 {
-    var pending = outcome.PendingHumanInput!;
-    // answer arrives via whatever mechanism IHumanNotifier dispatched to
+    // FinalState.PendingHumanInput is the durable form — present whether you loaded
+    // from a checkpoint or are continuing in-process after RunAsync returned.
+    var pending = outcome.FinalState.PendingHumanInput!;
     var answer = await GetHumanAnswerAsync(pending.CallId);
 
-    var next = outcome.FinalState.ResumeWithHumanAnswer(pending.CallId, answer);
-    outcome = await agent.RunAsync(next);
+    outcome = await agent.RunAsync(
+        outcome.FinalState.ResumeWithHumanAnswer(pending.CallId, answer));
+}
+```
+
+**Resuming after a crash:**
+
+```csharp
+var store = provider.GetRequiredService<ICheckpointStore>();
+var checkpoint = await store.LoadLatestAsync(taskId, ct);
+
+if (checkpoint?.State.Status == AgentStatus.AwaitingHuman)
+{
+    // Process restarted mid-wait — obtain the answer then resume
+    var pending = checkpoint.State.PendingHumanInput!;
+    var answer = await GetHumanAnswerAsync(pending.CallId);
+    var state = checkpoint.State.ResumeWithHumanAnswer(pending.CallId, answer);
+    outcome = await agent.RunAsync(state);
+}
+else if (checkpoint is not null)
+{
+    // Crash during a non-HITL turn — replay the interrupted turn
+    outcome = await agent.RunAsync(checkpoint.State with { Status = AgentStatus.Running });
 }
 ```
 
 `ResumeWithHumanAnswer` replaces the pending `ToolCallStep` in the trajectory with the real
-answer — the model sees it as a normal completed tool call on its next turn and continues from there.
-`PendingHumanInput.CallId` is the correlation key that links the question to the answer across the
-suspension boundary.
+answer and clears `PendingHumanInput` — the model sees it as a normal completed tool call
+on its next turn and continues from there.
 
-See `samples/HitlSuspendResume` for a runnable demo.
+See `samples/HitlSuspendResume` for a runnable in-process demo and `samples/CheckpointResume`
+for crash-recovery checkpointing.
 
 ## Budget enforcement
 
