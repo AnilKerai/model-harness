@@ -31,6 +31,8 @@ public static class AgentConsoleWriter
         {
             var line = step switch
             {
+                UserMessageStep u =>
+                    $"  [user]    {u.Content}",
                 ModelCallStep m =>
                     $"  [model]   stop={m.Response.StopReason,-10} " +
                     $"tools={m.Response.ToolCalls.Count} " +
