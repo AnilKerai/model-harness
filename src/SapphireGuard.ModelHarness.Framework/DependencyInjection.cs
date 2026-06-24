@@ -146,6 +146,7 @@ public static class DependencyInjection
     private static IServiceCollection AddDefaultGuidePipeline(this IServiceCollection services)
     {
         services.AddSingleton<IGuide, HarnessInstructionsGuide>();
+        services.AddSingleton<IGuide, ReActGuide>();
         services.AddSingleton<IGuide, MemoryGuide>();
         // ToolSelectorGuide must precede ToolCatalogueGuide — the catalogue renders
         // whatever tools the selector has approved for this turn.
