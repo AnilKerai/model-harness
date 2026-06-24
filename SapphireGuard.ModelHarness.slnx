@@ -12,6 +12,7 @@
     <Project Path="samples/Common/SapphireGuard.ModelHarness.Samples.Common.csproj" />
     <Project Path="samples/CheckpointResume/SapphireGuard.ModelHarness.Samples.CheckpointResume.csproj" />
     <Project Path="samples/HappyPath/SapphireGuard.ModelHarness.Samples.HappyPath.csproj" />
+    <Project Path="samples/Conversation/SapphireGuard.ModelHarness.Samples.Conversation.csproj" />
     <Project Path="samples/OllamaToolCall/SapphireGuard.ModelHarness.Samples.OllamaToolCall.csproj" />
     <Project Path="samples/PiiDetection/SapphireGuard.ModelHarness.Samples.PiiDetection.csproj" />
     <Project Path="samples/AiToneSensor/SapphireGuard.ModelHarness.Samples.AiToneSensor.csproj" />
