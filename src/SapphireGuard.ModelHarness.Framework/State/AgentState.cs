@@ -55,12 +55,22 @@ public sealed record AgentState
             TaskText = taskText,
             Budget = budget,
             Status = AgentStatus.Running,
-            Metadata = metadata ?? new Dictionary<string, string>()
+            Metadata = metadata ?? new Dictionary<string, string>(),
+            Trajectory = [new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, taskText)]
         };
 
     /// <summary>Returns a new state with <paramref name="step"/> appended to the trajectory.</summary>
     public AgentState AppendStep(Step step) =>
         this with { Trajectory = [.. Trajectory, step] };
+
+    /// <summary>
+    /// Appends a user-authored <see cref="UserMessageStep"/> and returns the run to
+    /// <see cref="AgentStatus.Running"/>, re-opening a completed run so a caller can continue a
+    /// multi-turn conversation by passing the result back to <c>HarnessLoop.RunAsync</c>.
+    /// </summary>
+    public AgentState WithUserMessage(string content) =>
+        (this with { Status = AgentStatus.Running })
+            .AppendStep(new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, content));
 
     /// <summary>
     /// Returns a new <see cref="AgentStatus.Running"/> state with the pending <c>ask_human</c>

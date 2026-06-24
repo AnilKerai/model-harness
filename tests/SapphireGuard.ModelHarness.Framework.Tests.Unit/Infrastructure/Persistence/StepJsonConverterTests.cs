@@ -74,6 +74,16 @@ public sealed class StepJsonConverterTests
     }
 
     [Fact]
+    public void UserMessageStep_round_trips()
+    {
+        var step = new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, "follow-up question");
+
+        var result = Assert.IsType<UserMessageStep>(RoundTrip(step));
+        Assert.Equal(step.Id, result.Id);
+        Assert.Equal(step.Content, result.Content);
+    }
+
+    [Fact]
     public void Read_throws_on_missing_type_discriminator()
     {
         var json = """{"Id":"00000000-0000-0000-0000-000000000001","Timestamp":"2024-01-01T00:00:00+00:00"}""";

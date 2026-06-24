@@ -20,7 +20,8 @@ public sealed class DefaultContextBuilderTests
         string systemPrompt = "You are helpful.",
         IReadOnlyList<string>? memories = null,
         IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<string>? systemSections = null)
+        IReadOnlyList<string>? systemSections = null,
+        IReadOnlyList<Message>? trajectoryMessages = null)
     {
         var draft = new ContextDraft
         {
@@ -31,17 +32,22 @@ public sealed class DefaultContextBuilderTests
             draft.MemorySnippets.AddRange(memories);
         if (systemSections != null)
             draft.SystemSections.AddRange(systemSections);
+        if (trajectoryMessages != null)
+            draft.TrajectoryMessages.AddRange(trajectoryMessages);
 
         var runner = new FixedDraftGuideRunner(draft);
         return new DefaultContextBuilder(runner);
     }
 
     [Fact]
-    public async Task BuildAsync_TaskTextIsLastUserMessage()
+    public async Task BuildAsync_AppendsTrajectoryMessagesAfterSystemMessage()
     {
-        var builder = BuilderWith();
+        // The builder no longer pins the task as a trailing user message — user turns
+        // (including the initial task) arrive via the trajectory guide as trajectory messages.
+        var builder = BuilderWith(trajectoryMessages: [new Message(MessageRole.User, "my task")]);
         var result = await builder.BuildAsync(State("my task"), [], CancellationToken.None);
 
+        Assert.Equal(MessageRole.System, result.Messages[0].Role);
         var last = result.Messages[^1];
         Assert.Equal(MessageRole.User, last.Role);
         Assert.Equal("my task", last.Content);

@@ -66,6 +66,24 @@ public sealed class HeadEvictionTrajectoryGuideTests
     }
 
     [Fact]
+    public async Task Contribute_MultipleUserMessages_RenderInOrderAsUserMessages()
+    {
+        // The seeded task plus an appended follow-up both survive, in order — the core
+        // multi-turn property: more than one user message can live in the trajectory.
+        var state = EmptyState() // seeds UserMessageStep("test")
+            .AppendStep(ModelStep("answer 1"))
+            .AppendStep(new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, "follow-up"));
+
+        var draft = await ContributeAsync(state);
+
+        var userMessages = draft.TrajectoryMessages
+            .Where(m => m.Role == MessageRole.User)
+            .Select(m => m.Content)
+            .ToList();
+        Assert.Equal(new[] { "test", "follow-up" }, userMessages);
+    }
+
+    [Fact]
     public async Task Contribute_ToolStep_RendersPairedToolUseAndToolMessages()
     {
         var state = EmptyState().AppendStep(ToolStep());

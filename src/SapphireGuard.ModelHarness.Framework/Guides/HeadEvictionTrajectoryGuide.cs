@@ -54,6 +54,10 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
 
             switch (step)
             {
+                case UserMessageStep um:
+                    messages.Add(new Message(MessageRole.User, um.Content));
+                    break;
+
                 case ModelCallStep mc:
                     // If a PostModelCall sensor intervened on this response, suppress the text —
                     // the model must not see its own flagged content on the next turn (e.g. PII).

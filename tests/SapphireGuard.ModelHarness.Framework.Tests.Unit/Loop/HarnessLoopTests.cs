@@ -375,10 +375,34 @@ public sealed class HarnessLoopTests
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
 
         var trajectory = outcome.FinalState.Trajectory;
-        Assert.Equal(3, trajectory.Count);
-        Assert.IsType<ModelCallStep>(trajectory[0]); // model → ToolUse
-        Assert.IsType<ToolCallStep>(trajectory[1]);  // tool dispatch
-        Assert.IsType<ModelCallStep>(trajectory[2]); // model → EndTurn
+        Assert.Equal(4, trajectory.Count);
+        Assert.IsType<UserMessageStep>(trajectory[0]); // seeded task
+        Assert.IsType<ModelCallStep>(trajectory[1]);   // model → ToolUse
+        Assert.IsType<ToolCallStep>(trajectory[2]);    // tool dispatch
+        Assert.IsType<ModelCallStep>(trajectory[3]);   // model → EndTurn
+    }
+
+    [Fact]
+    public async Task RunAsync_ContinuedWithUserMessage_AccumulatesUserTurnsAcrossRuns()
+    {
+        // A Done run is re-opened by appending a user message; the second run continues
+        // the same trajectory rather than starting fresh.
+        var client = new ScriptedModelClient(
+            EndTurnResponse("first answer"),
+            EndTurnResponse("second answer"));
+        var harness = BuildHarness(client);
+
+        var first = await harness.RunAsync(NewState(), CancellationToken.None);
+        Assert.Equal(AgentStatus.Done, first.Status);
+
+        var second = await harness.RunAsync(
+            first.FinalState.WithUserMessage("a follow-up"), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, second.Status);
+        Assert.Equal("second answer", second.FinalAnswer);
+
+        var userTurns = second.FinalState.Trajectory.OfType<UserMessageStep>().Select(s => s.Content).ToList();
+        Assert.Equal(new[] { "test task", "a follow-up" }, userTurns);
     }
 
     [Fact]

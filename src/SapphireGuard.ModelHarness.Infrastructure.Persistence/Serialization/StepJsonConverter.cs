@@ -27,6 +27,7 @@ public sealed class StepJsonConverter : JsonConverter<Step>
 
         return typeName switch
         {
+            nameof(UserMessageStep) => root.Deserialize<UserMessageStep>(options),
             nameof(ModelCallStep) => root.Deserialize<ModelCallStep>(options),
             nameof(ToolCallStep) => root.Deserialize<ToolCallStep>(options),
             nameof(SensorInterventionStep) => root.Deserialize<SensorInterventionStep>(options),
@@ -38,6 +39,7 @@ public sealed class StepJsonConverter : JsonConverter<Step>
     {
         var node = value switch
         {
+            UserMessageStep s => JsonSerializer.SerializeToNode(s, options),
             ModelCallStep s => JsonSerializer.SerializeToNode(s, options),
             ToolCallStep s => JsonSerializer.SerializeToNode(s, options),
             SensorInterventionStep s => JsonSerializer.SerializeToNode(s, options),

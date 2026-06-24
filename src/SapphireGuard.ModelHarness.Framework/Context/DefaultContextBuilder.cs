@@ -7,8 +7,9 @@ namespace SapphireGuard.ModelHarness.Framework.Context;
 
 /// <summary>
 /// Runs the guide pipeline then assembles the populated <see cref="ContextDraft"/>
-/// into a prompt: system message (prompt + memories + guide-rendered sections),
-/// trajectory messages, then the task as a final user message.
+/// into a prompt: system message (prompt + memories + guide-rendered sections)
+/// followed by the trajectory messages, which carry the conversation including
+/// user turns rendered in position.
 /// </summary>
 public sealed class DefaultContextBuilder(IGuideRunner guideRunner) : IContextBuilder
 {
@@ -25,7 +26,6 @@ public sealed class DefaultContextBuilder(IGuideRunner guideRunner) : IContextBu
         };
 
         messages.AddRange(draft.TrajectoryMessages);
-        messages.Add(new Message(MessageRole.User, state.TaskText));
 
         return new ContextBuildResult(messages, draft.AvailableTools);
     }

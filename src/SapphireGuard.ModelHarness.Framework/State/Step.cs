@@ -6,6 +6,12 @@ namespace SapphireGuard.ModelHarness.Framework.State;
 /// <summary>A single discrete event in an agent's trajectory.</summary>
 public abstract record Step(Guid Id, DateTimeOffset Timestamp);
 
+/// <summary>Records a user-authored message — the initial task or a conversational follow-up.</summary>
+public sealed record UserMessageStep(
+    Guid Id,
+    DateTimeOffset Timestamp,
+    string Content) : Step(Id, Timestamp);
+
 /// <summary>Records a call to the model and what came back.</summary>
 public sealed record ModelCallStep(
     Guid Id,
