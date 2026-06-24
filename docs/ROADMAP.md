@@ -17,6 +17,7 @@ where the implementation would live.
 - [x] `IGuide` / `IGuideRunner` / `ContextDraft` — sequential pipeline that shapes what the model sees
 - [x] `SystemPromptGuide` — injects agent identity and standing instructions
 - [x] `HarnessInstructionsGuide` — appends harness conventions to the system prompt; teaches the model to treat `[HARNESS OBSERVATION — ...]` notes as directives (feedforward complement to sensor feedback)
+- [x] `ReActGuide` — appends ReAct (Thought → Action → Observation) framing to the system prompt; the loop already runs the act/observe cycle, so this guide elicits the explicit reasoning trace. Built-in default, registered after `HarnessInstructionsGuide`
 - [x] `HeadEvictionTrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt; sensor notes use `[HARNESS OBSERVATION — ...]` prefix matching what `HarnessInstructionsGuide` declares
 - [x] Token-aware trajectory compaction — `HeadEvictionTrajectoryGuide` trims oldest steps when estimated token count approaches `MaxContextTokens`, prepending an omission note when steps are dropped
 - [x] Explicit guide pipeline with `HeadEvictionTrajectoryGuide` pinned last — built-in guides registered in visible, ordered sequence in `AddDefaultGuidePipeline`; `WithGuide()` accumulates custom guides (deferred, like tracers); `ApplyGuides()` registers custom guides then `HeadEvictionTrajectoryGuide` last so it can measure all prior guide contributions (`SystemPrompt`, `MemorySnippets`, `SystemSections`) and compute an accurate token budget rather than relying on a fixed reserve
@@ -24,7 +25,7 @@ where the implementation would live.
 - [x] `MemoryGuide` — port for long-term memory; default is `NullMemoryStore` (no-op); replace with a vector store or knowledge graph
 - [x] `ToolSelectorGuide` — port for tool filtering/ranking; default is `PassthroughToolSelector` (all tools, unchanged); replace with a relevance-ranking implementation
 - [ ] ~~Progressive tool discovery~~ — removed from backlog; see the ADR in README.md (tool relevance ranking row). Short version: a routing layer papers over an agent design problem. An agent with 20+ tools is already a smell; the right fix is decomposition, not a router.
-- [x] ReAct loop / goal reiteration — `HeadEvictionTrajectoryGuide` re-injects the original `state.TaskText` as a `[ORIGINAL GOAL]` system note on every turn; prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns, especially after compaction drops early history
+- [x] Goal reiteration / anti-drift — `HeadEvictionTrajectoryGuide` re-injects the original `state.TaskText` as a `[ORIGINAL GOAL]` system note on every turn; prevents context drift where the model's working hypothesis gradually diverges from user intent across many turns, especially after compaction drops early history (the reasoning-trace half of ReAct lives in `ReActGuide`)
 - [x] Intermediate validation gate — `ProgressCheckSensor` fires at `PreModelCall` every N completed turns (configurable, default 5) and annotates the trajectory with a structured checkpoint prompt; included in `AddStandardModelHarness` by default
 
 ### Sensor pattern

@@ -83,7 +83,8 @@ flowchart LR
     subgraph "Guide pipeline — runs before every model call"
         direction LR
         D[ContextDraft\ninitialised] --> G1[HarnessInstructionsGuide\nappends harness conventions]
-        G1 --> G2[MemoryGuide\nsurfaces snippets]
+        G1 --> GR[ReActGuide\nprimes reason + act]
+        GR --> G2[MemoryGuide\nsurfaces snippets]
         G2 --> G3[ToolSelectorGuide\nfilters AvailableTools]
         G3 --> G4[ToolCatalogueGuide\nrenders tool catalogue]
         G4 --> G5[SkillsGuide\nrenders skill catalogue]
@@ -115,7 +116,9 @@ See [EXTENDING.md](docs/EXTENDING.md) for the `IGuide` interface and registratio
 
 Custom guides registered via `builder.WithGuide<T>()` slot in after the built-ins and before `HeadEvictionTrajectoryGuide`.
 
-`HeadEvictionTrajectoryGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
+`ReActGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it primes the model to interleave reasoning (a one-line *Thought*) with actions (tool calls) and *Observations* on each result. The act/observe half is already the loop — the model emits tool calls, the harness dispatches them and feeds results back — so this guide is the system-prompt nudge that makes the reasoning explicit and inspectable.
+
+Complementing it, `HeadEvictionTrajectoryGuide` re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
 
 ### The Sensor pattern — observing and intervening
 
@@ -491,7 +494,7 @@ The framework provides the port; the caller provides the adapter. Defaults are n
 |---|---|---|---|
 | Domain tools | `ITool` | none | Functions the model can invoke. The only way an agent acts on the world. |
 | Domain sensors | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` via `AddStandardModelHarness` | Observe the loop at declared hookpoints and intervene. Run in parallel; the loop's response depends on the hookpoint. |
-| Custom guides | `IGuide` | none (seven built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the seven built-in guides, before the trajectory guide. |
+| Custom guides | `IGuide` | none (eight built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the built-in guides, before the trajectory guide. |
 | Long-term memory | `IMemoryStore` | `NullMemoryStore` | Supplies retrieved snippets to `MemoryGuide` each turn. Replace with a vector store or knowledge graph for long-term retrieval. |
 | Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note) | Decides what replaces evicted trajectory steps. Default inserts a bare note; `AiCompactionStrategy` generates a prose summary instead. |
 | Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) | Filters `AvailableTools` in `ContextDraft` before the catalogue is rendered. Controls what the model *sees*, not what the registry *holds*. |

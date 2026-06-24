@@ -199,7 +199,7 @@ you have found so far and explain why you could not complete the task.
 ## Add a guide
 
 ```csharp
-builder.WithGuide<MyGuide>() // runs after the seven built-in guides
+builder.WithGuide<MyGuide>() // runs after the eight built-in guides
 ```
 
 See the [guide pattern](../README.md#the-guide-pattern--shaping-perception) for how to implement `IGuide`.
