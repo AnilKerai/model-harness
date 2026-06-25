@@ -130,6 +130,37 @@ public static class DependencyInjection
         return builder;
     }
 
+    // ── Self-review ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Adds an opt-in self-review critic. Before the agent returns a final answer,
+    /// <paramref name="modelClient"/> scores it against the task; answers below
+    /// <paramref name="passThreshold"/> (default 0.6) are challenged back for revision. The loop's
+    /// consecutive-intervention cap bounds the number of revision rounds. Fails open — a model or
+    /// parse failure lets the answer through. Use a fast, cheap model to keep per-answer overhead low.
+    /// </summary>
+    public static ModelHarnessBuilder WithCriticSensor(
+        this ModelHarnessBuilder builder,
+        IModelClient modelClient,
+        double passThreshold = 0.6)
+    {
+        builder.WithSensor(_ => new CriticSensor(modelClient, passThreshold));
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds an opt-in self-review critic using a model client resolved from the container.
+    /// See <see cref="WithCriticSensor(ModelHarnessBuilder, IModelClient, double)"/>.
+    /// </summary>
+    public static ModelHarnessBuilder WithCriticSensor(
+        this ModelHarnessBuilder builder,
+        Func<IServiceProvider, IModelClient> factory,
+        double passThreshold = 0.6)
+    {
+        builder.WithSensor(sp => new CriticSensor(factory(sp), passThreshold));
+        return builder;
+    }
+
     /// <summary>Adds a <c>ConsoleTracer</c> that writes human-readable trace output to stdout. Handy for local development.</summary>
     public static ModelHarnessBuilder WithConsoleTracer(this ModelHarnessBuilder builder) =>
         builder.WithTracer<ConsoleTracer>();
