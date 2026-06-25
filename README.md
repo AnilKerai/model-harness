@@ -523,6 +523,34 @@ common adapters into a sensible out-of-the-box experience. Engineering consumers
 want to make every wiring decision can call this and just supply a model, their tools, and any
 overrides. Defaults are applied first; anything you add layers on top.
 
+### What's wired by default
+
+Both `AddModelHarness` (core, in `Framework`) and `AddStandardModelHarness` (in
+`Infrastructure`) register the same **framework defaults**: the core loop and `Agent`, the
+full guide pipeline (`HarnessInstructionsGuide → ReActGuide → MemoryGuide → ToolSelectorGuide →
+ToolCatalogueGuide → SkillsGuide`, with `HeadEvictionTrajectoryGuide` always last),
+`DefaultBudgetEnforcer`, the default context builder / guide runner / sensor runner, and a no-op
+for every remaining port (`NullMemoryStore`, `NullSkillStore`, `PassthroughToolSelector`,
+`NullCompactionStrategy`, `NullCheckpointStore`, `NullRateLimiter`, `NullHumanNotifier`).
+**Neither registers a model client** — you always supply one in the `configure` callback via
+`.WithModel(...)` / `.WithResilientModel(...)`.
+
+`AddStandardModelHarness` then layers the opinionated extras on top:
+
+| Seam | `AddModelHarness` (bare) | `AddStandardModelHarness` adds |
+|---|---|---|
+| Tool registry | `NullToolRegistry` (empty) | `InMemoryToolRegistry` |
+| Built-in tools | none | `GetDateTimeTool` |
+| Sensors | none | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` |
+| Tracing | `NullTracer` | `OpenTelemetryTracer` |
+
+Port defaults use `TryAdd`, so a matching `.WithX(...)` in your callback replaces them; tools,
+sensors, and guides are additive, so the ones you add run alongside the built-ins. Everything
+beyond the standard set is opt-in and wired explicitly — `CriticSensor`, the loop detectors
+(`MonologueLoopSensor`, `AlternatingToolLoopSensor`, `ToolErrorLoopSensor`),
+`TaintTrackingSensor`, `AiCompactionStrategy`, HITL, and checkpoint/resume — see
+[EXTENDING.md](docs/EXTENDING.md).
+
 ### Packages
 
 Each layer ships as an independent NuGet package — take only what you need:
