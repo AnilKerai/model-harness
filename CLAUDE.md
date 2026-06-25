@@ -59,16 +59,25 @@ Sensors may block actions but must never take turns away from the model — the 
 
 ## Key ports
 
-| Port | Interface | Default |
-|---|---|---|
-| Model transport | `IModelClient` | `ClaudeModelClient` (Anthropic) / `FakeModelClient` |
-| Tool registry | `IToolRegistry` | `InMemoryToolRegistry` |
-| Memory retrieval | `IMemoryStore` | `NullMemoryStore` (no-op) |
-| Skill storage | `ISkillStore` | `NullSkillStore` (no-op) |
-| Tool filtering | `IToolSelector` | `PassthroughToolSelector` |
-| Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note); opt in to `AiCompactionStrategy` via `WithAiCompaction(modelClient)` |
-| Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` |
-| Tracing | `ITracer` | `CompositeTracer(ConsoleTracer, OpenTelemetryTracer)` |
+Defaults differ by entry point: `AddModelHarness` (bare, `Framework`) wires core + no-op defaults; `AddStandardModelHarness` (`Infrastructure`) calls `AddModelHarness` then overrides a few seams and adds the default tools/sensors. **Neither registers a model client — the caller always supplies one** via `.WithModel(...)` / `.WithResilientModel(...)`. Port defaults use `TryAdd` (a matching `.WithX(...)` replaces them); tools, sensors, and guides are additive.
+
+| Port | Interface | `AddModelHarness` (bare) | `AddStandardModelHarness` |
+|---|---|---|---|
+| Model transport | `IModelClient` | none — caller supplies | none — caller supplies |
+| Tool registry | `IToolRegistry` | `NullToolRegistry` (empty) | `InMemoryToolRegistry` |
+| Memory retrieval | `IMemoryStore` | `NullMemoryStore` (no-op) | ↑ same |
+| Skill storage | `ISkillStore` | `NullSkillStore` (no-op) | ↑ same |
+| Tool filtering | `IToolSelector` | `PassthroughToolSelector` | ↑ same |
+| Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (omission note); opt in to `AiCompactionStrategy` via `WithAiCompaction(modelClient)` | ↑ same |
+| Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` | ↑ same |
+| Rate limiting | `IRateLimiter` | `NullRateLimiter` | ↑ same |
+| Checkpoint store | `ICheckpointStore` | `NullCheckpointStore` | ↑ same |
+| Human notifier | `IHumanNotifier` | `NullHumanNotifier` | ↑ same |
+| Tracing | `ITracer` | `NullTracer` | `OpenTelemetryTracer` |
+| Sensors (additive) | `ISensor` | none | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` |
+| Tools (additive) | `ITool` | none | `GetDateTimeTool` |
+
+The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContextBuilder`, and `HeadEvictionTrajectoryGuide` are wired identically by both.
 
 ## DI conventions
 
