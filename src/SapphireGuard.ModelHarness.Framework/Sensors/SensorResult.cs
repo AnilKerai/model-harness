@@ -10,9 +10,10 @@ public sealed record SensorResult(bool IsIntervene, string? Reason, bool Suppres
 
     /// <summary>
     /// The sensor has no concerns at this hookpoint but incurred model usage doing so.
-    /// Usage is propagated to the run budget.
+    /// Usage is propagated to the run budget. An optional <paramref name="reason"/> is recorded
+    /// for tracing/diagnostics only — it does not trigger an intervention.
     /// </summary>
-    public static SensorResult PassWithUsage(Usage usage, decimal cost) => new(false, null, Usage: usage, Cost: cost);
+    public static SensorResult PassWithUsage(Usage usage, decimal cost, string? reason = null) => new(false, reason, Usage: usage, Cost: cost);
 
     /// <summary>
     /// The sensor wants the loop to intervene. <paramref name="reason"/> is appended to

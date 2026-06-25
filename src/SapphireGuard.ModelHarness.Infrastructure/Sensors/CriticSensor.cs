@@ -51,8 +51,13 @@ public sealed class CriticSensor(IModelClient modelClient, double passThreshold 
             return SensorResult.Pass; // fail open — a flaky critic must never block a return
         }
 
-        if (!TryParseVerdict(response.Text, out var score, out var deficiencies) || score >= passThreshold)
-            return SensorResult.PassWithUsage(response.Usage, response.Cost);
+        if (!TryParseVerdict(response.Text, out var score, out var deficiencies))
+            return SensorResult.PassWithUsage(response.Usage, response.Cost,
+                "Self-review inconclusive: could not parse a score from the model response.");
+
+        if (score >= passThreshold)
+            return SensorResult.PassWithUsage(response.Usage, response.Cost,
+                $"Self-review passed: scored {score:0.00} (bar {passThreshold:0.00}).");
 
         var gaps = deficiencies.Count > 0
             ? string.Join("; ", deficiencies)

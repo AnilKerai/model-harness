@@ -74,6 +74,7 @@ public sealed class CriticSensorTests
         var result = await sut.CheckAsync(HookPoint.PreReturn, EmptyState(), ModelStep("a thorough summary"), CancellationToken.None);
 
         Assert.False(result.IsIntervene);
+        Assert.Contains("0.90", result.Reason!);
         Assert.Equal(new Usage(12, 8), result.Usage);
         Assert.Equal(0.001m, result.Cost);
     }
@@ -100,6 +101,7 @@ public sealed class CriticSensorTests
         var result = await sut.CheckAsync(HookPoint.PreReturn, EmptyState(), ModelStep("answer"), CancellationToken.None);
 
         Assert.False(result.IsIntervene);
+        Assert.Contains("parse", result.Reason!);
         Assert.Equal(new Usage(5, 5), result.Usage);
     }
 
