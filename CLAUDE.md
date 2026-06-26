@@ -65,6 +65,8 @@ Defaults differ by entry point: `AddModelHarness` (bare, `Framework`) wires core
 
 `AddChatHarness` (`Framework`) is a third entry point for multi-turn chat — a thin sibling of `AddStandardModelHarness`, not a fork. It calls `AddModelHarness` then swaps two seams: `TurnScopedBudgetEnforcer` (counts turns/cost/tokens since the last `UserMessageStep`, so each user turn gets a fresh allowance instead of the whole conversation exhausting one budget) and `HeadEvictionTrajectoryGuide(pinOriginalGoal: false)` (drops the `[ORIGINAL GOAL]` pin, since chat's live goal is the latest user turn). No task-completion sensors are wired. Same `HarnessLoop`, `AgentState`, and `Agent`; continue a conversation with `AgentState.WithUserMessage`. Sample: `samples/Conversation`. (Multi-turn memory retrieval needs no chat seam — `MemoryGuide` already queries the latest user turn unconditionally; see the Guide pattern above.)
 
+`AddStandardChatHarness` (`Infrastructure`) is the opinionated sibling — it calls `AddChatHarness` then adds chat-appropriate standard defaults: `InMemoryToolRegistry`, `GetDateTimeTool`, OpenTelemetry tracing, and the `PromptInjectionSensor` + `StuckDetector` security/loop sensors. It deliberately omits the task-completion `ProgressCheckSensor`. `PromptInjectionSensor` scans both inbound tool results (PostToolCall) and the latest user message (PreModelCall) — the latter checks the current chat turn, not just the opener. Sample: `samples/ChatSubAgent`.
+
 | Port | Interface | `AddModelHarness` (bare) | `AddStandardModelHarness` |
 |---|---|---|---|
 | Model transport | `IModelClient` | none — caller supplies | none — caller supplies |

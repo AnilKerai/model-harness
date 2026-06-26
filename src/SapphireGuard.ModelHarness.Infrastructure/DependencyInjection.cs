@@ -204,6 +204,29 @@ public static class DependencyInjection
             .WithOtelTracer();
     }
 
+    /// <summary>
+    /// Registers a chat-oriented harness: <c>AddChatHarness</c> (per-turn budget, unpinned goal)
+    /// plus the chat-appropriate standard defaults — <c>InMemoryToolRegistry</c>, <c>GetDateTimeTool</c>,
+    /// OpenTelemetry tracing, and the security/loop sensors <c>PromptInjectionSensor</c> (scans user
+    /// input and tool results) and <c>StuckDetector</c>. The task-completion <c>ProgressCheckSensor</c>
+    /// is deliberately omitted — a conversation has no single goal to make progress toward. Supply the
+    /// model and any extras via <paramref name="configure"/>.
+    /// </summary>
+    public static IServiceCollection AddStandardChatHarness(
+        this IServiceCollection services,
+        Action<ModelHarnessBuilder> configure) =>
+        services.AddChatHarness(builder =>
+        {
+            builder.Services.TryAddSingleton(TimeProvider.System);
+            builder
+                .WithToolRegistry<InMemoryToolRegistry>()
+                .WithTool<GetDateTimeTool>()
+                .WithSensor<PromptInjectionSensor>()
+                .WithSensor<StuckDetector>()
+                .WithOtelTracer();
+            configure(builder);
+        });
+
     // ── Security ─────────────────────────────────────────────────────────────
 
     /// <summary>

@@ -34,6 +34,21 @@ public sealed class DiSmokeTests
     }
 
     [Fact]
+    public async Task AddStandardChatHarness_ResolvesAgentAndCompletesOneTurn()
+    {
+        var services = new ServiceCollection();
+        services.AddStandardChatHarness(builder => builder
+            .WithSystemPrompt("You are a test chat agent.")
+            .WithTool<CalculatorTool>()
+            .WithModel(_ => new FakeModelClient()));
+
+        await using var provider = services.BuildServiceProvider();
+        var outcome = await provider.GetRequiredService<Agent>().RunAsync("What is 12 * 7?", budget: OneTurn);
+
+        Assert.NotNull(outcome);
+    }
+
+    [Fact]
     public async Task AddModelHarness_WithPiiRedactionSensor_ResolvesAgentAndCompletesOneTurn()
     {
         var services = new ServiceCollection();

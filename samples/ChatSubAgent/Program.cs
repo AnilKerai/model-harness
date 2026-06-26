@@ -48,14 +48,14 @@ factory.AddStandardAgent("currency_converter", b => b
 
 // ── Chat agent: turn-scoped, hosts the domain agent as a tool ──
 var services = new ServiceCollection();
-services.AddChatHarness(builder => builder
+// AddStandardChatHarness wires the chat-appropriate defaults: a tool registry plus the
+// PromptInjectionSensor + StuckDetector security/loop sensors (no task-completion sensors).
+services.AddStandardChatHarness(builder => builder
     .WithSystemPrompt(
         "You are a friendly general assistant. You cannot convert currencies yourself: whenever the " +
         "user asks to convert or compare money across currencies, delegate to the currency_converter " +
         "tool with a self-contained task (include the amount and both ISO currency codes), then relay " +
         "its answer in your own words. For anything else, just chat normally.")
-    // Bare chat harness defaults to NullToolRegistry — a real registry is required to dispatch tools.
-    .WithToolRegistry<InMemoryToolRegistry>()
     .WithResilientModel(_ => NewClient())
     // Tight per-delegation budget: a lookup + a multiply + an answer is ~3 turns, so 4 is plenty.
     .AddSubAgentAsTool("currency_converter", factory, new Budget
