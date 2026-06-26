@@ -21,6 +21,53 @@ services.AddModelHarness(builder => builder
 
 Everything below is opt-in whether you use `AddStandardModelHarness` or `AddModelHarness`.
 
+## Conversational (chat) agents
+
+`AddModelHarness` / `AddStandardModelHarness` run a task to a terminal state — they are built for
+"do this, return a result". A **chat agent** has a different lifecycle: it stays open across many
+user turns, each with its own goal. Use `AddChatHarness` (bare, `Framework`) or
+`AddStandardChatHarness` (opinionated, `Infrastructure`) for that shape.
+
+```csharp
+services.AddStandardChatHarness(builder => builder
+    .WithSystemPrompt("You are a friendly assistant.")
+    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
+```
+
+These are thin siblings of the model-harness entry points — same `HarnessLoop`, `AgentState`, and
+`Agent` — that swap two seams for the conversational lifecycle:
+
+- **Per-turn budget** (`TurnScopedBudgetEnforcer`): counts turns/cost/tokens since the last
+  `UserMessageStep`, so every user turn gets a fresh allowance. The default `DefaultBudgetEnforcer`
+  sums the whole trajectory, which would exhaust a long chat after `MaxTurns` total model calls.
+- **Unpinned goal** (`HeadEvictionTrajectoryGuide(pinOriginalGoal: false)`): drops the
+  `[ORIGINAL GOAL]` anchor, since a conversation's live goal is the latest user turn, not the opener.
+
+`AddStandardChatHarness` additionally wires the chat-appropriate standard defaults —
+`InMemoryToolRegistry`, `GetDateTimeTool`, OpenTelemetry tracing, and the `PromptInjectionSensor`
++ `StuckDetector` security/loop sensors. It deliberately omits the task-completion
+`ProgressCheckSensor` (a conversation has no single goal to make progress toward). The bare
+`AddChatHarness` wires no sensors or tools — it *can't*, since those live in `Infrastructure` — so
+reach for it only when you want a minimal pure-chat loop and will wire your own.
+
+Drive the conversation by carrying state forward with `WithUserMessage` — it re-opens the completed
+run and appends the next user turn, so the model sees the whole history:
+
+```csharp
+AgentOutcome? outcome = null;
+while (Console.ReadLine() is { Length: > 0 } input)
+{
+    var state = outcome is null
+        ? AgentState.NewTask(input, budget)            // first turn seeds the conversation
+        : outcome.FinalState.WithUserMessage(input);   // subsequent turns continue it
+    outcome = await agent.RunAsync(state);
+    Console.WriteLine(outcome.FinalAnswer);
+}
+```
+
+See `samples/Conversation` (bare REPL) and `samples/ChatSubAgent` (chat agent delegating to a
+sub-agent specialist).
+
 ## Multi-agent setup
 
 For multi-agent systems use `AddAgentFactory`. Each named agent gets its own isolated
@@ -49,6 +96,13 @@ var outcome = await provider.GetRequiredService<AgentFactory>()
 
 Each agent's sensors, model, and budget are fully isolated — nothing leaks between
 sub-containers. See `samples/SubAgent` for a runnable no-API-key demo.
+
+`AddSubAgentAsTool` takes an optional `Budget` to bound each delegated run — for example
+`AddSubAgentAsTool("research", factory, new Budget { MaxTurns = 4, MaxCost = 0.10m, ... })`. Omit it
+and the sub-agent uses the agent's default budget. The sub-agent's cost is returned through the tool
+result and counted against the calling agent's budget, so delegation spend is accounted for; the
+explicit budget is what bounds a single delegation from overrunning. `samples/ChatSubAgent` passes a
+tight budget to its currency specialist.
 
 ## Add a tool
 

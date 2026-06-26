@@ -592,6 +592,42 @@ Console.WriteLine(outcome.FinalAnswer);
 
 For the full set of how-to recipes — customising the harness, adding tools, sensors, guides, MCP, HITL, checkpoint/resume, rate limiting, compaction, and swapping the model client — see **[EXTENDING.md](docs/EXTENDING.md)**.
 
+### Conversational agents
+
+The entry points above run a task to a terminal state. For a **multi-turn chat agent** — one that
+stays open across many user turns — use `AddChatHarness` (bare, in `Framework`) or
+`AddStandardChatHarness` (opinionated, in `Infrastructure`). Same loop, state, and `Agent`; they
+just swap two seams for the conversational lifecycle: a **per-turn budget**
+(`TurnScopedBudgetEnforcer`, so each user turn gets a fresh allowance instead of the whole
+conversation draining one budget) and an **unpinned goal** (the trajectory guide stops re-injecting
+the first message as `[ORIGINAL GOAL]`, since a conversation's live goal is the latest turn).
+`AddStandardChatHarness` also wires the chat-appropriate sensors — `PromptInjectionSensor` and
+`StuckDetector` — but not the task-completion `ProgressCheckSensor`.
+
+Carry the conversation forward by passing the prior outcome's state back with `WithUserMessage`:
+
+```csharp
+services.AddStandardChatHarness(builder => builder
+    .WithSystemPrompt("You are a friendly assistant.")
+    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
+
+await using var provider = services.BuildServiceProvider();
+var agent = provider.GetRequiredService<Agent>();
+
+AgentOutcome? outcome = null;
+while (Console.ReadLine() is { Length: > 0 } input)
+{
+    var state = outcome is null
+        ? AgentState.NewTask(input, budget)            // first turn
+        : outcome.FinalState.WithUserMessage(input);   // continue the conversation
+    outcome = await agent.RunAsync(state);
+    Console.WriteLine(outcome.FinalAnswer);
+}
+```
+
+See `samples/Conversation` (bare chat REPL) and `samples/ChatSubAgent` (chat agent that delegates
+to a sub-agent specialist).
+
 ---
 
 ## Links
