@@ -19,13 +19,12 @@ var usingRealModel = !string.IsNullOrWhiteSpace(apiKey);
 
 AgentConsoleWriter.PrintHeader(
     "conversation",
-    "Multi-turn chat via AddChatHarness. A deliberately small per-turn budget (MaxTurns=3) is " +
-    "reused across 6 turns: TurnScopedBudgetEnforcer resets the allowance each user turn, so " +
-    "every turn finishes Done. Under the terminal-mode DefaultBudgetEnforcer the same budget would " +
-    "PartialResult from turn 4 onward, since it sums model calls across the whole conversation.");
+    "Interactive multi-turn chat via AddChatHarness. Each message is a new turn carried forward " +
+    "with WithUserMessage, so the model sees the whole conversation. TurnScopedBudgetEnforcer gives " +
+    "every turn a fresh per-turn budget, so the chat never exhausts a single run's allowance.");
 
 if (!usingRealModel)
-    Console.WriteLine("WARNING: Anthropic:ApiKey not configured — using a scripted fake client.\n");
+    Console.WriteLine("WARNING: Anthropic:ApiKey not configured — using a scripted fake client.");
 
 var services = new ServiceCollection();
 
@@ -46,44 +45,38 @@ services.AddChatHarness(builder =>
 await using var provider = services.BuildServiceProvider();
 var agent = provider.GetRequiredService<Agent>();
 
-// Per-turn budget that is smaller than the number of conversation turns — the whole point.
+// Per-turn allowance — reset at each user turn by TurnScopedBudgetEnforcer.
 var budget = new Budget
 {
-    MaxTurns = 3,
+    MaxTurns = 8,
     MaxContextTokens = 100_000,
     MaxCost = 1.00m,
     MaxWallClock = TimeSpan.FromMinutes(2)
 };
 
-var messages = new[]
-{
-    "Hi — what's your name?",
-    "What did I just ask you?",
-    "Name three primary colours.",
-    "Which of those three is the warmest?",
-    "Summarise what we've talked about so far.",
-    "Thanks — goodbye!"
-};
+Console.WriteLine("Type a message and press Enter. Blank line, 'exit', or Ctrl-D to quit.\n");
 
 AgentOutcome? outcome = null;
-for (var i = 0; i < messages.Length; i++)
+while (true)
 {
+    Console.Write("you>   ");
+    var input = Console.ReadLine();
+    if (string.IsNullOrWhiteSpace(input) || input.Trim() is "exit" or "quit")
+        break;
+
     var state = outcome is null
-        ? AgentState.NewTask(messages[i], budget)
-        : outcome.FinalState.WithUserMessage(messages[i]);
+        ? AgentState.NewTask(input, budget)
+        : outcome.FinalState.WithUserMessage(input);
 
     outcome = await agent.RunAsync(state);
 
-    Console.WriteLine($"── Turn {i + 1} [{outcome.Status}] ──────────────────────────────────────");
-    Console.WriteLine($"  you:   {messages[i]}");
-    Console.WriteLine($"  agent: {outcome.FinalAnswer}");
+    Console.WriteLine($"agent> {outcome.FinalAnswer ?? "(no answer)"}");
+    if (outcome.Status != AgentStatus.Done)
+        Console.WriteLine($"       [status: {outcome.Status}]");
     Console.WriteLine();
 }
 
-var lastTurnDone = outcome is { Status: AgentStatus.Done };
-Console.WriteLine(lastTurnDone
-    ? "Last turn is Done — per-turn budget held across a conversation longer than MaxTurns."
-    : "NOTE: the final turn was not Done — check the statuses above.");
+Console.WriteLine("Bye.");
 
 // Scripted fake used when no API key is set: proves each turn sees the full prior conversation.
 sealed class ConversationFakeClient : IModelClient
