@@ -103,7 +103,7 @@ writes into one or more of the draft's fields:
 |---|---|
 | `SystemPrompt` | Agent identity and standing instructions |
 | `TrajectoryMessages` | Rendered history — model turns, tool results, sensor notes |
-| `MemorySnippets` | Long-term knowledge surfaced from a retrieval system |
+| `MemorySnippets` | Long-term knowledge surfaced from a retrieval system, queried by the latest user turn |
 | `AvailableTools` | Tool list for this turn — guides can filter or reorder |
 | `SystemSections` | Pre-rendered system-prompt sections (tool catalogue, skill catalogue) appended after the prompt |
 
@@ -495,7 +495,7 @@ The framework provides the port; the caller provides the adapter. Defaults are n
 | Domain tools | `ITool` | none | Functions the model can invoke. The only way an agent acts on the world. |
 | Domain sensors | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` via `AddStandardModelHarness` | Observe the loop at declared hookpoints and intervene. Run in parallel; the loop's response depends on the hookpoint. |
 | Custom guides | `IGuide` | none (eight built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the built-in guides, before the trajectory guide. |
-| Long-term memory | `IMemoryStore` | `NullMemoryStore` | Supplies retrieved snippets to `MemoryGuide` each turn. Replace with a vector store or knowledge graph for long-term retrieval. |
+| Long-term memory | `IMemoryStore` | `NullMemoryStore` | Supplies retrieved snippets to `MemoryGuide` each turn. `RetrieveAsync` takes a *query*, not a key — it does relevance ranking, so `MemoryGuide` passes the **latest user turn** as the query (falling back to `TaskText`). In a single-task run that *is* `TaskText`; in a multi-turn conversation it tracks the current question instead of anchoring on the opener. Replace with a vector store or knowledge graph for long-term retrieval. |
 | Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note) | Decides what replaces evicted trajectory steps. Default inserts a bare note; `AiCompactionStrategy` generates a prose summary instead. |
 | Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) | Filters `AvailableTools` in `ContextDraft` before the catalogue is rendered. Controls what the model *sees*, not what the registry *holds*. |
 | Sub-agents / A2A | `ITool` wrapping a nested `HarnessLoop` or remote endpoint | none | A sub-agent is a tool whose `ExecuteAsync` runs another `HarnessLoop` or calls a remote A2A endpoint. Fully isolated — own model, sensors, and budget. |
