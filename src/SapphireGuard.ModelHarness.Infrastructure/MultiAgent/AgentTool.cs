@@ -7,9 +7,11 @@ namespace SapphireGuard.ModelHarness.Infrastructure.MultiAgent;
 /// <summary>
 /// Exposes a named agent from <see cref="AgentFactory"/> as an <see cref="ITool"/>.
 /// The orchestrating agent calls this tool with a sub-task; the tool runs the target
-/// agent's full loop and returns its final answer as the tool result.
+/// agent's full loop and returns its final answer as the tool result. An optional
+/// <paramref name="budget"/> bounds each delegated run; when <see langword="null"/> the
+/// sub-agent uses the agent's default budget.
 /// </summary>
-public sealed class AgentTool(string agentName, AgentFactory factory) : ITool
+public sealed class AgentTool(string agentName, AgentFactory factory, Budget? budget = null) : ITool
 {
     public string Name => agentName;
     public string Description =>
@@ -30,7 +32,7 @@ public sealed class AgentTool(string agentName, AgentFactory factory) : ITool
         var task = call.Arguments.GetProperty("task").GetString()
             ?? throw new InvalidOperationException("'task' argument is required.");
 
-        var outcome = await factory.GetAgent(agentName).RunAsync(task, ct: ct);
+        var outcome = await factory.GetAgent(agentName).RunAsync(task, budget, ct);
 
         var delegatedCost = 0m;
         var totalInput = 0;

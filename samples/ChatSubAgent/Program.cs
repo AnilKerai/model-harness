@@ -57,7 +57,14 @@ services.AddChatHarness(builder => builder
     // Bare chat harness defaults to NullToolRegistry — a real registry is required to dispatch tools.
     .WithToolRegistry<InMemoryToolRegistry>()
     .WithResilientModel(_ => NewClient())
-    .AddSubAgentAsTool("currency_converter", factory));
+    // Tight per-delegation budget: a lookup + a multiply + an answer is ~3 turns, so 4 is plenty.
+    .AddSubAgentAsTool("currency_converter", factory, new Budget
+    {
+        MaxTurns = 4,
+        MaxContextTokens = 50_000,
+        MaxCost = 0.10m,
+        MaxWallClock = TimeSpan.FromSeconds(30)
+    }));
 
 await using var provider = services.BuildServiceProvider();
 var agent = provider.GetRequiredService<Agent>();

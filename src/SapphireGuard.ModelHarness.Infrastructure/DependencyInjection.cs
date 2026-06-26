@@ -14,6 +14,7 @@ using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure.Skills;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
+using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
 
 namespace SapphireGuard.ModelHarness.Infrastructure;
 
@@ -242,13 +243,16 @@ public static class DependencyInjection
     /// <summary>
     /// Registers the named sub-agent as a tool on this agent's harness. The
     /// <paramref name="factory"/> reference is captured directly in a closure —
-    /// no service resolution from the sub-container is needed.
+    /// no service resolution from the sub-container is needed. An optional
+    /// <paramref name="budget"/> bounds each delegated run; when <see langword="null"/>
+    /// the sub-agent uses the agent's default budget.
     /// </summary>
     public static ModelHarnessBuilder AddSubAgentAsTool(
         this ModelHarnessBuilder builder,
         string agentName,
-        AgentFactory factory) =>
-        builder.WithTool(_ => new AgentTool(agentName, factory));
+        AgentFactory factory,
+        StateBudget? budget = null) =>
+        builder.WithTool(_ => new AgentTool(agentName, factory, budget));
 
     // ── Internal helpers ─────────────────────────────────────────────────────
 
