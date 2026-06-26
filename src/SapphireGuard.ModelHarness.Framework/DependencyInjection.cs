@@ -51,6 +51,24 @@ public static class DependencyInjection
         return services;
     }
 
+    /// <summary>
+    /// Registers the harness configured for multi-turn chat: a per-turn budget
+    /// (<see cref="TurnScopedBudgetEnforcer"/>) so each user turn gets a fresh allowance, and a
+    /// trajectory guide that does not pin the first message as a fixed goal. Task-completion
+    /// sensors are deliberately not wired — chat has no single goal to make progress toward; add
+    /// any you want via <paramref name="configure"/>. Continue a conversation across turns with
+    /// <see cref="State.AgentState.WithUserMessage"/>. The caller still supplies the model.
+    /// </summary>
+    public static IServiceCollection AddChatHarness(this IServiceCollection services, Action<ModelHarnessBuilder> configure) =>
+        services.AddModelHarness(builder =>
+        {
+            builder
+                .WithBudgetEnforcer<TurnScopedBudgetEnforcer>()
+                .WithTrajectoryGuide(sp => new HeadEvictionTrajectoryGuide(
+                    sp.GetRequiredService<ICompactionStrategy>(), pinOriginalGoal: false));
+            configure(builder);
+        });
+
     // ── Internal wiring ──────────────────────────────────────────────────────
 
     private static IServiceCollection AddAgent(this IServiceCollection services)

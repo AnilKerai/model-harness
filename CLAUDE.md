@@ -61,6 +61,8 @@ Sensors may block actions but must never take turns away from the model — the 
 
 Defaults differ by entry point: `AddModelHarness` (bare, `Framework`) wires core + no-op defaults; `AddStandardModelHarness` (`Infrastructure`) calls `AddModelHarness` then overrides a few seams and adds the default tools/sensors. **Neither registers a model client — the caller always supplies one** via `.WithModel(...)` / `.WithResilientModel(...)`. Port defaults use `TryAdd` (a matching `.WithX(...)` replaces them); tools, sensors, and guides are additive.
 
+`AddChatHarness` (`Framework`) is a third entry point for multi-turn chat — a thin sibling of `AddStandardModelHarness`, not a fork. It calls `AddModelHarness` then swaps two seams: `TurnScopedBudgetEnforcer` (counts turns/cost/tokens since the last `UserMessageStep`, so each user turn gets a fresh allowance instead of the whole conversation exhausting one budget) and `HeadEvictionTrajectoryGuide(pinOriginalGoal: false)` (drops the `[ORIGINAL GOAL]` pin, since chat's live goal is the latest user turn). No task-completion sensors are wired. Same `HarnessLoop`, `AgentState`, and `Agent`; continue a conversation with `AgentState.WithUserMessage`. Sample: `samples/Conversation`.
+
 | Port | Interface | `AddModelHarness` (bare) | `AddStandardModelHarness` |
 |---|---|---|---|
 | Model transport | `IModelClient` | none — caller supplies | none — caller supplies |

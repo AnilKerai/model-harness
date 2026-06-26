@@ -1,46 +1,91 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
-using SapphireGuard.ModelHarness.Infrastructure;
+using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
+using SapphireGuard.ModelHarness.Infrastructure.Resilience;
 using SapphireGuard.ModelHarness.Samples.Common;
+
+var config = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: false)
+    .AddJsonFile("appsettings.local.json", optional: true)
+    .Build();
+
+var apiKey = config["Anthropic:ApiKey"];
+var usingRealModel = !string.IsNullOrWhiteSpace(apiKey);
 
 AgentConsoleWriter.PrintHeader(
     "conversation",
-    "Multi-turn conversation: a completed run is re-opened with WithUserMessage, so the " +
-    "trajectory carries multiple user turns and turn 2 sees turn 1.");
+    "Multi-turn chat via AddChatHarness. A deliberately small per-turn budget (MaxTurns=3) is " +
+    "reused across 6 turns: TurnScopedBudgetEnforcer resets the allowance each user turn, so " +
+    "every turn finishes Done. Under the terminal-mode DefaultBudgetEnforcer the same budget would " +
+    "PartialResult from turn 4 onward, since it sums model calls across the whole conversation.");
+
+if (!usingRealModel)
+    Console.WriteLine("WARNING: Anthropic:ApiKey not configured — using a scripted fake client.\n");
 
 var services = new ServiceCollection();
 
-services.AddStandardModelHarness(builder => builder
-    .WithSystemPrompt("You are a friendly conversational assistant.")
-    .WithModel(_ => new ConversationFakeClient()));
+services.AddChatHarness(builder =>
+{
+    builder.WithSystemPrompt("You are a friendly conversational assistant. Keep replies to one sentence.");
+
+    if (usingRealModel)
+        builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
+        {
+            ApiKey = apiKey!,
+            ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5"
+        }));
+    else
+        builder.WithModel(_ => new ConversationFakeClient());
+});
 
 await using var provider = services.BuildServiceProvider();
 var agent = provider.GetRequiredService<Agent>();
 
-// ── Turn 1 ────────────────────────────────────────────────────────────────────
+// Per-turn budget that is smaller than the number of conversation turns — the whole point.
+var budget = new Budget
+{
+    MaxTurns = 3,
+    MaxContextTokens = 100_000,
+    MaxCost = 1.00m,
+    MaxWallClock = TimeSpan.FromMinutes(2)
+};
 
-var first = await agent.RunAsync("Hi — what's your name?");
+var messages = new[]
+{
+    "Hi — what's your name?",
+    "What did I just ask you?",
+    "Name three primary colours.",
+    "Which of those three is the warmest?",
+    "Summarise what we've talked about so far.",
+    "Thanks — goodbye!"
+};
 
-Console.WriteLine();
-Console.WriteLine("── Turn 1 ──────────────────────────────────────────────────────────────");
-AgentConsoleWriter.PrintOutcome(first);
+AgentOutcome? outcome = null;
+for (var i = 0; i < messages.Length; i++)
+{
+    var state = outcome is null
+        ? AgentState.NewTask(messages[i], budget)
+        : outcome.FinalState.WithUserMessage(messages[i]);
 
-// ── Turn 2 — continue the same conversation ────────────────────────────────────
-// WithUserMessage appends the human's next turn and returns the run to Running.
-// The carried-forward trajectory is what lets turn 2 see turn 1.
+    outcome = await agent.RunAsync(state);
 
-var second = await agent.RunAsync(first.FinalState.WithUserMessage("What did I just ask you?"));
+    Console.WriteLine($"── Turn {i + 1} [{outcome.Status}] ──────────────────────────────────────");
+    Console.WriteLine($"  you:   {messages[i]}");
+    Console.WriteLine($"  agent: {outcome.FinalAnswer}");
+    Console.WriteLine();
+}
 
-Console.WriteLine();
-Console.WriteLine("── Turn 2 ──────────────────────────────────────────────────────────────");
-AgentConsoleWriter.PrintOutcome(second);
+var lastTurnDone = outcome is { Status: AgentStatus.Done };
+Console.WriteLine(lastTurnDone
+    ? "Last turn is Done — per-turn budget held across a conversation longer than MaxTurns."
+    : "NOTE: the final turn was not Done — check the statuses above.");
 
-// ── Scripted fake: answers from the user turns it can see in the rendered prompt ─
-// On turn 2 it sees both user messages, proving multiple user turns reach the model.
-
+// Scripted fake used when no API key is set: proves each turn sees the full prior conversation.
 sealed class ConversationFakeClient : IModelClient
 {
     public Task<ModelResponse> CallAsync(
@@ -54,8 +99,8 @@ sealed class ConversationFakeClient : IModelClient
             .ToList();
 
         var answer = userTurns.Count <= 1
-            ? "I'm Sapphire, your assistant. Ask me anything."
-            : $"You first asked: \"{userTurns[0]}\". I can see all {userTurns.Count} of your messages this conversation.";
+            ? "I'm Sapphire, your assistant."
+            : $"You've sent me {userTurns.Count} messages; the first was \"{userTurns[0]}\".";
 
         return Task.FromResult(new ModelResponse
         {

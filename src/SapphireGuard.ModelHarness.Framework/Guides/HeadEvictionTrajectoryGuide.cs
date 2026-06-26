@@ -14,8 +14,11 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// or an AI-generated prose summary (<c>AiCompactionStrategy</c> in Infrastructure).
 /// Must run last in the guide pipeline so it can measure all prior guide contributions
 /// and compute an accurate token budget rather than relying on a fixed reserve.
+/// When <paramref name="pinOriginalGoal"/> is <see langword="false"/> (chat mode) the
+/// fixed <c>[ORIGINAL GOAL]</c> anchor is omitted — the latest user turn is already the
+/// live goal, so re-pinning the first message would misdirect a multi-turn conversation.
 /// </summary>
-public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionStrategy) : ITrajectoryGuide
+public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionStrategy, bool pinOriginalGoal = true) : ITrajectoryGuide
 {
     public string Name => "trajectory";
 
@@ -36,8 +39,9 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
             stepGroups = stepGroups[trimCount..];
         }
 
-        draft.TrajectoryMessages.Add(new Message(MessageRole.System,
-            $"[ORIGINAL GOAL] {state.TaskText}"));
+        if (pinOriginalGoal)
+            draft.TrajectoryMessages.Add(new Message(MessageRole.System,
+                $"[ORIGINAL GOAL] {state.TaskText}"));
 
         foreach (var (_, messages) in stepGroups)
             draft.TrajectoryMessages.AddRange(messages);
