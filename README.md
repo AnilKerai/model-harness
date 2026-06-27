@@ -25,6 +25,23 @@ always a product decision, not a model decision.
 
 ---
 
+## Harness engineering vs loop engineering
+
+*Prompt → context → loop* is the usual progression of where the engineering effort goes, and the last word is overloaded — so it is worth being precise about where this framework sits.
+
+A **harness equips a single agent run**: the control loop (`HarnessLoop`, below), guides, sensors, and budget that turn one model into one reliable agent. That is what this framework is — **harness engineering**, the single-run body. A **loop**, in the "loop engineering" sense, is the *outer* orchestration that runs across many runs: it discovers work, triggers the harness on a schedule or event, spawns helpers, verifies results, persists state, and decides what to run next. (So `HarnessLoop` is the inner control loop, part of the body — it is not the outer "loop.")
+
+The framework draws that boundary deliberately. Two outer-tier concerns are left above it:
+
+| Concern | Where it lives | Why |
+|---|---|---|
+| **Triggering** — cron, webhooks, "run nightly" | The host composes a scheduler *around* `Agent` | The harness is invoked; it does not invoke itself. A scheduler is not a harness concern, and baking one in would break the dependency direction. |
+| **Self-improvement** — score outcomes, tune prompts/tools, auto-harvest skills | A separate layer on top — see [ROADMAP](docs/ROADMAP.md) | Getting better over many tasks is cross-episode. The harness runs one episode and emits the traces (`ITracer`) an outer loop consumes — it never grades itself. |
+
+One more word worth splitting: **verifier**. An **eval** runs offline over a fixed dataset and gates a release — it belongs in a test project, above the harness. A **runtime guardrail** runs inline during one run and feeds a failure back so the model self-corrects before returning — that *is* a harness concern, implemented as a sensor (`PreReturn` / `PostToolCall`). Same predicate, different time and consequence: offline it yields a score, inline it yields a retry.
+
+---
+
 ## Context engineering
 
 Context engineering — as I understand it — is the practice of shaping model perception: deciding what information goes into the context window at each step, what gets left out, and how it's structured. The guide pattern in this framework is a concrete implementation of that idea.
