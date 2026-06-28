@@ -83,7 +83,7 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
                     // Advisory hookpoints (PreModelCall guidance, PostToolCall flag) block nothing,
                     // so the acknowledgement must not claim the response was blocked.
                     var acknowledgement = si.HookPoint is HookPoint.PreModelCall or HookPoint.PostToolCall
-                        ? $"{si.Reason} I will take this into account."
+                        ? $"{si.Reason} I will follow this guidance."
                         : $"My previous response was blocked: {si.Reason} I will comply fully and not repeat this behaviour.";
                     messages.Add(new Message(MessageRole.Assistant,
                         $"[HARNESS OBSERVATION — {si.SensorName} at {si.HookPoint}] {acknowledgement}"));
