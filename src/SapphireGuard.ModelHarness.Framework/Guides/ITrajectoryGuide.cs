@@ -6,7 +6,7 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// Renders the agent trajectory into the context draft. Intentionally separate from
 /// <see cref="IGuide"/> so the runner can guarantee it executes after all supporting
 /// guides without relying on DI registration order. Swap the default implementation
-/// via <c>builder.WithHeadEvictionTrajectoryGuide&lt;T&gt;()</c>.
+/// via <c>builder.WithTrajectoryGuide&lt;T&gt;()</c>.
 /// </summary>
 public interface ITrajectoryGuide
 {

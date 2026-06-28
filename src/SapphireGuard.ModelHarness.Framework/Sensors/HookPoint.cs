@@ -4,9 +4,9 @@ namespace SapphireGuard.ModelHarness.Framework.Sensors;
 public enum HookPoint
 {
     /// <summary>
-    /// Before context is built and the model is called. Interventions here force-finalise
-    /// the run immediately — the loop cannot loop back because no model call has happened
-    /// yet and the trajectory is unchanged from the previous turn.
+    /// Before context is built and the model is called. Interventions here annotate — the note is
+    /// appended to the trajectory and the model call still proceeds on the same turn, so the model
+    /// can act on the guidance immediately.
     /// </summary>
     PreModelCall,
 

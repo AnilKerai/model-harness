@@ -486,7 +486,7 @@ defaults. Zero infrastructure dependencies — the harness runs with whatever ad
 in. This is the stable core everything else builds on.
 
 **Layer 2 — Common adapters** (the `Infrastructure.*` packages): ready-made implementations
-of the framework ports — model clients, tracing, persistence, resilience, MCP, and so on.
+of the framework ports — model clients, tracing, persistence, resilience, and so on.
 Consumers pick the packages they need; each is independent. If a built-in adapter doesn't fit,
 replace it by implementing the port directly.
 
