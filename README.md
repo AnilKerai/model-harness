@@ -25,20 +25,48 @@ always a product decision, not a model decision.
 
 ---
 
-## Harness engineering vs loop engineering
+## Loop engineering
 
-*Prompt → context → loop* is the usual progression of where the engineering effort goes, and the last word is overloaded — so it is worth being precise about where this framework sits.
+*Prompt → context → loop* is the progression of where the engineering effort goes, each rung wrapping the one below rather than replacing it. Loop engineering — the rung that crystallised in mid-2026 — is the shift from prompting an agent turn-by-turn to **designing the system that prompts it**. The model is the **brain**; the harness is the **body** that equips a single run; the **loop** is the driver that runs the body across many runs — discovering work, triggering on a schedule or event, spawning helpers, verifying results, persisting state, and deciding what to do next until a goal is met.
 
-A **harness equips a single agent run**: the control loop (`HarnessLoop`, below), guides, sensors, and budget that turn one model into one reliable agent. That is what this framework is — **harness engineering**, the single-run body. A **loop**, in the "loop engineering" sense, is the *outer* orchestration that runs across many runs: it discovers work, triggers the harness on a schedule or event, spawns helpers, verifies results, persists state, and decides what to run next. (So `HarnessLoop` is the inner control loop, part of the body — it is not the outer "loop.")
+**This framework is the body.** It is built to be *driven* by a loop, ships the inner loop and the building blocks a loop is assembled from, and deliberately leaves the outer loops above it. (So `HarnessLoop`, below, is the inner control loop — it is *not* the outer "loop" the discipline is named for.)
 
-The framework draws that boundary deliberately. Two outer-tier concerns are left above it:
+### The four loops
 
-| Concern | Where it lives | Why |
+Loop engineering stacks feedback loops from the single run outward; each layer wraps the one inside it, and the further out, the longer its period:
+
+| Loop | What it does | In this harness |
 |---|---|---|
-| **Triggering** — cron, webhooks, "run nightly" | The host composes a scheduler *around* `Agent` | The harness is invoked; it does not invoke itself. A scheduler is not a harness concern, and baking one in would break the dependency direction. |
-| **Self-improvement** — score outcomes, tune prompts/tools, auto-harvest skills | A separate layer on top — see [ROADMAP](docs/ROADMAP.md) | Getting better over many tasks is cross-episode. The harness runs one episode and emits the traces (`ITracer`) an outer loop consumes — it never grades itself. |
+| **1. Agent loop** | Model calls tools in a loop until the task is done | ✅ `HarnessLoop` — the turn-by-turn state machine |
+| **2. Verification loop** | Check each result; feed failures back so the agent self-corrects | ◐ inline as **sensors** (`PreReturn` challenge, `PostToolCall` flag); offline as **evals** in a sibling eval project |
+| **3. Event-driven loop** | Start runs from cron / webhooks / events, not by hand | ⛔ above the harness — the host composes a scheduler around `Agent` |
+| **4. Hill-climbing loop** | Read traces + outcomes, then update the agent's own config to do better next time | ⛔ above the harness — the harness only *emits* the traces (`ITracer`) it would consume; see [ROADMAP](docs/ROADMAP.md) |
 
-One more word worth splitting: **verifier**. An **eval** runs offline over a fixed dataset and gates a release — it belongs in a test project, above the harness. A **runtime guardrail** runs inline during one run and feeds a failure back so the model self-corrects before returning — that *is* a harness concern, implemented as a sensor (`PreReturn` / `PostToolCall`). Same predicate, different time and consequence: offline it yields a score, inline it yields a retry.
+The kit a loop assembles from — skills, sub-agents, connectors, persistence, a human gate — is the [agentic primitives](#agentic-primitives) this README already documents, all provided as in-run features. The two a loop adds on top are robust **termination** and **verification**. The harness even ships the *mutation primitive* a hill-climbing loop would use — `skill_manage` lets the agent persist reusable skills ([Agent Learning](#agent-learning-experimental)) — but in-episode and model-driven; the outcome-scored controller that decides *when* to write is the part left above.
+
+### Termination is the part naive loops get wrong
+
+The signature bug of a hand-rolled loop is that it never stops — the failure the trend nicknamed *loopmaxxing* (assuming more iterations will eventually solve it). A robust loop carries several **independent** exits, and this is where the harness is deliberately strong:
+
+- **Budget as control flow** — turns, tokens, cost, and wall-clock are hard limits checked at the top of every turn; exhaustion returns a `PartialResult`, never an exception. A loop without a budget has no stopping condition, only a failure mode.
+- **No-progress detection** — `StuckDetector` and the loop sensors (`MonologueLoopSensor`, `AlternatingToolLoopSensor`, `ToolErrorLoopSensor`) catch the subtle exit: turns being spent without advancing.
+- **Verification** — a `PreReturn` sensor can refuse an answer and hand the model a fresh turn to fix it.
+
+Deterministic exits beat asking a model "are we done?" — a budget can't be talked out of stopping.
+
+### How it relates to harness and eval engineering
+
+Three disciplines, three tiers, one stack — loop engineering *wraps* the others, it does not replace them:
+
+| Discipline | Owns | Period | Here |
+|---|---|---|---|
+| **Harness engineering** | one reliable run — loop, guides, sensors, budget | a single episode | this repo |
+| **Eval engineering** | measuring runs against criteria | offline, per release | a sibling eval project |
+| **Loop engineering** | driving the harness across runs; at the top, improving it | many episodes | composed above |
+
+The division of labour is clean: the harness **runs** an episode, the eval **measures** it, the loop **acts on the measurement**. The verification loop *consumes* eval engineering; the hill-climbing loop consumes both the harness's traces and the eval's verdicts to decide what to change. Only that outermost act — changing the agent based on measured outcomes — is out of scope here, by design.
+
+This is why **verifier** is worth splitting across tiers: an **eval** runs offline over a fixed dataset and gates a release; a **runtime guardrail** runs inline during one run and feeds a failure back so the model self-corrects before returning. Same predicate, different time and consequence — offline it yields a score, inline it yields a retry.
 
 ---
 
