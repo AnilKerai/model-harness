@@ -100,7 +100,7 @@ Every agent, no matter how capable it looks, is an assembly of the same small se
 | **Perception** | What the agent can see right now — the shaped view of world state it reasons over before each model call. Every prompt is an act of perception design. Getting this right matters more than most people expect: what you omit is as important as what you include. Implemented here via the **Guide pattern** — a sequential pipeline of guides that each contribute to a shared context draft before every model call. |
 | **Control flow** | The loop that decides what runs next and in what order: call model → act on response → repeat. Budget enforcement, rate limiting, and checkpoint/resume are all control-flow concerns. The loop is deceptively simple; almost all agent reliability problems are really control-flow problems in disguise. |
 | **Guardrails** | Checkpoints that intercept and shape agent behaviour at declared points in the loop — before the model call, after it, before a tool runs, after it, before the final answer is accepted. Guardrails observe and redirect; they do not take turns away from the model. Implemented here via the **Sensor pattern** — sensors run in parallel at five hookpoints and feed interventions back through the guide pipeline so the model can self-correct. |
-| **Sub-agents** | Agents calling other agents — an orchestrator delegates a sub-task to a specialist, gets a result back, and continues. From the calling agent's perspective a sub-agent is just a tool: it takes a task and returns a result. The isolation contract is what makes this composable — each agent runs in its own container with its own model, sensors, and budget. Implemented here via **`AgentFactory`** and **`AgentTool`** — see the [Multi-agent setup](#multi-agent-setup) section. |
+| **Sub-agents** | Agents calling other agents — an orchestrator delegates a sub-task to a specialist, gets a result back, and continues. From the calling agent's perspective a sub-agent is just a tool: it takes a task and returns a result. The isolation contract is what makes this composable — each agent runs in its own container with its own model, sensors, and budget. Implemented here via **`AgentFactory`** and **`AgentTool`** — see [EXTENDING.md](docs/EXTENDING.md). |
 
 Most agent complexity is a composition of these six — not something fundamentally new. A "research agent" is control flow + tools + memory. An "orchestrated pipeline" adds sub-agents. Building the framework around named primitives keeps the ports obvious: when a new concern arrives, there is usually a clear home for it.
 
@@ -160,6 +160,8 @@ See [EXTENDING.md](docs/EXTENDING.md) for the `IGuide` interface and registratio
 - **`HeadEvictionTrajectoryGuide` last** — it measures the token cost of everything already written to `ContextDraft` (`SystemPrompt`, `MemorySnippets`, `SystemSections`) to compute how much context window remains for the trajectory. Running earlier would mean guessing at that cost with a fixed reserve. This constraint is enforced structurally: `HeadEvictionTrajectoryGuide` implements `ITrajectoryGuide` (not `IGuide`), and `DefaultGuideRunner` resolves it as a separate dependency and always invokes it after all `IGuide` instances — no reliance on DI registration order. Swap the default via `builder.WithTrajectoryGuide<T>()`.
 
 Custom guides registered via `builder.WithGuide<T>()` slot in after the built-ins and before `HeadEvictionTrajectoryGuide`.
+
+The standing system prompt that guides like `HarnessInstructionsGuide` and `ReActGuide` append to is itself set by a `SystemPromptGuide`, added when you call `builder.WithSystemPrompt(...)`. It is registered by that builder call rather than by the default pipeline, so it is not one of the always-on built-in guides. Because every guide contributes to one shared `SystemPrompt`, the order among the prompt-appending guides does not matter.
 
 `ReActGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it primes the model to interleave reasoning (a one-line *Thought*) with actions (tool calls) and *Observations* on each result. The act/observe half is already the loop — the model emits tool calls, the harness dispatches them and feeds results back — so this guide is the system-prompt nudge that makes the reasoning explicit and inspectable.
 
@@ -225,7 +227,7 @@ SensorInterventionStep appended to AgentState.Trajectory
 TrajectoryGuide renders it as an assistant-role message in ContextDraft
         │
         ▼
-Model sees: "[HARNESS OBSERVATION — my-sensor at PreToolCall] dangerous-tool is not permitted — adjust your next action and do not repeat flagged behaviour."
+Model sees: "[HARNESS OBSERVATION — my-sensor at PreToolCall] My previous response was blocked: dangerous-tool is not permitted. I will comply fully and not repeat this behaviour."
         │
         ▼
 Model re-plans without that tool
@@ -406,7 +408,7 @@ Rather than trying to track taint through the model's reasoning, the `TaintTrack
 - When a tool result arrives from an **untrusted source** (e.g. a web fetch), a `PostToolCall` annotation warns the model that untrusted content is now in context and that it should not follow any instructions it contains.
 - When the model subsequently attempts to call a **privileged action** (e.g. send email, execute code), `PreToolCall` scans the trajectory. If any successful untrusted-source result is present, the tool is **blocked** — the model receives an error and can replan without the action ever executing.
 
-This fails closed: a model that legitimately fetches a web page and then legitimately needs to send an email will be blocked. The intended workaround is to route through an `ask_human` step — explicit human approval acts as a taint-clearing gate, because the human has decided the action is safe in context.
+This fails closed: a model that legitimately fetches a web page and then legitimately needs to send an email will be blocked. Clearing taint is an **operator-level** concern — the sensor never does it. Taint persists for the whole trajectory, and `TaintTrackingSensor` does not detect an intervening `ask_human` step (see ROADMAP, known limitations). The intended workaround is to gate the privileged action behind `ask_human` and structure the flow so the human-approved path is not on the `privilegedActions` list — explicit approval then stands in for taint clearance, because the human has judged the action safe in context.
 
 Neither list is hardcoded. What counts as an untrusted source or a privileged action is declared entirely at the composition root by the operator — because only the operator knows the deployment context. MCP tools and any remote tool whose author cannot be verified should be listed as untrusted sources:
 
@@ -520,7 +522,7 @@ The framework manages these in every agent. Defaults work out of the box — rep
 
 | Concern | Port | Default | What it is |
 |---|---|---|---|
-| Model transport | `IModelClient` | `FakeModelClient` (no external deps) | Sends messages to the model and returns responses. Swap for any provider — Anthropic, Azure, Ollama, or custom. |
+| Model transport | `IModelClient` | none — caller supplies | Sends messages to the model and returns responses. **No default is registered** — supply one via `.WithModel(...)` / `.WithResilientModel(...)`. Swap for any provider — Anthropic, Azure, Ollama, or custom. |
 | Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` | Checks turn, token, cost, and wall-clock limits at the top of each turn. Returns `PartialResult` on exhaustion rather than throwing. |
 | Rate limiting | `IRateLimiter` | `NullRateLimiter` (no limiting) | Checks provider sliding-window limits before each model call. Waits and retries; degrades to `PartialResult` if the wait would exceed `MaxWallClock`. |
 | Context assembly | `IContextBuilder` | `DefaultContextBuilder` | Assembles the final prompt from the `ContextDraft` that guides produce. Rarely needs replacing. |
@@ -539,7 +541,7 @@ The framework provides the port; the caller provides the adapter. Defaults are n
 |---|---|---|---|
 | Domain tools | `ITool` | none | Functions the model can invoke. The only way an agent acts on the world. |
 | Domain sensors | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` via `AddStandardModelHarness` | Observe the loop at declared hookpoints and intervene. Run in parallel; the loop's response depends on the hookpoint. |
-| Custom guides | `IGuide` | none (eight built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the built-in guides, before the trajectory guide. |
+| Custom guides | `IGuide` | none (seven built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the built-in guides, before the trajectory guide. |
 | Long-term memory | `IMemoryStore` | `NullMemoryStore` | Supplies retrieved snippets to `MemoryGuide` each turn. `RetrieveAsync` takes a *query*, not a key — it does relevance ranking, so `MemoryGuide` passes the **latest user turn** as the query (falling back to `TaskText`). In a single-task run that *is* `TaskText`; in a multi-turn conversation it tracks the current question instead of anchoring on the opener. Replace with a vector store or knowledge graph for long-term retrieval. |
 | Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note) | Decides what replaces evicted trajectory steps. Default inserts a bare note; `AiCompactionStrategy` generates a prose summary instead. |
 | Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) | Filters `AvailableTools` in `ContextDraft` before the catalogue is rendered. Controls what the model *sees*, not what the registry *holds*. |
