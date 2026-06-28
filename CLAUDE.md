@@ -80,11 +80,14 @@ Defaults differ by entry point: `AddModelHarness` (bare, `Framework`) wires core
 | Rate limiting | `IRateLimiter` | `NullRateLimiter` | ↑ same |
 | Checkpoint store | `ICheckpointStore` | `NullCheckpointStore` | ↑ same |
 | Human notifier | `IHumanNotifier` | `NullHumanNotifier` | ↑ same |
+| Clock | `TimeProvider` | `TimeProvider.System` | ↑ same |
 | Tracing | `ITracer` | `NullTracer` | `OpenTelemetryTracer` |
 | Sensors (additive) | `ISensor` | none | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` |
 | Tools (additive) | `ITool` | none | `GetDateTimeTool` |
 
 The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContextBuilder`, and `HeadEvictionTrajectoryGuide` are wired identically by both.
+
+`TimeProvider` is registered as a singleton (`TimeProvider.System`) so all DI-resolved time-dependent components — `HarnessLoop`, the budget enforcers, the rate limiters, `ConsoleTracer`, `FileSkillStore` — read one injectable clock; override it with standard DI (`services.Replace(...)`) rather than a dedicated builder method. Each such type also takes an optional `TimeProvider? = null` ctor parameter that falls back to `TimeProvider.System`, so direct construction (and `AgentState.NewTask` / `WithUserMessage`) stays clock-free unless a caller supplies one.
 
 ## DI conventions
 
@@ -100,7 +103,7 @@ The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContext
 - Interfaces over concrete implementations.
 - Small, focused changes — build after each set of changes.
 - Remove unused `using` statements in every file touched.
-- No comments unless the WHY is non-obvious. No XML doc blocks.
+- No comments unless the WHY is non-obvious. XML doc comments belong on the public API surface only (this ships as a NuGet library, so consumers get IntelliSense) — keep them concise. Do not put XML docs on internal/private members; use a plain `//` comment there only where the WHY is non-obvious.
 - No unnecessary abstractions — don't design for hypothetical future requirements.
 
 ## Workflow

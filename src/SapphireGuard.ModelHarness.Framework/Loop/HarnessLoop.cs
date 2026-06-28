@@ -26,12 +26,15 @@ public sealed class HarnessLoop(
     IBudgetEnforcer budgetEnforcer,
     IRateLimiter rateLimiter,
     ITracer tracer,
-    ICheckpointStore checkpointStore)
+    ICheckpointStore checkpointStore,
+    TimeProvider? timeProvider = null)
 {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
     public async Task<AgentOutcome> RunAsync(AgentState initial, CancellationToken ct)
     {
         var state = initial;
-        var startedAt = DateTimeOffset.UtcNow;
+        var startedAt = _time.GetUtcNow();
         var runId = Guid.NewGuid().ToString("n");
         var turn = 0;
         var consecutiveInterventions = 0;
@@ -49,7 +52,7 @@ public sealed class HarnessLoop(
                 {
                     CheckpointId = Guid.NewGuid().ToString("n"),
                     RunId = runId,
-                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedAt = _time.GetUtcNow(),
                     TurnNumber = turn++,
                     State = state
                 }, ct);
@@ -62,7 +65,7 @@ public sealed class HarnessLoop(
                 if (rateLimitCheck.IsLimited)
                 {
                     var delay = rateLimitCheck.RetryAfter ?? TimeSpan.FromSeconds(10);
-                    if (DateTimeOffset.UtcNow + delay > startedAt + state.Budget.MaxWallClock)
+                    if (_time.GetUtcNow() + delay > startedAt + state.Budget.MaxWallClock)
                         return await FinaliseOnBudgetAsync(state,
                             $"Rate limit wait ({delay.TotalSeconds:0}s) would exceed MaxWallClock.", ct);
                     await Task.Delay(delay, ct);
@@ -136,7 +139,7 @@ public sealed class HarnessLoop(
                         {
                             CheckpointId = Guid.NewGuid().ToString("n"),
                             RunId = runId,
-                            CreatedAt = DateTimeOffset.UtcNow,
+                            CreatedAt = _time.GetUtcNow(),
                             TurnNumber = turn,
                             State = suspended
                         }, ct);
@@ -216,7 +219,7 @@ public sealed class HarnessLoop(
                 suppressTools |= result.SuppressTools;
                 next = next.AppendStep(new SensorInterventionStep(
                     Id: Guid.NewGuid(),
-                    Timestamp: DateTimeOffset.UtcNow,
+                    Timestamp: _time.GetUtcNow(),
                     HookPoint: hookPoint,
                     SensorName: sensor.Name,
                     Reason: result.Reason ?? "(no reason given)",
@@ -256,7 +259,7 @@ public sealed class HarnessLoop(
 
         var step = new ModelCallStep(
             Id: Guid.NewGuid(),
-            Timestamp: DateTimeOffset.UtcNow,
+            Timestamp: _time.GetUtcNow(),
             Prompt: messages,
             Response: response,
             Usage: response.Usage,
@@ -269,7 +272,7 @@ public sealed class HarnessLoop(
     {
         var preStep = new ToolCallStep(
             Id: Guid.NewGuid(),
-            Timestamp: DateTimeOffset.UtcNow,
+            Timestamp: _time.GetUtcNow(),
             Call: call,
             Result: new ToolResult(call.CallId, "(pending)"));
 
@@ -279,7 +282,7 @@ public sealed class HarnessLoop(
             var lastIntervention = afterPre.Trajectory.OfType<SensorInterventionStep>().Last();
             return afterPre.AppendStep(new ToolCallStep(
                 Id: Guid.NewGuid(),
-                Timestamp: DateTimeOffset.UtcNow,
+                Timestamp: _time.GetUtcNow(),
                 Call: call,
                 Result: new ToolResult(call.CallId,
                     $"Blocked by sensor '{lastIntervention.SensorName}': {lastIntervention.Reason}",
@@ -302,7 +305,7 @@ public sealed class HarnessLoop(
 
         var executed = new ToolCallStep(
             Id: Guid.NewGuid(),
-            Timestamp: DateTimeOffset.UtcNow,
+            Timestamp: _time.GetUtcNow(),
             Call: call,
             Result: result);
 

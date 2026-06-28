@@ -26,6 +26,7 @@ public static class DependencyInjection
     {
         services
             .AddAgent()
+            .AddTimeProviderDefault()
             .AddHarnessLoop()
             .AddBudgetEnforcerDefault()
             .AddRateLimiterDefault()
@@ -74,6 +75,12 @@ public static class DependencyInjection
     private static IServiceCollection AddAgent(this IServiceCollection services)
     {
         services.TryAddSingleton<Agent>();
+        return services;
+    }
+
+    private static IServiceCollection AddTimeProviderDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
         return services;
     }
 
@@ -154,13 +161,9 @@ public static class DependencyInjection
         return services;
     }
 
-    /// <summary>
-    /// Registers the built-in guide pipeline in explicit execution order.
-    /// The ITrajectoryGuide (HeadEvictionTrajectoryGuide by default) is absent —
-    /// DefaultGuideRunner resolves it as a separate dependency and always runs it last.
-    /// Custom guides registered via builder.WithGuide() are inserted between
-    /// these built-ins and the trajectory guide.
-    /// </summary>
+    // Built-in guides in explicit execution order. The ITrajectoryGuide (HeadEvictionTrajectoryGuide
+    // by default) is absent — DefaultGuideRunner resolves it separately and always runs it last.
+    // Custom guides registered via builder.WithGuide() are inserted between these and the trajectory guide.
     private static IServiceCollection AddDefaultGuidePipeline(this IServiceCollection services)
     {
         services.AddSingleton<IGuide, HarnessInstructionsGuide>();

@@ -3,12 +3,9 @@ using SapphireGuard.ModelHarness.Framework.Skills;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Skills;
 
-/// <summary>
-/// Parses and serialises the SKILL.md format: YAML-style frontmatter followed by a
-/// markdown body. Enforces the agentskills.io spec — <c>name</c> and <c>description</c>
-/// are required; missing either throws <see cref="InvalidOperationException"/>.
-/// <c>when_to_use</c> and <c>version</c> are framework extensions and are optional.
-/// </summary>
+// Parses and serialises the SKILL.md format: YAML-style frontmatter followed by a markdown body.
+// Enforces the agentskills.io spec — name and description are required (missing either throws
+// InvalidOperationException); when_to_use and version are optional framework extensions.
 internal static class SkillDocumentParser
 {
     public static Skill Parse(string text)

@@ -10,8 +10,13 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Skills;
 public sealed class FileSkillStore : ISkillStore
 {
     private readonly string _dir;
+    private readonly TimeProvider _time;
 
-    public FileSkillStore(string directory) => _dir = Expand(directory);
+    public FileSkillStore(string directory, TimeProvider? timeProvider = null)
+    {
+        _dir = Expand(directory);
+        _time = timeProvider ?? TimeProvider.System;
+    }
 
     public async Task<IReadOnlyList<SkillSummary>> ListAsync(CancellationToken ct)
     {
@@ -87,7 +92,7 @@ public sealed class FileSkillStore : ISkillStore
     {
         var historyDir = HistoryDir(name);
         Directory.CreateDirectory(historyDir);
-        var id = DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmssZ");
+        var id = _time.GetUtcNow().ToString("yyyyMMddTHHmmssZ");
         await File.WriteAllTextAsync(Path.Combine(historyDir, id + ".md"),
             await File.ReadAllTextAsync(currentPath, ct), ct);
     }

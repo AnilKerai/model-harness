@@ -48,7 +48,7 @@ public sealed record AgentState
     public PendingHumanInput? PendingHumanInput { get; init; }
 
     /// <summary>Creates an initial state for a new task with a generated task ID and <see cref="AgentStatus.Running"/> status.</summary>
-    public static AgentState NewTask(string taskText, Budget budget, IReadOnlyDictionary<string, string>? metadata = null) =>
+    public static AgentState NewTask(string taskText, Budget budget, IReadOnlyDictionary<string, string>? metadata = null, TimeProvider? timeProvider = null) =>
         new()
         {
             TaskId = Guid.NewGuid().ToString("n"),
@@ -56,7 +56,7 @@ public sealed record AgentState
             Budget = budget,
             Status = AgentStatus.Running,
             Metadata = metadata ?? new Dictionary<string, string>(),
-            Trajectory = [new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, taskText)]
+            Trajectory = [new UserMessageStep(Guid.NewGuid(), (timeProvider ?? TimeProvider.System).GetUtcNow(), taskText)]
         };
 
     /// <summary>Returns a new state with <paramref name="step"/> appended to the trajectory.</summary>
@@ -68,9 +68,9 @@ public sealed record AgentState
     /// <see cref="AgentStatus.Running"/>, re-opening a completed run so a caller can continue a
     /// multi-turn conversation by passing the result back to <c>HarnessLoop.RunAsync</c>.
     /// </summary>
-    public AgentState WithUserMessage(string content) =>
+    public AgentState WithUserMessage(string content, TimeProvider? timeProvider = null) =>
         (this with { Status = AgentStatus.Running })
-            .AppendStep(new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, content));
+            .AppendStep(new UserMessageStep(Guid.NewGuid(), (timeProvider ?? TimeProvider.System).GetUtcNow(), content));
 
     /// <summary>
     /// Returns a new <see cref="AgentStatus.Running"/> state with the pending <c>ask_human</c>

@@ -24,7 +24,7 @@ public static class DependencyInjection
     /// <summary>Configures a single skill store for both reading and writing. Use <see cref="WithLearning"/> and <see cref="WithSkills"/> for the two-store pattern.</summary>
     public static ModelHarnessBuilder WithSkillStore(this ModelHarnessBuilder builder, string directory)
     {
-        builder.WithSkillStore(_ => new FileSkillStore(directory));
+        builder.WithSkillStore(sp => new FileSkillStore(directory, sp.GetRequiredService<TimeProvider>()));
         AddSkillTools(builder);
         return builder;
     }
@@ -187,11 +187,8 @@ public static class DependencyInjection
             configure(builder);
         });
 
-    /// <summary>
-    /// Applies the standard opinionated defaults to any <see cref="ModelHarnessBuilder"/>.
-    /// Single source of truth shared by <see cref="AddStandardModelHarness"/> and
-    /// <see cref="AgentFactory.AddStandardAgent"/> — add new standard sensors here only.
-    /// </summary>
+    // Applies the standard opinionated defaults to any ModelHarnessBuilder. Single source of truth
+    // shared by AddStandardModelHarness and AgentFactory.AddStandardAgent — add new standard sensors here only.
     internal static void ApplyStandardDefaults(ModelHarnessBuilder builder)
     {
         builder.Services.TryAddSingleton(TimeProvider.System);

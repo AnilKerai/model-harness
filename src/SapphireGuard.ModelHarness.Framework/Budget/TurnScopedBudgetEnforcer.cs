@@ -9,8 +9,10 @@ namespace SapphireGuard.ModelHarness.Framework.Budget;
 /// exhausts a multi-turn chat after MaxTurns total model calls; this resets that window at each
 /// user turn. Live context-window size stays bounded separately by the trajectory guide.
 /// </summary>
-public sealed class TurnScopedBudgetEnforcer : IBudgetEnforcer
+public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) : IBudgetEnforcer
 {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
     public BudgetCheckResult Check(AgentState state, DateTimeOffset startedAt)
     {
         var budget = state.Budget;
@@ -53,7 +55,7 @@ public sealed class TurnScopedBudgetEnforcer : IBudgetEnforcer
         if (totalTokens >= budget.MaxContextTokens)
             return BudgetCheckResult.Exhausted($"Reached MaxContextTokens ({budget.MaxContextTokens}) this turn.");
 
-        var elapsed = DateTimeOffset.UtcNow - startedAt;
+        var elapsed = _time.GetUtcNow() - startedAt;
         if (elapsed >= budget.MaxWallClock)
             return BudgetCheckResult.Exhausted($"Reached MaxWallClock ({budget.MaxWallClock}).");
 

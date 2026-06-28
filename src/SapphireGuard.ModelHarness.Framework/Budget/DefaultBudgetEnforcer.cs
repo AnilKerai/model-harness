@@ -7,8 +7,10 @@ namespace SapphireGuard.ModelHarness.Framework.Budget;
 /// checks elapsed wall-clock. Token counting is left to the model client as
 /// the loop has no tokeniser.
 /// </summary>
-public sealed class DefaultBudgetEnforcer : IBudgetEnforcer
+public sealed class DefaultBudgetEnforcer(TimeProvider? timeProvider = null) : IBudgetEnforcer
 {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
     public BudgetCheckResult Check(AgentState state, DateTimeOffset startedAt)
     {
         var budget = state.Budget;
@@ -45,7 +47,7 @@ public sealed class DefaultBudgetEnforcer : IBudgetEnforcer
         {
             return BudgetCheckResult.Exhausted($"Reached MaxContextTokens ({budget.MaxContextTokens}).");
         }
-        var elapsed = DateTimeOffset.UtcNow - startedAt;
+        var elapsed = _time.GetUtcNow() - startedAt;
         if (elapsed >= budget.MaxWallClock)
         {
             return BudgetCheckResult.Exhausted($"Reached MaxWallClock ({budget.MaxWallClock}).");

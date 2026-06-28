@@ -243,10 +243,8 @@ public sealed class ClaudeModelClient : IModelClient
         _ => FrameworkStopReason.EndTurn
     };
 
-    /// <summary>
-    /// Approximate cost based on published pricing (May 2026).
-    /// Prices change — update from https://www.anthropic.com/pricing when stale.
-    /// </summary>
+    // Approximate cost based on published pricing (May 2026).
+    // Prices change — update from https://www.anthropic.com/pricing when stale.
     private static decimal CalculateCost(string modelFamily, FrameworkUsage usage)
     {
         var (inputPer1M, outputPer1M) = modelFamily switch

@@ -89,6 +89,25 @@ public sealed class DefaultBudgetEnforcerTests
     }
 
     [Fact]
+    public void Check_WallClock_UsesInjectedTimeProvider()
+    {
+        // startedAt == the injected clock's "now", so elapsed is zero — yet it is years in the
+        // real past, so an enforcer reading the system clock would report it long exhausted.
+        var frozen = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var sut = new DefaultBudgetEnforcer(new FixedClock(frozen));
+        var budget = Generous with { MaxWallClock = TimeSpan.FromMilliseconds(1) };
+
+        var result = sut.Check(EmptyState(budget), frozen);
+
+        Assert.False(result.IsExhausted);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    [Fact]
     public void Check_NonModelCallStepsIgnored_DoesNotInflateTurnCount()
     {
         var budget = Generous with { MaxTurns = 1 };

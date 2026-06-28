@@ -197,10 +197,8 @@ public sealed class AzureOpenAIModelClient : IModelClient
         _                                                       => FrameworkStopReason.EndTurn
     };
 
-    /// <summary>
-    /// Approximate cost based on Azure AI Foundry published pricing (June 2026).
-    /// Inferred from deployment name — update from https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/ when stale.
-    /// </summary>
+    // Approximate cost based on Azure AI Foundry published pricing (June 2026).
+    // Inferred from deployment name — update from https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/ when stale.
     private static decimal CalculateCost(string deploymentName, FrameworkUsage usage)
     {
         var name = deploymentName.ToLowerInvariant();

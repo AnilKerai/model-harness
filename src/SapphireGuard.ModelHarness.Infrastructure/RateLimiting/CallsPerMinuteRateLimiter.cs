@@ -3,11 +3,13 @@ using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.RateLimiting;
 
-public sealed class CallsPerMinuteRateLimiter(int callsPerMinute) : IRateLimiter
+public sealed class CallsPerMinuteRateLimiter(int callsPerMinute, TimeProvider? timeProvider = null) : IRateLimiter
 {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
     public Task<RateLimitCheck> CheckAsync(AgentState state, CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _time.GetUtcNow();
         var windowStart = now - TimeSpan.FromMinutes(1);
 
         var recent = state.Trajectory

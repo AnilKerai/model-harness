@@ -9,19 +9,20 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 
 /// <summary>Writes one JSON line per event to stdout. Cheap, structured, greppable.</summary>
 [ExcludeFromCodeCoverage]
-public sealed class ConsoleTracer : ITracer
+public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = false };
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
     public void StartTrace(string taskId, string taskText) =>
-        Emit(new { evt = "trace_started", taskId, taskText, ts = DateTimeOffset.UtcNow });
+        Emit(new { evt = "trace_started", taskId, taskText, ts = _time.GetUtcNow() });
 
     public void LogModelCall(string taskId, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) =>
         Emit(new
         {
             evt = "model_call",
             taskId,
-            ts = DateTimeOffset.UtcNow,
+            ts = _time.GetUtcNow(),
             promptMessages = prompt.Count,
             tools = tools.Count,
             stopReason = response.StopReason.ToString(),
@@ -36,7 +37,7 @@ public sealed class ConsoleTracer : ITracer
         {
             evt = "tool_call",
             taskId,
-            ts = DateTimeOffset.UtcNow,
+            ts = _time.GetUtcNow(),
             tool = call.ToolName,
             callId = call.CallId,
             args = call.Arguments.GetRawText(),
@@ -50,7 +51,7 @@ public sealed class ConsoleTracer : ITracer
         {
             evt = "sensor_result",
             taskId,
-            ts = DateTimeOffset.UtcNow,
+            ts = _time.GetUtcNow(),
             hookPoint = hookPoint.ToString(),
             sensor = sensorName,
             intervene = result.IsIntervene,
@@ -58,7 +59,7 @@ public sealed class ConsoleTracer : ITracer
         });
 
     public void Complete(string taskId, AgentStatus status, string? failureReason) =>
-        Emit(new { evt = "trace_completed", taskId, ts = DateTimeOffset.UtcNow, status = status.ToString(), failureReason });
+        Emit(new { evt = "trace_completed", taskId, ts = _time.GetUtcNow(), status = status.ToString(), failureReason });
 
     private static void Emit(object payload) =>
         Console.WriteLine(JsonSerializer.Serialize(payload, Options));
