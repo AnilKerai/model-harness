@@ -42,10 +42,10 @@
   <text x="354" y="179" text-anchor="middle" font-family="monospace" font-size="9.5" font-weight="bold" fill="#1a2744">Infrastructure.Anthropic</text>
   <text x="354" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">ClaudeModelClient</text>
 
-  <!-- Infrastructure.Mcp -->
+  <!-- Infrastructure.AzureOpenAI -->
   <rect x="457" y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>
-  <text x="545" y="179" text-anchor="middle" font-family="monospace" font-size="10" font-weight="bold" fill="#1a2744">Infrastructure.Mcp</text>
-  <text x="545" y="196" text-anchor="middle" font-family="sans-serif" font-size="9.5" fill="#5c6b7a">McpTool · McpToolFactory</text>
+  <text x="545" y="179" text-anchor="middle" font-family="monospace" font-size="9" font-weight="bold" fill="#1a2744">Infrastructure.AzureOpenAI</text>
+  <text x="545" y="196" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#5c6b7a">AzureOpenAIModelClient</text>
 
   <!-- Infrastructure.Persistence -->
   <rect x="648" y="158" width="175" height="54" rx="8" fill="#eef2f7" stroke="#8eabc7" stroke-width="1.5"/>

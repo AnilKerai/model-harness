@@ -23,13 +23,14 @@ Add an API key first (per-sample; samples fall back to `FakeModelClient` when ab
 | Project | Role |
 |---|---|
 | `Framework` | Abstractions + core loop only. Only external dep: `Microsoft.Extensions.DependencyInjection.Abstractions` |
-| `Infrastructure` | Concrete implementations: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Sensors: `StuckDetector`, `ProgressCheckSensor`, `PiiRedactionSensor`, `ToolResultSanityCheckSensor`, `PromptInjectionSensor`, `TaintTrackingSensor`, `CriticSensor`, `MonologueLoopSensor`, `AlternatingToolLoopSensor`, `ToolErrorLoopSensor`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Skills (procedural memory): `FileSkillStore`, `SkillManageTool`, `SkillViewTool`. Depends on Framework only |
+| `Infrastructure` | Concrete implementations: `FakeModelClient`, `ConsoleTracer`, `OpenTelemetryTracer`, `CompositeTracer`, `InMemoryToolRegistry`. Sensors: `StuckDetector`, `ProgressCheckSensor`, `PiiRedactionSensor`, `ToolResultSanityCheckSensor`, `PromptInjectionSensor`, `TaintTrackingSensor`, `CriticSensor`, `MonologueLoopSensor`, `AlternatingToolLoopSensor`, `ToolErrorLoopSensor`. Harness tools: `AskHumanTool`, `ConsoleHumanChannel`. Skills (procedural memory): `FileSkillStore`, `SkillManageTool`, `SkillViewTool`. Multi-agent: `AgentFactory` (spawns sub-agents) + `AgentTool` (exposes a sub-agent as an `ITool`), wired via `AddAgentFactory` / `AddSubAgentAsTool`. Depends on Framework only |
 | `Infrastructure.Resilience` | `ResilientModelClientDecorator` — wraps any `IModelClient` with Polly retry + circuit breaker. Depends on Framework + Polly v8 |
 | `Infrastructure.Anthropic` | Anthropic SDK adapter (`ClaudeModelClient`). Depends on Framework only |
 | `Infrastructure.Persistence` | Checkpoint/resume (`FileCheckpointStore`, `StepJsonConverter`). Depends on Framework only |
 | `Infrastructure.Ollama` | Ollama adapter (`OllamaModelClient`) via OllamaSharp v5. Depends on Framework only |
 | `Infrastructure.AzureOpenAI` | Azure AI Foundry / Azure OpenAI Service adapter (`AzureOpenAIModelClient`) via `Azure.AI.OpenAI` v2. Supports API key and `DefaultAzureCredential`. Depends on Framework only |
 | `samples/*` | One console project per scenario — composition roots showing how to wire everything via DI |
+| `getting-started/` | Standalone minimal on-ramp (`GettingStarted.csproj` with its own `.slnx`) — the smallest end-to-end example, kept outside the main solution |
 
 Dependency direction is strict and unidirectional: samples/* → Infrastructure / Infrastructure.Anthropic / Infrastructure.Ollama / Infrastructure.AzureOpenAI / Infrastructure.Resilience → Framework.
 
