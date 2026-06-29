@@ -15,4 +15,8 @@
     <PackageReference Include="OllamaSharp" Version="5.4.25" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SapphireGuard.ModelHarness.Framework.Tests.Unit" />
+  </ItemGroup>
+
 </Project>

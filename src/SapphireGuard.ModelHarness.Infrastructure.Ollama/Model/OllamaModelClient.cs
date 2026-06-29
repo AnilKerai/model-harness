@@ -127,7 +127,7 @@ public sealed class OllamaModelClient : IModelClient
                     break;
 
                 case MessageRole.ToolUse:
-                    var (callName, callId, argsJson) = ParseToolUse(msg.Content);
+                    var (callName, callId, argsJson) = OllamaWireFormat.ParseToolUse(msg.Content);
                     var args = JsonSerializer.Deserialize<Dictionary<string, object?>>(argsJson)
                                ?? new Dictionary<string, object?>();
                     pendingCalls.Add(new OllamaToolCall
@@ -139,7 +139,7 @@ public sealed class OllamaModelClient : IModelClient
                     break;
 
                 case MessageRole.Tool:
-                    var (_, _, resultText) = ParseToolResult(msg.Content);
+                    var (_, _, resultText) = OllamaWireFormat.ParseToolResult(msg.Content);
                     // Match this result to the n-th pending call by position.
                     var matchedName = pendingResults.Count < pendingCallNames.Count
                         ? pendingCallNames[pendingResults.Count]
@@ -250,56 +250,4 @@ public sealed class OllamaModelClient : IModelClient
         Cost = 0m
     };
 
-    // ── Parsing helpers (mirror ClaudeModelClient's format) ──────────────────
-
-    // Format: "[tool_call name={name} id={callId}] {argsJson}"
-    private static (string Name, string CallId, string ArgsJson) ParseToolUse(string content)
-    {
-        string name = "", callId = "", argsJson = "{}";
-
-        if (!content.StartsWith("[tool_call ", StringComparison.Ordinal))
-            return (name, callId, argsJson);
-
-        var closeBracket = content.IndexOf(']');
-        if (closeBracket <= 0)
-            return (name, callId, argsJson);
-
-        var meta = content[1..closeBracket];
-        argsJson = content[(closeBracket + 1)..].TrimStart();
-
-        foreach (var part in meta.Split(' '))
-        {
-            if (part.StartsWith("name=", StringComparison.Ordinal)) name = part[5..];
-            if (part.StartsWith("id=", StringComparison.Ordinal)) callId = part[3..];
-        }
-
-        return (name, callId, argsJson);
-    }
-
-    // Format: "[tool_result id={callId} error={bool}] {resultText}"
-    private static (string CallId, bool IsError, string ResultText) ParseToolResult(string content)
-    {
-        string callId = "";
-        bool isError = false;
-        var resultText = content;
-
-        if (!content.StartsWith("[tool_result ", StringComparison.Ordinal))
-            return (callId, isError, resultText);
-
-        var closeBracket = content.IndexOf(']');
-        if (closeBracket <= 0)
-            return (callId, isError, resultText);
-
-        var meta = content[1..closeBracket];
-        resultText = content[(closeBracket + 1)..].TrimStart();
-
-        foreach (var part in meta.Split(' '))
-        {
-            if (part.StartsWith("id=", StringComparison.Ordinal)) callId = part[3..];
-            if (part.StartsWith("error=", StringComparison.Ordinal))
-                isError = string.Equals(part[6..], "true", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return (callId, isError, resultText);
-    }
 }
