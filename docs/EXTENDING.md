@@ -251,6 +251,17 @@ so they can review and authorise the action. Otherwise, return what
 you have found so far and explain why you could not complete the task.
 ```
 
+**Custom classification:**
+
+`WithTaintTracking` registers a built-in `ITrustPolicy` that classifies tools by static membership of the two lists above. When classification needs more than static lists — it depends on runtime config, a server allow-list, or per-tool metadata — implement `ITrustPolicy` yourself and register it instead of calling `WithTaintTracking`:
+
+```csharp
+builder.Services.Replace(ServiceDescriptor.Singleton<ITrustPolicy>(new MyTrustPolicy(...)));
+builder.WithSensor<TaintTrackingSensor>();
+```
+
+`TaintTrackingSensor` depends only on `ITrustPolicy`, so swapping the policy changes nothing else.
+
 ## Add a guide
 
 ```csharp

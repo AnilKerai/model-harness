@@ -3,7 +3,9 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Security;
 /// <summary>
 /// Classifies tools by their trust role. Used by <see cref="Sensors.TaintTrackingSensor"/>
 /// to determine which tool results taint the trajectory and which actions should be blocked
-/// while tainted content is present.
+/// while tainted content is present. This is an extension seam: implement it to supply a custom
+/// trust model — the <c>WithTaintTracking</c> helper registers the default list-based
+/// <see cref="TrustPolicy"/>.
 /// </summary>
 public interface ITrustPolicy
 {
