@@ -126,72 +126,70 @@ public sealed class HarnessLoop(
                     ct.ThrowIfCancellationRequested();
                     state = await ExecuteToolAsync(state, call, ct);
 
-                    var lastTool = state.Trajectory.OfType<ToolCallStep>().LastOrDefault();
-                    if (lastTool?.Result.IsPending == true)
-                    {
-                        var pending = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content);
-                        var suspended = state with
-                        {
-                            Status = AgentStatus.AwaitingHuman,
-                            PendingHumanInput = pending
-                        };
-                        await checkpointStore.SaveAsync(new Checkpoint
-                        {
-                            CheckpointId = Guid.NewGuid().ToString("n"),
-                            RunId = runId,
-                            CreatedAt = _time.GetUtcNow(),
-                            TurnNumber = turn,
-                            State = suspended
-                        }, ct);
-                        tracer.Complete(suspended.TaskId, AgentStatus.AwaitingHuman, failureReason: null);
-                        return new AgentOutcome
-                        {
-                            TaskId = suspended.TaskId,
-                            Status = AgentStatus.AwaitingHuman,
-                            FinalAnswer = null,
-                            FinalState = suspended,
-                            PendingHumanInput = pending
-                        };
-                    }
+                    var suspended = await TrySuspendForHumanAsync(state, runId, turn, ct);
+                    if (suspended is not null)
+                        return suspended;
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            tracer.Complete(state.TaskId, AgentStatus.Failed, "cancelled");
-            return new AgentOutcome
-            {
-                TaskId = state.TaskId,
-                Status = AgentStatus.Failed,
-                FinalAnswer = null,
-                FinalState = state with { Status = AgentStatus.Failed },
-                FailureReason = "cancelled"
-            };
+            return FailOutcome(state, failureReason: "cancelled", traceReason: "cancelled");
         }
         catch (BudgetExceededException ex)
         {
-            tracer.Complete(state.TaskId, AgentStatus.Failed, ex.Reason);
-            return new AgentOutcome
-            {
-                TaskId = state.TaskId,
-                Status = AgentStatus.Failed,
-                FinalAnswer = null,
-                FinalState = state with { Status = AgentStatus.Failed },
-                FailureReason = $"budget violated by collaborator: {ex.Reason}"
-            };
+            return FailOutcome(state, $"budget violated by collaborator: {ex.Reason}", ex.Reason);
         }
         catch (Exception ex)
         {
-            tracer.Complete(state.TaskId, AgentStatus.Failed, ex.Message);
-            return new AgentOutcome
-            {
-                TaskId = state.TaskId,
-                Status = AgentStatus.Failed,
-                FinalAnswer = null,
-                FinalState = state with { Status = AgentStatus.Failed },
-                FailureReason = ex.Message
-            };
+            return FailOutcome(state, ex.Message, ex.Message);
         }
+    }
+
+    private AgentOutcome FailOutcome(AgentState state, string failureReason, string traceReason)
+    {
+        tracer.Complete(state.TaskId, AgentStatus.Failed, traceReason);
+        return new AgentOutcome
+        {
+            TaskId = state.TaskId,
+            Status = AgentStatus.Failed,
+            FinalAnswer = null,
+            FinalState = state with { Status = AgentStatus.Failed },
+            FailureReason = failureReason
+        };
+    }
+
+    // Suspends the run for human input when the last tool returned a pending result; returns the
+    // AwaitingHuman outcome to bubble out of the loop, or null to keep going.
+    private async Task<AgentOutcome?> TrySuspendForHumanAsync(AgentState state, string runId, int turn, CancellationToken ct)
+    {
+        var lastTool = state.Trajectory.OfType<ToolCallStep>().LastOrDefault();
+        if (lastTool?.Result.IsPending != true)
+            return null;
+
+        var pending = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content);
+        var suspended = state with
+        {
+            Status = AgentStatus.AwaitingHuman,
+            PendingHumanInput = pending
+        };
+        await checkpointStore.SaveAsync(new Checkpoint
+        {
+            CheckpointId = Guid.NewGuid().ToString("n"),
+            RunId = runId,
+            CreatedAt = _time.GetUtcNow(),
+            TurnNumber = turn,
+            State = suspended
+        }, ct);
+        tracer.Complete(suspended.TaskId, AgentStatus.AwaitingHuman, failureReason: null);
+        return new AgentOutcome
+        {
+            TaskId = suspended.TaskId,
+            Status = AgentStatus.AwaitingHuman,
+            FinalAnswer = null,
+            FinalState = suspended,
+            PendingHumanInput = pending
+        };
     }
 
     private async Task<(AgentState State, bool Intervened, bool SuppressTools)> RunSensorsAsync(AgentState state, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
