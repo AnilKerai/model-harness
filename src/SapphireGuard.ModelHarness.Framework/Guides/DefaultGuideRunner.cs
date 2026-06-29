@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
@@ -10,7 +9,6 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// <see cref="ITrajectoryGuide"/> is always last so it can measure all prior contributions
 /// and compute an accurate token budget — enforced by type, not by DI registration order.
 /// </summary>
-[ExcludeFromCodeCoverage]
 public sealed class DefaultGuideRunner(IEnumerable<IGuide> guides, ITrajectoryGuide trajectoryGuide) : IGuideRunner
 {
     private readonly IReadOnlyList<IGuide> _guides = [.. guides];
