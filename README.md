@@ -585,13 +585,14 @@ services.AddStandardChatHarness(builder => builder
 
 await using var provider = services.BuildServiceProvider();
 var agent = provider.GetRequiredService<Agent>();
+var time = provider.GetRequiredService<TimeProvider>();
 
 AgentOutcome? outcome = null;
 while (Console.ReadLine() is { Length: > 0 } input)
 {
     var state = outcome is null
-        ? AgentState.NewTask(input, budget)            // first turn
-        : outcome.FinalState.WithUserMessage(input);   // continue the conversation
+        ? AgentState.NewTask(input, budget, time.GetUtcNow())          // first turn
+        : outcome.FinalState.WithUserMessage(input, time.GetUtcNow()); // continue the conversation
     outcome = await agent.RunAsync(state);
     Console.WriteLine(outcome.FinalAnswer);
 }

@@ -16,7 +16,7 @@ public sealed class TurnScopedBudgetEnforcerTests
     };
 
     private static AgentState EmptyState(StateBudget? budget = null) =>
-        AgentState.NewTask("test", budget ?? Generous);
+        AgentState.NewTask("test", budget ?? Generous, DateTimeOffset.UtcNow);
 
     private static ModelCallStep ModelStep(decimal cost = 0m, int inputTokens = 0, int outputTokens = 0) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow, [], new ModelResponse
@@ -34,8 +34,8 @@ public sealed class TurnScopedBudgetEnforcerTests
         var budget = Generous with { MaxTurns = 3 };
         var state = EmptyState(budget) // NewTask seeds the first UserMessageStep
             .AppendStep(ModelStep()).AppendStep(ModelStep())
-            .WithUserMessage("turn 2").AppendStep(ModelStep()).AppendStep(ModelStep())
-            .WithUserMessage("turn 3").AppendStep(ModelStep()).AppendStep(ModelStep());
+            .WithUserMessage("turn 2", DateTimeOffset.UtcNow).AppendStep(ModelStep()).AppendStep(ModelStep())
+            .WithUserMessage("turn 3", DateTimeOffset.UtcNow).AppendStep(ModelStep()).AppendStep(ModelStep());
 
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
 
@@ -63,7 +63,7 @@ public sealed class TurnScopedBudgetEnforcerTests
         // 0.9 spent last turn would exhaust cumulatively; per-turn it resets to 0.4.
         var state = EmptyState(budget)
             .AppendStep(ModelStep(cost: 0.9m))
-            .WithUserMessage("turn 2")
+            .WithUserMessage("turn 2", DateTimeOffset.UtcNow)
             .AppendStep(ModelStep(cost: 0.4m));
 
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
@@ -91,7 +91,7 @@ public sealed class TurnScopedBudgetEnforcerTests
         var budget = Generous with { MaxContextTokens = 100 };
         var state = EmptyState(budget)
             .AppendStep(ModelStep(inputTokens: 60, outputTokens: 30))
-            .WithUserMessage("turn 2")
+            .WithUserMessage("turn 2", DateTimeOffset.UtcNow)
             .AppendStep(ModelStep(inputTokens: 10, outputTokens: 10));
 
         var result = Sut.Check(state, DateTimeOffset.UtcNow);

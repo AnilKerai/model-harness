@@ -87,7 +87,7 @@ Defaults differ by entry point: `AddModelHarness` (bare, `Framework`) wires core
 
 The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContextBuilder`, and `HeadEvictionTrajectoryGuide` are wired identically by both.
 
-`TimeProvider` is registered as a singleton (`TimeProvider.System`) so all DI-resolved time-dependent components — `HarnessLoop`, the budget enforcers, the rate limiters, `ConsoleTracer`, `FileSkillStore` — read one injectable clock; override it with standard DI (`services.Replace(...)`) rather than a dedicated builder method. Each such type also takes an optional `TimeProvider? = null` ctor parameter that falls back to `TimeProvider.System`, so direct construction (and `AgentState.NewTask` / `WithUserMessage`) stays clock-free unless a caller supplies one.
+`TimeProvider` is registered as a singleton (`TimeProvider.System`) so every DI-resolved time-dependent component — `Agent`, `HarnessLoop`, the budget enforcers, the rate limiters, `ConsoleTracer`, `FileSkillStore` — reads one injectable clock; override it with standard DI (`services.Replace(...)`) rather than a dedicated builder method. Those components accept the clock by constructor injection (an optional `TimeProvider? = null` falling back to `TimeProvider.System`, except `Agent` which requires it), so direct construction still works without a container. `AgentState` is deliberately the exception: it stays a pure value type, so `NewTask` / `WithUserMessage` take a `DateTimeOffset timestamp` supplied by the caller (`Agent` passes `timeProvider.GetUtcNow()`) rather than depending on a clock at all.
 
 ## DI conventions
 

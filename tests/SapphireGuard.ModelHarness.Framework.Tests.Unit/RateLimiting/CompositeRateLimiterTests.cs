@@ -10,7 +10,7 @@ public sealed class CompositeRateLimiterTests
     {
         MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(1)
-    });
+    }, DateTimeOffset.UtcNow);
 
     private static IRateLimiter PassLimiter() =>
         new StubRateLimiter(RateLimitCheck.Pass);

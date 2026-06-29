@@ -12,7 +12,7 @@ public sealed class CallsPerMinuteRateLimiterTests
     {
         MaxTurns = 100, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(5)
-    });
+    }, DateTimeOffset.UtcNow);
 
     private static ModelCallStep RecentStep() => ModelStep(DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10));
     private static ModelCallStep OldStep() => ModelStep(DateTimeOffset.UtcNow - TimeSpan.FromMinutes(2));

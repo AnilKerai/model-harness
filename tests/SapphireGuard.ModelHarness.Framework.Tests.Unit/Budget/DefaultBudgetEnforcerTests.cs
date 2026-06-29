@@ -16,7 +16,7 @@ public sealed class DefaultBudgetEnforcerTests
     };
 
     private static AgentState EmptyState(StateBudget? budget = null) =>
-        AgentState.NewTask("test", budget ?? Generous);
+        AgentState.NewTask("test", budget ?? Generous, DateTimeOffset.UtcNow);
 
     private static ModelCallStep ModelStep(decimal cost = 0m, int inputTokens = 0, int outputTokens = 0) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow, [], new ModelResponse

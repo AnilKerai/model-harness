@@ -11,7 +11,7 @@ public sealed class DefaultSensorRunnerTests
     {
         MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(1)
-    });
+    }, DateTimeOffset.UtcNow);
 
     [Fact]
     public async Task RunAsync_NoSensors_ReturnsEmpty()

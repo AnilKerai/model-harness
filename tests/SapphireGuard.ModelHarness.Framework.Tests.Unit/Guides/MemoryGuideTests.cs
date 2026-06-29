@@ -24,13 +24,13 @@ public sealed class MemoryGuideTests
         {
             MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 1m,
             MaxWallClock = TimeSpan.FromMinutes(1)
-        });
+        }, DateTimeOffset.UtcNow);
 
     [Fact]
     public async Task QueriesLatestUserMessage_NotTheFirst()
     {
         var store = new RecordingMemoryStore();
-        var state = State().WithUserMessage("second message").WithUserMessage("third message");
+        var state = State().WithUserMessage("second message", DateTimeOffset.UtcNow).WithUserMessage("third message", DateTimeOffset.UtcNow);
         var draft = new ContextDraft();
 
         await new MemoryGuide(store).ContributeAsync(draft, state, CancellationToken.None);

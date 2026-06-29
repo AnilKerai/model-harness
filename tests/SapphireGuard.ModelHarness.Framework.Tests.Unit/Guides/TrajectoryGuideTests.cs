@@ -19,7 +19,7 @@ public sealed class HeadEvictionTrajectoryGuideTests
             MaxContextTokens = 100_000,
             MaxCost = 10m,
             MaxWallClock = TimeSpan.FromMinutes(1)
-        });
+        }, DateTimeOffset.UtcNow);
 
     private static ModelCallStep ModelStep(string text, StopReason stopReason = StopReason.EndTurn) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,

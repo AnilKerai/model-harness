@@ -40,7 +40,7 @@ public sealed class HarnessLoopTests
             MaxContextTokens = 100_000,
             MaxCost = 10m,
             MaxWallClock = TimeSpan.FromMinutes(1)
-        });
+        }, DateTimeOffset.UtcNow);
 
     private static ModelResponse EndTurnResponse(string text = "final answer") => new()
     {
@@ -396,7 +396,7 @@ public sealed class HarnessLoopTests
         Assert.Equal(AgentStatus.Done, first.Status);
 
         var second = await harness.RunAsync(
-            first.FinalState.WithUserMessage("a follow-up"), CancellationToken.None);
+            first.FinalState.WithUserMessage("a follow-up", DateTimeOffset.UtcNow), CancellationToken.None);
 
         Assert.Equal(AgentStatus.Done, second.Status);
         Assert.Equal("second answer", second.FinalAnswer);

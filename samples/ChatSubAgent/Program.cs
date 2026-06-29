@@ -68,6 +68,7 @@ services.AddStandardChatHarness(builder => builder
 
 await using var provider = services.BuildServiceProvider();
 var agent = provider.GetRequiredService<Agent>();
+var timeProvider = provider.GetRequiredService<TimeProvider>();
 
 var budget = new Budget
 {
@@ -87,9 +88,10 @@ while (true)
     if (string.IsNullOrWhiteSpace(input) || input.Trim() is "exit" or "quit")
         break;
 
+    var now = timeProvider.GetUtcNow();
     var state = outcome is null
-        ? AgentState.NewTask(input, budget)
-        : outcome.FinalState.WithUserMessage(input);
+        ? AgentState.NewTask(input, budget, now)
+        : outcome.FinalState.WithUserMessage(input, now);
 
     outcome = await agent.RunAsync(state);
 

@@ -11,7 +11,7 @@ public sealed class ProgressCheckSensorTests
     {
         MaxTurns = 100, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(5)
-    });
+    }, DateTimeOffset.UtcNow);
 
     private static ModelCallStep ModelStep() =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,

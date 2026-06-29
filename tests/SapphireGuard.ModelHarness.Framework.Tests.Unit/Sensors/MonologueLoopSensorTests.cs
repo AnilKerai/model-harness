@@ -13,7 +13,7 @@ public sealed class MonologueLoopSensorTests
     {
         MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(1)
-    });
+    }, DateTimeOffset.UtcNow);
 
     private static ModelCallStep ModelStep(string text, bool withToolCall = false) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,

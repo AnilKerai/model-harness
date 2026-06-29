@@ -54,12 +54,13 @@ Drive the conversation by carrying state forward with `WithUserMessage` — it r
 run and appends the next user turn, so the model sees the whole history:
 
 ```csharp
+var time = provider.GetRequiredService<TimeProvider>();
 AgentOutcome? outcome = null;
 while (Console.ReadLine() is { Length: > 0 } input)
 {
     var state = outcome is null
-        ? AgentState.NewTask(input, budget)            // first turn seeds the conversation
-        : outcome.FinalState.WithUserMessage(input);   // subsequent turns continue it
+        ? AgentState.NewTask(input, budget, time.GetUtcNow())          // first turn seeds the conversation
+        : outcome.FinalState.WithUserMessage(input, time.GetUtcNow()); // subsequent turns continue it
     outcome = await agent.RunAsync(state);
     Console.WriteLine(outcome.FinalAnswer);
 }

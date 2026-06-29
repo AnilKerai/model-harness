@@ -14,7 +14,7 @@ public sealed class ToolCatalogueGuideTests
         {
             MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 1m,
             MaxWallClock = TimeSpan.FromMinutes(1)
-        });
+        }, DateTimeOffset.UtcNow);
 
     [Fact]
     public async Task RendersAvailableToolsIntoSystemSection()

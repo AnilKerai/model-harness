@@ -13,7 +13,7 @@ public sealed class StuckDetectorTests
     {
         MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(1)
-    });
+    }, DateTimeOffset.UtcNow);
 
     private static ToolCallStep ToolStep(string name, string argsJson = "{}") =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,

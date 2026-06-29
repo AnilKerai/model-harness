@@ -30,7 +30,7 @@ public sealed class HarnessLoopHitlTests
             MaxContextTokens = 100_000,
             MaxCost = 10m,
             MaxWallClock = TimeSpan.FromMinutes(1)
-        });
+        }, DateTimeOffset.UtcNow);
 
     private static ModelResponse EndTurnResponse(string text) => new()
     {
