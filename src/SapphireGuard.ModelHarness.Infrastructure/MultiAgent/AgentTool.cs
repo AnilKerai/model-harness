@@ -32,7 +32,7 @@ public sealed class AgentTool(string agentName, AgentFactory factory, Budget? bu
         var task = call.Arguments.GetProperty("task").GetString()
             ?? throw new InvalidOperationException("'task' argument is required.");
 
-        var outcome = await factory.GetAgent(agentName).RunAsync(task, budget, ct);
+        var outcome = await factory.GetAgent(agentName).RunAsync(task, budget, ct: ct);
 
         var delegatedCost = 0m;
         var totalInput = 0;

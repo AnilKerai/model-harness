@@ -47,11 +47,17 @@ public sealed record AgentState
     /// </summary>
     public PendingHumanInput? PendingHumanInput { get; init; }
 
-    /// <summary>Creates an initial state for a new task with a generated task ID and <see cref="AgentStatus.Running"/> status.</summary>
-    public static AgentState NewTask(string taskText, Budget budget, DateTimeOffset timestamp, IReadOnlyDictionary<string, string>? metadata = null) =>
+    /// <summary>
+    /// Creates an initial state for a new task with <see cref="AgentStatus.Running"/> status. Pass
+    /// <paramref name="taskId"/> to correlate the run with an external system (job queue, ticket, trace);
+    /// when omitted a unique ID is generated. The ID becomes the checkpoint and tracing key, so a caller
+    /// that supplies one owns its uniqueness, and storage adapters may constrain its format
+    /// (e.g. <c>FileCheckpointStore</c> requires a single path segment).
+    /// </summary>
+    public static AgentState NewTask(string taskText, Budget budget, DateTimeOffset timestamp, IReadOnlyDictionary<string, string>? metadata = null, string? taskId = null) =>
         new()
         {
-            TaskId = Guid.NewGuid().ToString("n"),
+            TaskId = taskId ?? Guid.NewGuid().ToString("n"),
             TaskText = taskText,
             Budget = budget,
             Status = AgentStatus.Running,

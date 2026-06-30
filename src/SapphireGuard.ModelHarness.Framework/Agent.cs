@@ -16,8 +16,8 @@ public sealed class Agent(HarnessLoop loop, TimeProvider timeProvider)
         MaxWallClock = TimeSpan.FromMinutes(2)
     };
 
-    public Task<AgentOutcome> RunAsync(string taskText, AgentBudget? budget = null, CancellationToken ct = default) =>
-        loop.RunAsync(AgentState.NewTask(taskText, budget ?? DefaultBudget, timeProvider.GetUtcNow()), ct);
+    public Task<AgentOutcome> RunAsync(string taskText, AgentBudget? budget = null, string? taskId = null, CancellationToken ct = default) =>
+        loop.RunAsync(AgentState.NewTask(taskText, budget ?? DefaultBudget, timeProvider.GetUtcNow(), taskId: taskId), ct);
 
     public Task<AgentOutcome> RunAsync(AgentState state, CancellationToken ct = default) =>
         loop.RunAsync(state, ct);

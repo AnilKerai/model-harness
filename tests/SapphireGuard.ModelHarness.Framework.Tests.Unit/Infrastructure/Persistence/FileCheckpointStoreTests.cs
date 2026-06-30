@@ -95,4 +95,43 @@ public sealed class FileCheckpointStoreTests : IDisposable
 
         Assert.Null(await store.LoadLatestAsync("no-such-task"));
     }
+
+    [Fact]
+    public async Task Save_ThenLoadLatest_HonoursCallerSuppliedTaskId()
+    {
+        var store = new FileCheckpointStore(_dir);
+        var state = AgentState.NewTask("checkpoint me", Budget, T0, taskId: "job-12345");
+
+        await store.SaveAsync(At(state, "c1", T0, turn: 0));
+        var loaded = await store.LoadLatestAsync("job-12345");
+
+        Assert.NotNull(loaded);
+        Assert.Equal("job-12345", loaded!.State.TaskId);
+    }
+
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("nested/segment")]
+    [InlineData("..")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Save_RejectsUnsafeTaskId(string taskId)
+    {
+        var store = new FileCheckpointStore(_dir);
+        var state = AgentState.NewTask("x", Budget, T0, taskId: taskId);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveAsync(At(state, "c1", T0, turn: 0)));
+    }
+
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("nested/segment")]
+    [InlineData("..")]
+    [InlineData("")]
+    public async Task LoadLatest_RejectsUnsafeTaskId(string taskId)
+    {
+        var store = new FileCheckpointStore(_dir);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.LoadLatestAsync(taskId));
+    }
 }

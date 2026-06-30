@@ -337,6 +337,14 @@ var outcome = await provider.GetRequiredService<Agent>()
     .RunAsync(latest!.State with { Status = AgentStatus.Running });
 ```
 
+`LoadLatestAsync` needs the `taskId`. By default `NewTask` generates one, so you must capture
+and persist it yourself to resume later. To make the resume key something you already know,
+supply your own — `agent.RunAsync(task, taskId: jobId)` or `AgentState.NewTask(task, budget, now,
+taskId: jobId)` — so a job-queue ID, ticket number, or trace ID *is* the checkpoint key and no
+ID-mapping table is needed. A caller-supplied ID owns its own uniqueness, and because
+`FileCheckpointStore` uses it as a directory name it must be a single path segment (IDs containing
+separators or `..` are rejected). The same ID also flows to the tracer and to tools via `ToolContext`.
+
 Implement `ICheckpointStore` to target blob storage, a database, or any other backend.
 
 ### HITL without durability
