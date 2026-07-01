@@ -61,6 +61,23 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
     public void Complete(string taskId, AgentStatus status, string? failureReason) =>
         Emit(new { evt = "trace_completed", taskId, ts = _time.GetUtcNow(), status = status.ToString(), failureReason });
 
+    public void LogGuideContribution(string taskId, string guideName, GuideContribution contribution) =>
+        Emit(new
+        {
+            evt = "guide_contribution",
+            taskId,
+            ts = _time.GetUtcNow(),
+            guide = guideName,
+            toolsBefore = contribution.ToolsBefore,
+            toolsAfter = contribution.ToolsAfter,
+            toolsRemoved = contribution.ToolsRemoved,
+            toolsAdded = contribution.ToolsAdded,
+            memorySnippetsAdded = contribution.MemorySnippetsAdded,
+            systemSectionsAdded = contribution.SystemSectionsAdded,
+            trajectoryMessagesAdded = contribution.TrajectoryMessagesAdded,
+            systemPromptCharDelta = contribution.SystemPromptCharDelta
+        });
+
     private static void Emit(object payload) =>
         Console.WriteLine(JsonSerializer.Serialize(payload, Options));
 

@@ -24,4 +24,11 @@ public interface ITracer
 
     /// <summary>Called once when the run finishes with the terminal status and, on failure, a reason.</summary>
     void Complete(string taskId, AgentStatus status, string? failureReason);
+
+    /// <summary>
+    /// Called after each guide contributes to the context draft, with the structural delta
+    /// it produced. Default no-op so existing <see cref="ITracer"/> implementations compile
+    /// unchanged — override it to observe how the guide pipeline shapes each turn's context.
+    /// </summary>
+    void LogGuideContribution(string taskId, string guideName, GuideContribution contribution) { }
 }

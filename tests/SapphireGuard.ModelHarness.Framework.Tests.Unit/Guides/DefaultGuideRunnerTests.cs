@@ -1,5 +1,9 @@
+using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Guides;
+using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Framework.Tracing;
 using Xunit;
 using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
 
@@ -61,4 +65,73 @@ public sealed class DefaultGuideRunnerTests
 
         Assert.Equal(new[] { "trajectory" }, log);
     }
+
+    [Fact]
+    public async Task EmitsOneGuideContribution_PerSupportingGuideAndTrajectory()
+    {
+        var tracer = new RecordingTracer();
+        var runner = new DefaultGuideRunner(
+            [new RecordingGuide("a", []), new RecordingGuide("b", [])],
+            new RecordingTrajectoryGuide([]),
+            tracer);
+
+        await runner.RunAsync(State(), [], CancellationToken.None);
+
+        Assert.Equal(new[] { "a", "b", "trajectory" }, tracer.Contributions.Select(c => c.Guide));
+    }
+
+    [Fact]
+    public async Task GuideContribution_CapturesToolRemovalAndSnippetDelta()
+    {
+        var tracer = new RecordingTracer();
+        var runner = new DefaultGuideRunner(
+            [new DropCalcAndRecallGuide()],
+            new RecordingTrajectoryGuide([]),
+            tracer);
+
+        await runner.RunAsync(
+            State(),
+            [new StubTool("calc", "maths"), new StubTool("search", "web")],
+            CancellationToken.None);
+
+        var contribution = tracer.Contributions.Single(c => c.Guide == "drop-calc").Contribution;
+        Assert.Equal(2, contribution.ToolsBefore);
+        Assert.Equal(1, contribution.ToolsAfter);
+        Assert.Equal(["calc"], contribution.ToolsRemoved);
+        Assert.Empty(contribution.ToolsAdded);
+        Assert.Equal(1, contribution.MemorySnippetsAdded);
+    }
+
+    private sealed class DropCalcAndRecallGuide : IGuide
+    {
+        public string Name => "drop-calc";
+        public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+        {
+            draft.AvailableTools = draft.AvailableTools.Where(t => t.Name != "calc").ToList();
+            draft.MemorySnippets.Add("recalled fact");
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingTracer : ITracer
+    {
+        public List<(string Guide, GuideContribution Contribution)> Contributions { get; } = [];
+        public void StartTrace(string taskId, string taskText) { }
+        public void LogModelCall(string taskId, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) { }
+        public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration) { }
+        public void LogSensorResult(string taskId, HookPoint hookPoint, string sensorName, SensorResult result) { }
+        public void Complete(string taskId, AgentStatus status, string? failureReason) { }
+        public void LogGuideContribution(string taskId, string guideName, GuideContribution contribution)
+            => Contributions.Add((guideName, contribution));
+    }
+}
+
+file sealed class StubTool(string name, string description) : ITool
+{
+    public string Name => name;
+    public string Description => description;
+    public JsonElement InputSchema => JsonDocument.Parse("{}").RootElement;
+
+    public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
+        => Task.FromResult(new ToolResult(call.CallId, "ok"));
 }

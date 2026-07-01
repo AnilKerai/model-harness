@@ -52,6 +52,7 @@ where the implementation would live.
 - [x] `ConsoleTracer` — streams JSON trace events to stdout
 - [x] `OpenTelemetryTracer` — emits spans via `ActivitySource` and metrics via `Meter`; no OTel SDK dependency
 - [x] `CompositeTracer` — fans out to multiple `ITracer` instances simultaneously
+- [x] Guide-pipeline observability — `DefaultGuideRunner` emits a `GuideContribution` per guide via `ITracer.LogGuideContribution` (a default-interface no-op, so existing tracers are unaffected), computed as a generic before/after diff of the `ContextDraft`; surfaces the context-shaping deltas (tools filtered, memory surfaced, sections/messages added) that never reach the final prompt
 - [x] `ClaudeModelClient` — Anthropic SDK adapter; handles message alternation, tool result inlining, cost tracking
 - [x] `OllamaModelClient` — OllamaSharp v5 adapter; stateful tool-call grouping pass; cost is always zero (local inference)
 - [x] `AzureOpenAIModelClient` — Azure AI Foundry / Azure OpenAI Service adapter (`Infrastructure.AzureOpenAI`); supports API key and `DefaultAzureCredential` (managed identity); `WithAzureOpenAIModel` DI extension; `samples/AzureOpenAI` demo

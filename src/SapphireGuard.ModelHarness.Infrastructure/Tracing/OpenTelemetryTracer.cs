@@ -101,6 +101,24 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             new TagList { { "sensor.name", sensorName }, { "hook.point", hookPoint.ToString() }, { "task.id", taskId } });
     }
 
+    public void LogGuideContribution(string taskId, string guideName, GuideContribution contribution)
+    {
+        if (!_activities.TryGetValue(taskId, out var activity)) return;
+
+        activity?.AddEvent(new ActivityEvent("guide_contribution", tags: new ActivityTagsCollection
+        {
+            ["guide.name"] = guideName,
+            ["guide.tools.before"] = contribution.ToolsBefore,
+            ["guide.tools.after"] = contribution.ToolsAfter,
+            ["guide.tools.removed"] = string.Join(",", contribution.ToolsRemoved),
+            ["guide.tools.added"] = string.Join(",", contribution.ToolsAdded),
+            ["guide.memory.added"] = contribution.MemorySnippetsAdded,
+            ["guide.sections.added"] = contribution.SystemSectionsAdded,
+            ["guide.trajectory.added"] = contribution.TrajectoryMessagesAdded,
+            ["guide.prompt.char_delta"] = contribution.SystemPromptCharDelta,
+        }));
+    }
+
     public void Complete(string taskId, AgentStatus status, string? failureReason)
     {
         if (!_activities.TryRemove(taskId, out var activity) || activity is null) return;

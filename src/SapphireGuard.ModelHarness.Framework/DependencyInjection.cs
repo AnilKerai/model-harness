@@ -113,7 +113,8 @@ public static class DependencyInjection
         services.TryAddSingleton<IGuideRunner>(sp =>
             new DefaultGuideRunner(
                 sp.GetRequiredService<IEnumerable<IGuide>>(),
-                sp.GetRequiredService<ITrajectoryGuide>()));
+                sp.GetRequiredService<ITrajectoryGuide>(),
+                sp.GetRequiredService<ITracer>()));
         return services;
     }
 

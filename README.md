@@ -455,7 +455,7 @@ The framework manages these in every agent. Defaults work out of the box — rep
 | Tool registry | `IToolRegistry` | `InMemoryToolRegistry` | Holds all registered tools and dispatches tool calls to the right implementation. Replace for dynamic or gateway-backed tool sets (e.g. MCP). |
 | Skills & learning storage | `ISkillStore` | `NullSkillStore` (no-op until opted in) | Persists `SKILL.md` files the agent reads (skills) or writes (learning). No-op until opted in via `WithSkills` or `WithLearning`. |
 | Human-in-the-loop notification | `IHumanNotifier` | none | Delivers `ask_human` questions to a human via any channel. The loop suspends with `AwaitingHuman` until resumed. |
-| Tracing & metrics | `ITracer` | `NullTracer`; use `WithConsoleTracer()` / `WithOtelTracer()` | Receives loop events for logging, spans, and metrics. Multiple tracers are composed automatically. |
+| Tracing & metrics | `ITracer` | `NullTracer`; use `WithConsoleTracer()` / `WithOtelTracer()` | Receives loop events for logging, spans, and metrics — task lifecycle, model calls, tool calls, sensor interventions, and per-guide context-shaping deltas. Multiple tracers are composed automatically. |
 | Checkpoint / resume | `ICheckpointStore` | `NullCheckpointStore` (no persistence) | Saves `AgentState` at the start of each turn. Load the latest checkpoint to resume after a crash or restart. |
 
 ### User concerns

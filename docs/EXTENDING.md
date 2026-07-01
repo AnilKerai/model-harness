@@ -310,6 +310,18 @@ builder
 Implement `ITracer` and register via `WithTracer<T>()` or `WithTracer(factory)` for a
 custom backend.
 
+A tracer receives an event for each loop milestone: task start/completion, every model call
+(full prompt + tools + response), every tool call (call, result, duration), and every sensor
+intervention. It also receives a `GuideContribution` after each guide runs — the structural
+delta that guide made to the context draft: tools filtered out or added, memory snippets
+surfaced, trajectory messages rendered, system-prompt sections added, and the system-prompt
+character delta. Because the final prompt only shows what *survived* the pipeline, these
+per-guide deltas are what let you reconstruct the decisions that shaped it — which tools a
+selector dropped, or whether memory retrieval returned anything at all — which is often where
+an undesirable result traces back to. `LogGuideContribution` is a default-interface no-op, so
+existing custom `ITracer` implementations keep compiling unchanged; override it to consume the
+deltas.
+
 ## Checkpoint / resume and human-in-the-loop
 
 These two features share the same underlying mechanism — `ICheckpointStore` — but serve
