@@ -44,12 +44,13 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         _activities[taskId] = activity;
     }
 
-    public void LogModelCall(string taskId, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response)
+    public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response)
     {
         if (_activities.TryGetValue(taskId, out var activity))
         {
             activity?.AddEvent(new ActivityEvent("model_call", tags: new ActivityTagsCollection
             {
+                ["turn"] = turn,
                 ["prompt.messages"] = prompt.Count,
                 ["tools.count"] = tools.Count,
                 ["stop.reason"] = response.StopReason.ToString(),
@@ -66,12 +67,13 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         Cost.Add((double)response.Cost, tags);
     }
 
-    public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration)
+    public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration)
     {
         if (_activities.TryGetValue(taskId, out var activity))
         {
             activity?.AddEvent(new ActivityEvent("tool_call", tags: new ActivityTagsCollection
             {
+                ["turn"] = turn,
                 ["tool.name"] = call.ToolName,
                 ["tool.call.id"] = call.CallId,
                 ["tool.is_error"] = result.IsError,
@@ -83,7 +85,7 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             new TagList { { "tool.name", call.ToolName }, { "task.id", taskId } });
     }
 
-    public void LogSensorResult(string taskId, HookPoint hookPoint, string sensorName, SensorResult result)
+    public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result)
     {
         if (!result.IsIntervene) return;
 
@@ -91,6 +93,7 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         {
             activity?.AddEvent(new ActivityEvent("sensor_intervention", tags: new ActivityTagsCollection
             {
+                ["turn"] = turn,
                 ["sensor.name"] = sensorName,
                 ["hook.point"] = hookPoint.ToString(),
                 ["sensor.reason"] = result.Reason ?? string.Empty,
@@ -101,12 +104,13 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             new TagList { { "sensor.name", sensorName }, { "hook.point", hookPoint.ToString() }, { "task.id", taskId } });
     }
 
-    public void LogGuideContribution(string taskId, string guideName, GuideContribution contribution)
+    public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)
     {
         if (!_activities.TryGetValue(taskId, out var activity)) return;
 
         activity?.AddEvent(new ActivityEvent("guide_contribution", tags: new ActivityTagsCollection
         {
+            ["turn"] = turn,
             ["guide.name"] = guideName,
             ["guide.tools.before"] = contribution.ToolsBefore,
             ["guide.tools.after"] = contribution.ToolsAfter,

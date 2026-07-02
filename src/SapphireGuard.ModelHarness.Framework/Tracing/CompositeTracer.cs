@@ -13,19 +13,19 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
         foreach (var t in tracers) t.StartTrace(taskId, taskText);
     }
 
-    public void LogModelCall(string taskId, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response)
+    public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response)
     {
-        foreach (var t in tracers) t.LogModelCall(taskId, prompt, tools, response);
+        foreach (var t in tracers) t.LogModelCall(taskId, turn, prompt, tools, response);
     }
 
-    public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration)
+    public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration)
     {
-        foreach (var t in tracers) t.LogToolCall(taskId, call, result, duration);
+        foreach (var t in tracers) t.LogToolCall(taskId, turn, call, result, duration);
     }
 
-    public void LogSensorResult(string taskId, HookPoint hookPoint, string sensorName, SensorResult result)
+    public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result)
     {
-        foreach (var t in tracers) t.LogSensorResult(taskId, hookPoint, sensorName, result);
+        foreach (var t in tracers) t.LogSensorResult(taskId, turn, hookPoint, sensorName, result);
     }
 
     public void Complete(string taskId, AgentStatus status, string? failureReason)
@@ -33,8 +33,8 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
         foreach (var t in tracers) t.Complete(taskId, status, failureReason);
     }
 
-    public void LogGuideContribution(string taskId, string guideName, GuideContribution contribution)
+    public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)
     {
-        foreach (var t in tracers) t.LogGuideContribution(taskId, guideName, contribution);
+        foreach (var t in tracers) t.LogGuideContribution(taskId, turn, guideName, contribution);
     }
 }

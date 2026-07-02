@@ -102,6 +102,32 @@ public sealed class DefaultGuideRunnerTests
         Assert.Equal(1, contribution.MemorySnippetsAdded);
     }
 
+    [Fact]
+    public async Task GuideContributions_TaggedWithTurnIndex_FromPriorModelCallCount()
+    {
+        var tracer = new RecordingTracer();
+        var runner = new DefaultGuideRunner(
+            [new RecordingGuide("a", [])],
+            new RecordingTrajectoryGuide([]),
+            tracer);
+
+        // Two prior model calls already in the trajectory → the pipeline is shaping turn index 2.
+        var state = State().AppendStep(ModelStep()).AppendStep(ModelStep());
+
+        await runner.RunAsync(state, [], CancellationToken.None);
+
+        Assert.NotEmpty(tracer.Contributions);
+        Assert.All(tracer.Contributions, c => Assert.Equal(2, c.Turn));
+    }
+
+    private static ModelCallStep ModelStep() => new(
+        Guid.NewGuid(),
+        new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        Prompt: [],
+        Response: new ModelResponse { Text = "ok", ToolCalls = [], StopReason = StopReason.EndTurn, Usage = Usage.Zero, Cost = 0m },
+        Usage: Usage.Zero,
+        Cost: 0m);
+
     private sealed class DropCalcAndRecallGuide : IGuide
     {
         public string Name => "drop-calc";
@@ -115,14 +141,14 @@ public sealed class DefaultGuideRunnerTests
 
     private sealed class RecordingTracer : ITracer
     {
-        public List<(string Guide, GuideContribution Contribution)> Contributions { get; } = [];
+        public List<(string Guide, int Turn, GuideContribution Contribution)> Contributions { get; } = [];
         public void StartTrace(string taskId, string taskText) { }
-        public void LogModelCall(string taskId, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) { }
-        public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration) { }
-        public void LogSensorResult(string taskId, HookPoint hookPoint, string sensorName, SensorResult result) { }
+        public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) { }
+        public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration) { }
+        public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) { }
         public void Complete(string taskId, AgentStatus status, string? failureReason) { }
-        public void LogGuideContribution(string taskId, string guideName, GuideContribution contribution)
-            => Contributions.Add((guideName, contribution));
+        public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)
+            => Contributions.Add((guideName, turn, contribution));
     }
 }
 

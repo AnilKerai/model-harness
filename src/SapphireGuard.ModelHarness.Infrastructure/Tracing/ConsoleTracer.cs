@@ -17,11 +17,12 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
     public void StartTrace(string taskId, string taskText) =>
         Emit(new { evt = "trace_started", taskId, taskText, ts = _time.GetUtcNow() });
 
-    public void LogModelCall(string taskId, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) =>
+    public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) =>
         Emit(new
         {
             evt = "model_call",
             taskId,
+            turn,
             ts = _time.GetUtcNow(),
             promptMessages = prompt.Count,
             tools = tools.Count,
@@ -32,11 +33,12 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
             cost = response.Cost
         });
 
-    public void LogToolCall(string taskId, ToolCall call, ToolResult result, TimeSpan duration) =>
+    public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration) =>
         Emit(new
         {
             evt = "tool_call",
             taskId,
+            turn,
             ts = _time.GetUtcNow(),
             tool = call.ToolName,
             callId = call.CallId,
@@ -46,11 +48,12 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
             durationMs = duration.TotalMilliseconds
         });
 
-    public void LogSensorResult(string taskId, HookPoint hookPoint, string sensorName, SensorResult result) =>
+    public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) =>
         Emit(new
         {
             evt = "sensor_result",
             taskId,
+            turn,
             ts = _time.GetUtcNow(),
             hookPoint = hookPoint.ToString(),
             sensor = sensorName,
@@ -61,11 +64,12 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
     public void Complete(string taskId, AgentStatus status, string? failureReason) =>
         Emit(new { evt = "trace_completed", taskId, ts = _time.GetUtcNow(), status = status.ToString(), failureReason });
 
-    public void LogGuideContribution(string taskId, string guideName, GuideContribution contribution) =>
+    public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution) =>
         Emit(new
         {
             evt = "guide_contribution",
             taskId,
+            turn,
             ts = _time.GetUtcNow(),
             guide = guideName,
             toolsBefore = contribution.ToolsBefore,

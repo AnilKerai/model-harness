@@ -26,18 +26,23 @@ public sealed class DefaultGuideRunner(
     {
         var draft = new ContextDraft { AvailableTools = [.. allTools] };
 
+        // The model call this pipeline feeds isn't appended until after we run, so the count of
+        // prior model calls is the zero-based index of the current turn — matching the loop's
+        // own counter without threading it through IContextBuilder.
+        var turn = state.Trajectory.OfType<ModelCallStep>().Count();
+
         foreach (var guide in _guides)
         {
             ct.ThrowIfCancellationRequested();
             var before = Snapshot(draft);
             await guide.ContributeAsync(draft, state, ct);
-            _tracer.LogGuideContribution(state.TaskId, guide.Name, Diff(before, draft));
+            _tracer.LogGuideContribution(state.TaskId, turn, guide.Name, Diff(before, draft));
         }
 
         ct.ThrowIfCancellationRequested();
         var trajectoryBefore = Snapshot(draft);
         await trajectoryGuide.ContributeAsync(draft, state, ct);
-        _tracer.LogGuideContribution(state.TaskId, trajectoryGuide.Name, Diff(trajectoryBefore, draft));
+        _tracer.LogGuideContribution(state.TaskId, turn, trajectoryGuide.Name, Diff(trajectoryBefore, draft));
 
         return draft;
     }

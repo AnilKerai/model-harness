@@ -318,9 +318,16 @@ surfaced, trajectory messages rendered, system-prompt sections added, and the sy
 character delta. Because the final prompt only shows what *survived* the pipeline, these
 per-guide deltas are what let you reconstruct the decisions that shaped it — which tools a
 selector dropped, or whether memory retrieval returned anything at all — which is often where
-an undesirable result traces back to. `LogGuideContribution` is a default-interface no-op, so
-existing custom `ITracer` implementations keep compiling unchanged; override it to consume the
-deltas.
+an undesirable result traces back to.
+
+Every per-turn event — `LogModelCall`, `LogToolCall`, `LogSensorResult`, `LogGuideContribution` —
+takes a zero-based `turn` index as its second argument so a backend can group everything that
+happened on one turn. The loop threads its own turn counter into the model/tool/sensor events;
+the guide runner derives the same index from the trajectory (count of prior model calls), so no
+extra plumbing is needed to correlate guide deltas with the call they shaped. `LogGuideContribution`
+remains a default-interface no-op, so a custom `ITracer` that never overrode it still compiles;
+but the `turn` parameter added to the three non-default methods is a **breaking change** — update
+their signatures when you upgrade. Override `LogGuideContribution` to consume the guide deltas.
 
 ## Checkpoint / resume and human-in-the-loop
 
