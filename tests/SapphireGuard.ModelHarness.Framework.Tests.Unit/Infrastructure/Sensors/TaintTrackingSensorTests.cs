@@ -18,7 +18,7 @@ public sealed class TaintTrackingSensorTests
 
     private static AgentState EmptyState() => AgentState.NewTask("t", new Framework.State.Budget
     {
-        MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m,
+        MaxTurns = 10, MaxTotalTokens = 100_000, MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(1)
     }, DateTimeOffset.UtcNow);
 

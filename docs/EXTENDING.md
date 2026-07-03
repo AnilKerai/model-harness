@@ -275,7 +275,7 @@ See the [guide pattern](../README.md#the-guide-pattern--shaping-perception) for 
 The default `HeadEvictionTrajectoryGuide` evicts the oldest steps when the trajectory exceeds the context budget, replacing them with a placeholder via `ICompactionStrategy`. Swap it for a different eviction or rendering strategy via `builder.WithTrajectoryGuide<T>()`:
 
 ```csharp
-public sealed class MyTrajectoryGuide(ICompactionStrategy compactionStrategy) : ITrajectoryGuide
+public sealed class MyTrajectoryGuide(ICompactionStrategy compactionStrategy, CompactionOptions options) : ITrajectoryGuide
 {
     public string Name => "my-trajectory";
 
@@ -283,7 +283,7 @@ public sealed class MyTrajectoryGuide(ICompactionStrategy compactionStrategy) : 
     {
         // Write rendered steps into draft.TrajectoryMessages however you like.
         // draft.TrajectoryMessages is empty when this is called — write everything here.
-        // Use state.Budget.MaxContextTokens and state.Trajectory for inputs.
+        // Use options.WindowTokens (the per-turn context window) and state.Trajectory for inputs.
     }
 }
 ```
@@ -587,18 +587,22 @@ argument to override the default policy.
 By default, when the trajectory is trimmed to fit the context window, `HeadEvictionTrajectoryGuide` inserts a bare omission note (`[N earlier step(s) omitted — context window limit]`) and persists nothing — a stateless *view* that reconsiders the whole evicted head every turn. On long runs this loses signal the model may still need. `AiCompactionStrategy` replaces it with an incremental *fold*: it summarises only the newly evicted steps on top of the running summary and persists the result on `AgentState.RollingSummary`, so summarisation cost stays flat as the run grows instead of re-summarising the whole head each turn.
 
 ```csharp
-builder.WithAiCompaction(new ClaudeModelClient(new ClaudeClientOptions
-{
-    ApiKey = apiKey,
-    ModelId = "claude-haiku-4-5-20251001"   // dedicated compaction model
-}))
+builder.WithAiCompaction(
+    new ClaudeModelClient(new ClaudeClientOptions
+    {
+        ApiKey = apiKey,
+        ModelId = "claude-haiku-4-5-20251001"   // dedicated compaction model
+    }),
+    new CompactionOptions { WindowTokens = 150_000 })   // required: the eviction trigger
 ```
+
+`CompactionOptions` is **required** when you opt into compaction, so a strategy is never wired without stating its trigger. `WindowTokens` is the per-turn context-window size the guide keeps each turn under by evicting — it is deliberately separate from `Budget.MaxTotalTokens`, which is the *cumulative* run-total token cap the enforcer checks. Set `WindowTokens` to your model's usable context window and `MaxTotalTokens` to however many tokens the whole run may consume; conflating them (the old single `MaxContextTokens`) hard-stopped compacted runs at ~one window. To tune the window without changing the strategy, use `WithCompactionOptions(...)`.
 
 The rolling summary is checkpointed, so a resumed run rehydrates it and folds onward rather than recomputing. The strategy's token usage and cost accumulate on `AgentState.CompactionUsage` / `CompactionCost` and are counted by the budget enforcer. It fails open — on model error or empty output the prior summary is preserved and a bare note is injected for the newly evicted slice (retried next turn), so a compaction failure never blocks the run. Use a fast, cheap model (Haiku-class).
 
 ### Write a custom compaction strategy
 
-`ICompactionStrategy` is a framework extension point — implement it for structured clearing, semantic compression, or any policy of your own, and register it with `builder.WithCompactionStrategy<T>()`. The harness calls it whenever the live trajectory exceeds the budget, handing it the **typed** steps being evicted (not pre-rendered text) plus the full run context:
+`ICompactionStrategy` is a framework extension point — implement it for structured clearing, semantic compression, or any policy of your own, and register it with `builder.WithCompactionStrategy<T>(options)` (the `CompactionOptions` are required here too). The harness calls it whenever the live context exceeds `WindowTokens`, handing it the **typed** steps being evicted (not pre-rendered text) plus the full run context:
 
 ```csharp
 public sealed class MyCompactionStrategy : ICompactionStrategy

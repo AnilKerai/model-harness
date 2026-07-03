@@ -22,7 +22,7 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// fixed <c>[ORIGINAL GOAL]</c> anchor is omitted — the latest user turn is already the
 /// live goal, so re-pinning the first message would misdirect a multi-turn conversation.
 /// </summary>
-public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionStrategy, bool pinOriginalGoal = true) : ITrajectoryGuide
+public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionStrategy, CompactionOptions options, bool pinOriginalGoal = true) : ITrajectoryGuide
 {
     public string Name => "trajectory";
 
@@ -36,7 +36,7 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
         var liveGroups = allGroups[foldedCount..];
         var priorSummary = state.RollingSummary;
 
-        var budget = state.Budget.MaxContextTokens - EstimateDraftTokens(draft);
+        var budget = options.WindowTokens - EstimateDraftTokens(draft);
         if (priorSummary is not null)
             budget -= EstimateTokens(priorSummary.Text);
 

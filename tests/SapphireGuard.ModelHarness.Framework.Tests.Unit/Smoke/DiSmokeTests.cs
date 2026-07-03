@@ -13,7 +13,7 @@ public sealed class DiSmokeTests
     private static readonly Framework.State.Budget OneTurn = new()
     {
         MaxTurns = 1,
-        MaxContextTokens = 100_000,
+        MaxTotalTokens = 100_000,
         MaxCost = 1m,
         MaxWallClock = TimeSpan.FromSeconds(10)
     };

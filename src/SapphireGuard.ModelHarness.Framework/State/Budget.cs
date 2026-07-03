@@ -9,8 +9,13 @@ public sealed record Budget
     /// <summary>Maximum number of loop turns before budget finalisation.</summary>
     public required int MaxTurns { get; init; }
 
-    /// <summary>Maximum cumulative context tokens before budget finalisation.</summary>
-    public required int MaxContextTokens { get; init; }
+    /// <summary>
+    /// Maximum <em>cumulative</em> tokens across the whole run (all model, tool, sensor, and
+    /// compaction calls) before budget finalisation. This is a run-total spend cap, not a
+    /// context-window size — the per-turn window that drives eviction lives on
+    /// <see cref="Guides.CompactionOptions.WindowTokens"/>.
+    /// </summary>
+    public required int MaxTotalTokens { get; init; }
 
     /// <summary>Maximum cumulative cost before budget finalisation.</summary>
     public required decimal MaxCost { get; init; }

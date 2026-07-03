@@ -106,7 +106,7 @@ public sealed class StepJsonConverterTests
         // a checkpoint so a reloaded run folds onward instead of re-summarising from scratch.
         var budget = new StateBudget
         {
-            MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(5)
+            MaxTurns = 10, MaxTotalTokens = 100_000, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(5)
         };
         var state = AgentState.NewTask("task", budget, DateTimeOffset.UtcNow) with
         {

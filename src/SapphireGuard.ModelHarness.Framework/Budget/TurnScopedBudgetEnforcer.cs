@@ -53,8 +53,8 @@ public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) 
             return BudgetCheckResult.Exhausted($"Reached MaxTurns ({budget.MaxTurns}) this turn.");
         if (totalCost >= budget.MaxCost)
             return BudgetCheckResult.Exhausted($"Reached MaxCost ({budget.MaxCost:F4}) this turn.");
-        if (totalTokens >= budget.MaxContextTokens)
-            return BudgetCheckResult.Exhausted($"Reached MaxContextTokens ({budget.MaxContextTokens}) this turn.");
+        if (totalTokens >= budget.MaxTotalTokens)
+            return BudgetCheckResult.Exhausted($"Reached MaxTotalTokens ({budget.MaxTotalTokens}) this turn.");
 
         var elapsed = _time.GetUtcNow() - startedAt;
         if (elapsed >= budget.MaxWallClock)

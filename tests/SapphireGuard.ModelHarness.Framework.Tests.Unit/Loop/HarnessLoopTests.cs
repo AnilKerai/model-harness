@@ -40,7 +40,7 @@ public sealed class HarnessLoopTests
         AgentState.NewTask(task, new SapphireGuard.ModelHarness.Framework.State.Budget
         {
             MaxTurns = 10,
-            MaxContextTokens = 100_000,
+            MaxTotalTokens = 100_000,
             MaxCost = 10m,
             MaxWallClock = TimeSpan.FromMinutes(1)
         }, DateTimeOffset.UtcNow);

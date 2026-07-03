@@ -16,7 +16,7 @@ public sealed class HeadEvictionTrajectoryGuideTests
         AgentState.NewTask("test", new StateBudget
         {
             MaxTurns = 10,
-            MaxContextTokens = 100_000,
+            MaxTotalTokens = 100_000,
             MaxCost = 10m,
             MaxWallClock = TimeSpan.FromMinutes(1)
         }, DateTimeOffset.UtcNow);
@@ -47,10 +47,13 @@ public sealed class HeadEvictionTrajectoryGuideTests
             Call: new ToolCall(Guid.NewGuid().ToString("n"), "test-tool", JsonDocument.Parse("{}").RootElement),
             Result: new ToolResult("id", "result"));
 
-    private static async Task<ContextDraft> ContributeAsync(AgentState state)
+    // Eviction is driven by the compaction window, not the run budget. Basic-rendering tests use a
+    // large window (no eviction); compaction tests pass windowTokens: 1 to force it.
+    private static async Task<ContextDraft> ContributeAsync(AgentState state, int windowTokens = 100_000)
     {
         var draft = new ContextDraft();
-        await new HeadEvictionTrajectoryGuide(new NullCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+        await new HeadEvictionTrajectoryGuide(new NullCompactionStrategy(), new CompactionOptions { WindowTokens = windowTokens })
+            .ContributeAsync(draft, state, CancellationToken.None);
         return draft;
     }
 
@@ -166,12 +169,9 @@ public sealed class HeadEvictionTrajectoryGuideTests
 
     // ── Incremental fold compaction ───────────────────────────────────────────
 
-    // MaxContextTokens = 1 forces the whole live tail to be evicted, so compaction always fires.
-    private static AgentState TinyBudgetState() =>
-        AgentState.NewTask("test", new StateBudget
-        {
-            MaxTurns = 10, MaxContextTokens = 1, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(1)
-        }, DateTimeOffset.UtcNow);
+    // WindowTokens = 1 forces the whole live tail to be evicted, so compaction always fires.
+    private static HeadEvictionTrajectoryGuide EvictingGuide(ICompactionStrategy strategy) =>
+        new(strategy, new CompactionOptions { WindowTokens = 1 });
 
     [Fact]
     public async Task Contribute_Fold_PassesOnlyNewSliceAndPriorSummary_SkipsFoldedHead()
@@ -180,13 +180,13 @@ public sealed class HeadEvictionTrajectoryGuideTests
         // newly evicted tail is handed to the strategy — never the whole head again — and the
         // watermark advances by exactly that slice.
         var strategy = new RecordingCompactionStrategy();
-        var built = TinyBudgetState()
+        var built = EmptyState()
             .AppendStep(ModelStep("FOLDED_M1"))
             .AppendStep(ModelStep("LIVE_TAIL"));
         var state = built with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 2) };
 
         var draft = new ContextDraft();
-        await new HeadEvictionTrajectoryGuide(strategy).ContributeAsync(draft, state, CancellationToken.None);
+        await EvictingGuide(strategy).ContributeAsync(draft, state, CancellationToken.None);
 
         var call = Assert.Single(strategy.Calls);
         Assert.Equal("PRIOR SUMMARY", call.PriorSummary?.Text);
@@ -199,8 +199,8 @@ public sealed class HeadEvictionTrajectoryGuideTests
     [Fact]
     public async Task Contribute_ViewStrategy_CompactsButPersistsNothing()
     {
-        var state = TinyBudgetState().AppendStep(ModelStep("some tail content to evict"));
-        var draft = await ContributeAsync(state); // uses NullCompactionStrategy (a view)
+        var state = EmptyState().AppendStep(ModelStep("some tail content to evict"));
+        var draft = await ContributeAsync(state, windowTokens: 1); // uses NullCompactionStrategy (a view)
 
         Assert.NotNull(draft.Compaction);                 // compaction happened
         Assert.Null(draft.Compaction!.UpdatedSummary);    // but nothing to persist — stays a view
@@ -209,10 +209,10 @@ public sealed class HeadEvictionTrajectoryGuideTests
     [Fact]
     public async Task Contribute_StrategyThrows_FailsOpenWithOmissionNoteAndDoesNotThrow()
     {
-        var state = TinyBudgetState().AppendStep(ModelStep("tail to evict"));
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
         var draft = new ContextDraft();
 
-        await new HeadEvictionTrajectoryGuide(new ThrowingCompactionStrategy())
+        await EvictingGuide(new ThrowingCompactionStrategy())
             .ContributeAsync(draft, state, CancellationToken.None);
 
         Assert.Contains("omitted", draft.Compaction!.InjectedText);

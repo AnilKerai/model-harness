@@ -59,7 +59,7 @@ AgentConsoleWriter.PrintHeader(
 
 var firstOutcome = await firstProvider.GetRequiredService<Agent>()
     .RunAsync("What is 56 multiplied by 13?",
-        budget: new Budget { MaxTurns = 3, MaxContextTokens = 100_000, MaxCost = 1.00m, MaxWallClock = TimeSpan.FromSeconds(60) });
+        budget: new Budget { MaxTurns = 3, MaxTotalTokens = 100_000, MaxCost = 1.00m, MaxWallClock = TimeSpan.FromSeconds(60) });
 
 AgentConsoleWriter.PrintOutcome(firstOutcome);
 

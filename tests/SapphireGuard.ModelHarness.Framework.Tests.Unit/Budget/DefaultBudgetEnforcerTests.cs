@@ -10,7 +10,7 @@ public sealed class DefaultBudgetEnforcerTests
     private static readonly StateBudget Generous = new()
     {
         MaxTurns = 10,
-        MaxContextTokens = 100_000,
+        MaxTotalTokens = 100_000,
         MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(5)
     };
@@ -66,14 +66,14 @@ public sealed class DefaultBudgetEnforcerTests
     [Fact]
     public void Check_TokensAtLimit_ReturnsExhausted()
     {
-        var budget = Generous with { MaxContextTokens = 100 };
+        var budget = Generous with { MaxTotalTokens = 100 };
         var state = EmptyState(budget)
             .AppendStep(ModelStep(inputTokens: 60, outputTokens: 40));
 
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
 
         Assert.True(result.IsExhausted);
-        Assert.Contains("MaxContextTokens", result.Reason);
+        Assert.Contains("MaxTotalTokens", result.Reason);
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class DefaultBudgetEnforcerTests
     [Fact]
     public void Check_ToolCallStepWithDelegatedUsage_ExhaustsWhenTokensReachLimit()
     {
-        var budget = Generous with { MaxContextTokens = 100 };
+        var budget = Generous with { MaxTotalTokens = 100 };
         var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
             new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
             new Tools.ToolResult("id", "ok", Usage: new Usage(60, 40)));
@@ -149,13 +149,13 @@ public sealed class DefaultBudgetEnforcerTests
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
 
         Assert.True(result.IsExhausted);
-        Assert.Contains("MaxContextTokens", result.Reason);
+        Assert.Contains("MaxTotalTokens", result.Reason);
     }
 
     [Fact]
     public void Check_ToolCallStepWithNullCostAndUsage_DoesNotContributeToTotals()
     {
-        var budget = Generous with { MaxCost = 0.5m, MaxContextTokens = 50 };
+        var budget = Generous with { MaxCost = 0.5m, MaxTotalTokens = 50 };
         // Tool result with null Cost and null Usage should not push over the limit
         var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
             new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
@@ -199,13 +199,13 @@ public sealed class DefaultBudgetEnforcerTests
     [Fact]
     public void Check_SensorUsageAtLimit_ReturnsExhausted()
     {
-        var budget = Generous with { MaxContextTokens = 100 };
+        var budget = Generous with { MaxTotalTokens = 100 };
         var state = EmptyState(budget) with { SensorUsage = new Usage(60, 40) };
 
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
 
         Assert.True(result.IsExhausted);
-        Assert.Contains("MaxContextTokens", result.Reason);
+        Assert.Contains("MaxTotalTokens", result.Reason);
     }
 
     [Fact]
@@ -240,12 +240,12 @@ public sealed class DefaultBudgetEnforcerTests
     [Fact]
     public void Check_CompactionUsageAtLimit_ReturnsExhausted()
     {
-        var budget = Generous with { MaxContextTokens = 100 };
+        var budget = Generous with { MaxTotalTokens = 100 };
         var state = EmptyState(budget) with { CompactionUsage = new Usage(60, 40) };
 
         var result = Sut.Check(state, DateTimeOffset.UtcNow);
 
         Assert.True(result.IsExhausted);
-        Assert.Contains("MaxContextTokens", result.Reason);
+        Assert.Contains("MaxTotalTokens", result.Reason);
     }
 }

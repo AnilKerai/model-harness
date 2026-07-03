@@ -10,7 +10,7 @@ public sealed class TurnScopedBudgetEnforcerTests
     private static readonly StateBudget Generous = new()
     {
         MaxTurns = 3,
-        MaxContextTokens = 100_000,
+        MaxTotalTokens = 100_000,
         MaxCost = 10m,
         MaxWallClock = TimeSpan.FromMinutes(5)
     };
@@ -88,7 +88,7 @@ public sealed class TurnScopedBudgetEnforcerTests
     [Fact]
     public void Check_TokensResetAtUserTurn_OnlyCurrentTurnCounts()
     {
-        var budget = Generous with { MaxContextTokens = 100 };
+        var budget = Generous with { MaxTotalTokens = 100 };
         var state = EmptyState(budget)
             .AppendStep(ModelStep(inputTokens: 60, outputTokens: 30))
             .WithUserMessage("turn 2", DateTimeOffset.UtcNow)

@@ -61,7 +61,7 @@ services.AddStandardChatHarness(builder => builder
     .AddSubAgentAsTool("currency_converter", factory, new Budget
     {
         MaxTurns = 4,
-        MaxContextTokens = 50_000,
+        MaxTotalTokens = 50_000,
         MaxCost = 0.10m,
         MaxWallClock = TimeSpan.FromSeconds(30)
     }));
@@ -73,7 +73,7 @@ var timeProvider = provider.GetRequiredService<TimeProvider>();
 var budget = new Budget
 {
     MaxTurns = 8,
-    MaxContextTokens = 100_000,
+    MaxTotalTokens = 100_000,
     MaxCost = 1.00m,
     MaxWallClock = TimeSpan.FromMinutes(2)
 };

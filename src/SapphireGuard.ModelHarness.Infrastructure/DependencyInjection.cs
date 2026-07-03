@@ -104,30 +104,37 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Enables AI-powered trajectory compaction. When the context window fills up, evicted steps
-    /// are summarised by <paramref name="modelClient"/> rather than silently dropped. Use a fast,
-    /// cheap model (Haiku-class) to keep compaction overhead low. The strategy fails open —
-    /// a bare omission note is used if the model call fails or returns empty text.
+    /// Enables AI-powered trajectory compaction. When the context grows past
+    /// <paramref name="options"/>'s window, evicted steps are folded into an incremental summary by
+    /// <paramref name="modelClient"/> rather than silently dropped. Use a fast, cheap model
+    /// (Haiku-class) to keep compaction overhead low. The strategy fails open — a bare omission note
+    /// is used if the model call fails or returns empty text. <paramref name="options"/> is required
+    /// so opting into compaction always states its trigger (the eviction window).
     /// </summary>
     public static ModelHarnessBuilder WithAiCompaction(
         this ModelHarnessBuilder builder,
-        IModelClient modelClient)
+        IModelClient modelClient,
+        CompactionOptions options)
     {
         builder.Services.Replace(ServiceDescriptor.Singleton<ICompactionStrategy>(
             _ => new AiCompactionStrategy(modelClient)));
+        builder.Services.Replace(ServiceDescriptor.Singleton(options));
         return builder;
     }
 
     /// <summary>
     /// Enables AI-powered trajectory compaction using a model client resolved from the container.
-    /// Use a fast, cheap model (Haiku-class) to keep compaction overhead low.
+    /// Use a fast, cheap model (Haiku-class) to keep compaction overhead low. <paramref name="options"/>
+    /// is required so opting into compaction always states its trigger (the eviction window).
     /// </summary>
     public static ModelHarnessBuilder WithAiCompaction(
         this ModelHarnessBuilder builder,
-        Func<IServiceProvider, IModelClient> factory)
+        Func<IServiceProvider, IModelClient> factory,
+        CompactionOptions options)
     {
         builder.Services.Replace(ServiceDescriptor.Singleton<ICompactionStrategy>(
             sp => new AiCompactionStrategy(factory(sp))));
+        builder.Services.Replace(ServiceDescriptor.Singleton(options));
         return builder;
     }
 

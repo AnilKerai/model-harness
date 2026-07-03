@@ -22,7 +22,7 @@ public sealed class MemoryGuideTests
     private static AgentState State() =>
         AgentState.NewTask("first message", new StateBudget
         {
-            MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 1m,
+            MaxTurns = 10, MaxTotalTokens = 100_000, MaxCost = 1m,
             MaxWallClock = TimeSpan.FromMinutes(1)
         }, DateTimeOffset.UtcNow);
 

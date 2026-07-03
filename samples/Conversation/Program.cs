@@ -50,7 +50,7 @@ var timeProvider = provider.GetRequiredService<TimeProvider>();
 var budget = new Budget
 {
     MaxTurns = 8,
-    MaxContextTokens = 100_000,
+    MaxTotalTokens = 100_000,
     MaxCost = 1.00m,
     MaxWallClock = TimeSpan.FromMinutes(2)
 };

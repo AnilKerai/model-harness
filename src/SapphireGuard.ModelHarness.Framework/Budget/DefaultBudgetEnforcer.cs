@@ -43,9 +43,9 @@ public sealed class DefaultBudgetEnforcer(TimeProvider? timeProvider = null) : I
         {
             return BudgetCheckResult.Exhausted($"Reached MaxCost ({budget.MaxCost:F4}).");
         }
-        if (totalTokens >= budget.MaxContextTokens)
+        if (totalTokens >= budget.MaxTotalTokens)
         {
-            return BudgetCheckResult.Exhausted($"Reached MaxContextTokens ({budget.MaxContextTokens}).");
+            return BudgetCheckResult.Exhausted($"Reached MaxTotalTokens ({budget.MaxTotalTokens}).");
         }
         var elapsed = _time.GetUtcNow() - startedAt;
         if (elapsed >= budget.MaxWallClock)

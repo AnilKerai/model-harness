@@ -272,19 +272,34 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
 
     /// <summary>
     /// Replaces the default <see cref="ICompactionStrategy"/> (a bare omission note) with a custom
-    /// strategy — e.g. structured clearing or semantic compression. For the built-in AI fold, prefer
-    /// the <c>WithAiCompaction(model)</c> shortcut in Infrastructure.
+    /// strategy — e.g. structured clearing or semantic compression. <paramref name="options"/> is
+    /// required so opting into compaction always states its trigger (the eviction window). For the
+    /// built-in AI fold, prefer the <c>WithAiCompaction(model, options)</c> shortcut in Infrastructure.
     /// </summary>
-    public ModelHarnessBuilder WithCompactionStrategy<TImpl>() where TImpl : class, ICompactionStrategy
+    public ModelHarnessBuilder WithCompactionStrategy<TImpl>(CompactionOptions options) where TImpl : class, ICompactionStrategy
     {
         Services.Replace(ServiceDescriptor.Singleton<ICompactionStrategy, TImpl>());
+        Services.Replace(ServiceDescriptor.Singleton(options));
         return this;
     }
 
-    /// <summary>Replaces the default <see cref="ICompactionStrategy"/> with a custom implementation via factory.</summary>
-    public ModelHarnessBuilder WithCompactionStrategy(Func<IServiceProvider, ICompactionStrategy> factory)
+    /// <summary>Replaces the default <see cref="ICompactionStrategy"/> with a custom implementation via factory; <paramref name="options"/> states the eviction trigger.</summary>
+    public ModelHarnessBuilder WithCompactionStrategy(Func<IServiceProvider, ICompactionStrategy> factory, CompactionOptions options)
     {
         Services.Replace(ServiceDescriptor.Singleton(factory));
+        Services.Replace(ServiceDescriptor.Singleton(options));
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the <see cref="CompactionOptions"/> (chiefly the eviction window) without changing the
+    /// compaction strategy — use it to tune the context-window trigger for the default omission-note
+    /// behaviour. The <c>WithAiCompaction</c> / <c>WithCompactionStrategy</c> opt-in methods take
+    /// options directly, so this is only needed for the base path.
+    /// </summary>
+    public ModelHarnessBuilder WithCompactionOptions(CompactionOptions options)
+    {
+        Services.Replace(ServiceDescriptor.Singleton(options));
         return this;
     }
 

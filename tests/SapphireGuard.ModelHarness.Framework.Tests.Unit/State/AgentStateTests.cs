@@ -9,7 +9,7 @@ public sealed class AgentStateTests
     private static readonly StateBudget Budget = new()
     {
         MaxTurns = 1,
-        MaxContextTokens = 1,
+        MaxTotalTokens = 1,
         MaxCost = 1m,
         MaxWallClock = TimeSpan.FromMinutes(1)
     };

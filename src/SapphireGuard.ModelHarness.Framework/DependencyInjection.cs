@@ -39,6 +39,7 @@ public static class DependencyInjection
             .AddTracerDefault()
             .AddToolRegistryDefault()
             .AddCompactionStrategyDefault()
+            .AddCompactionOptionsDefault()
             .AddTrajectoryGuideDefault()
             .AddHumanNotifierDefault()
             .AddDefaultGuidePipeline()
@@ -66,7 +67,9 @@ public static class DependencyInjection
             builder
                 .WithBudgetEnforcer<TurnScopedBudgetEnforcer>()
                 .WithTrajectoryGuide(sp => new HeadEvictionTrajectoryGuide(
-                    sp.GetRequiredService<ICompactionStrategy>(), pinOriginalGoal: false));
+                    sp.GetRequiredService<ICompactionStrategy>(),
+                    sp.GetRequiredService<CompactionOptions>(),
+                    pinOriginalGoal: false));
             configure(builder);
         });
 
@@ -155,10 +158,18 @@ public static class DependencyInjection
         return services;
     }
 
+    private static IServiceCollection AddCompactionOptionsDefault(this IServiceCollection services)
+    {
+        services.TryAddSingleton(CompactionOptions.Default);
+        return services;
+    }
+
     private static IServiceCollection AddTrajectoryGuideDefault(this IServiceCollection services)
     {
         services.TryAddSingleton<ITrajectoryGuide>(sp =>
-            new HeadEvictionTrajectoryGuide(sp.GetRequiredService<ICompactionStrategy>()));
+            new HeadEvictionTrajectoryGuide(
+                sp.GetRequiredService<ICompactionStrategy>(),
+                sp.GetRequiredService<CompactionOptions>()));
         return services;
     }
 

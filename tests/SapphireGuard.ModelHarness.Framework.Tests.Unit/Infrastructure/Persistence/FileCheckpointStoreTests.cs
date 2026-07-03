@@ -19,7 +19,7 @@ public sealed class FileCheckpointStoreTests : IDisposable
     private static readonly StateBudget Budget = new()
     {
         MaxTurns = 10,
-        MaxContextTokens = 1000,
+        MaxTotalTokens = 1000,
         MaxCost = 1m,
         MaxWallClock = TimeSpan.FromMinutes(1)
     };

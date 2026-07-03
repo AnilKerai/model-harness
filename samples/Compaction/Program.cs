@@ -14,15 +14,19 @@ using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
 // activity: the VIEW re-summarises the whole growing head every time; the FOLD only ever touches
 // the newly evicted slice. No API key needed — the model and both strategies are scripted.
 
+// A tiny WindowTokens is the eviction trigger — the compaction opt-in methods require it, so a
+// strategy is never wired without stating when it fires.
+var window = new CompactionOptions { WindowTokens = 240 };
+
 await RunScenario(
     "view",
     "Stateless view (like NullCompactionStrategy) — re-summarises the whole evicted head every turn.",
-    b => b.WithCompactionStrategy<NarratingViewStrategy>());
+    b => b.WithCompactionStrategy<NarratingViewStrategy>(window));
 
 await RunScenario(
     "fold",
     "Incremental fold (like AiCompactionStrategy) — summarises only the newly evicted slice.",
-    b => b.WithCompactionStrategy<NarratingFoldStrategy>());
+    b => b.WithCompactionStrategy<NarratingFoldStrategy>(window));
 
 static async Task RunScenario(string name, string description, Action<ModelHarnessBuilder> registerCompaction)
 {
@@ -41,12 +45,13 @@ static async Task RunScenario(string name, string description, Action<ModelHarne
     await using var provider = services.BuildServiceProvider();
     var agent = provider.GetRequiredService<Agent>();
 
-    // Tiny MaxContextTokens forces eviction. Model/compaction token usage is zero so this budget
-    // stays purely about context-window size, not cumulative token spend (the two share the field).
+    // Eviction is driven by CompactionOptions.WindowTokens (240, above); the run budget stays
+    // generous so it doesn't stop before the investigation finishes. MaxTotalTokens is the
+    // cumulative token cap — a separate concern from the per-turn window.
     var budget = new StateBudget
     {
         MaxTurns = 30,
-        MaxContextTokens = 240,
+        MaxTotalTokens = 1_000_000,
         MaxCost = 100m,
         MaxWallClock = TimeSpan.FromMinutes(1)
     };

@@ -87,7 +87,7 @@ var agent = serviceProvider.GetRequiredService<Agent>();
 var budget = new Budget
 {
     MaxTurns = 10,
-    MaxContextTokens = 100_000,
+    MaxTotalTokens = 100_000,
     MaxCost = 0.10m,
     MaxWallClock = TimeSpan.FromMinutes(1)
 };

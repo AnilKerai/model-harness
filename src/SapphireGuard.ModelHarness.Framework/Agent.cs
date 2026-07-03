@@ -11,7 +11,7 @@ public sealed class Agent(HarnessLoop loop, TimeProvider timeProvider)
     private static readonly AgentBudget DefaultBudget = new()
     {
         MaxTurns = 10,
-        MaxContextTokens = 100_000,
+        MaxTotalTokens = 100_000,
         MaxCost = 1.00m,
         MaxWallClock = TimeSpan.FromMinutes(2)
     };
