@@ -310,24 +310,36 @@ builder
 Implement `ITracer` and register via `WithTracer<T>()` or `WithTracer(factory)` for a
 custom backend.
 
-A tracer receives an event for each loop milestone: task start/completion, every model call
-(full prompt + tools + response), every tool call (call, result, duration), and every sensor
-intervention. It also receives a `GuideContribution` after each guide runs — the structural
-delta that guide made to the context draft: tools filtered out or added, memory snippets
-surfaced, trajectory messages rendered, system-prompt sections added, and the system-prompt
-character delta. Because the final prompt only shows what *survived* the pipeline, these
-per-guide deltas are what let you reconstruct the decisions that shaped it — which tools a
-selector dropped, or whether memory retrieval returned anything at all — which is often where
-an undesirable result traces back to.
+A tracer is notified at each loop milestone. Task start/completion and sensor interventions are
+one-shot events (`StartTrace`, `Complete`, `LogSensorResult`). **Model and tool calls are
+scopes, not events**: the loop calls `BeginModelCall`/`BeginToolCall` *before* the operation and
+gets back an `IModelCallScope`/`IToolCallScope`; when the call returns it calls `Complete(response)`
+/`Complete(result)` on the scope, then disposes it. A scope disposed *without* `Complete` means
+the call threw — record it as a failed span. This begin/complete shape is what lets a tracer
+bracket a real span with an accurate duration: `OpenTelemetryTracer` emits a nested OpenTelemetry
+GenAI span tree — an `invoke_agent` root with `chat {model}` and `execute_tool {name}` children
+carrying `gen_ai.*` attributes, plus the `gen_ai.client.token.usage` and
+`gen_ai.client.operation.duration` metrics. `CompositeTracer` fans one scope out to each
+registered tracer's child scope, so native OTel and a debug tracer can run side by side.
 
-Every per-turn event — `LogModelCall`, `LogToolCall`, `LogSensorResult`, `LogGuideContribution` —
-takes a zero-based `turn` index as its second argument so a backend can group everything that
-happened on one turn. The loop threads its own turn counter into the model/tool/sensor events;
-the guide runner derives the same index from the trajectory (count of prior model calls), so no
-extra plumbing is needed to correlate guide deltas with the call they shaped. `LogGuideContribution`
-remains a default-interface no-op, so a custom `ITracer` that never overrode it still compiles;
-but the `turn` parameter added to the three non-default methods is a **breaking change** — update
-their signatures when you upgrade. Override `LogGuideContribution` to consume the guide deltas.
+A tracer also receives a `GuideContribution` after each guide runs — the structural delta that
+guide made to the context draft: tools filtered out or added, memory snippets surfaced,
+trajectory messages rendered, system-prompt sections added, and the system-prompt character
+delta. Because the final prompt only shows what *survived* the pipeline, these per-guide deltas
+are what let you reconstruct the decisions that shaped it — which tools a selector dropped, or
+whether memory retrieval returned anything at all — which is often where an undesirable result
+traces back to.
+
+Every per-turn hook — `BeginModelCall`, `BeginToolCall`, `LogSensorResult`, `LogGuideContribution` —
+takes a zero-based `turn` index so a backend can group everything that happened on one turn. The
+loop threads its own turn counter into the model/tool/sensor hooks; the guide runner derives the
+same index from the trajectory (count of prior model calls), so no extra plumbing is needed to
+correlate guide deltas with the call they shaped. `LogGuideContribution` remains a default-interface
+no-op, so a custom `ITracer` that never overrode it still compiles; but replacing the post-hoc
+`LogModelCall`/`LogToolCall` with the `BeginModelCall`/`BeginToolCall` scope methods is a **breaking
+change** — update your implementation when you upgrade. `ModelResponse` now also carries optional
+`Model`/`Provider` fields (populated by the built-in adapters) that feed `gen_ai.request.model` and
+`gen_ai.provider.name`.
 
 ## Checkpoint / resume and human-in-the-loop
 

@@ -10,9 +10,12 @@ using SapphireGuard.ModelHarness.Framework.Tracing;
 namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 
 /// <summary>
-/// Emits traces and metrics via System.Diagnostics.ActivitySource and
-/// System.Diagnostics.Metrics.Meter — the standard .NET observability hooks.
-/// Wire up your OTel exporters in the host; this class has no OTel SDK dependency.
+/// Emits a nested span tree aligned with the OpenTelemetry GenAI semantic conventions —
+/// an <c>invoke_agent</c> root with <c>chat</c> and <c>execute_tool</c> children — plus the
+/// <c>gen_ai.client.token.usage</c> and <c>gen_ai.client.operation.duration</c> metrics, via
+/// <see cref="ActivitySource"/> and <see cref="Meter"/>. Wire up your OTel exporters in the
+/// host; this class has no OTel SDK dependency. Cost has no GenAI attribute (backends compute
+/// it from tokens), so the computed cost is emitted under <c>harness.cost</c>.
 /// </summary>
 [ExcludeFromCodeCoverage]
 public sealed class OpenTelemetryTracer : ITracer, IDisposable
@@ -23,66 +26,50 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
     private static readonly ActivitySource Source = new(ActivitySourceName, "1.0.0");
     private static readonly Meter Meter = new(MeterName, "1.0.0");
 
-    private static readonly Counter<long> InputTokens = Meter.CreateCounter<long>(
-        "agent.tokens.input", unit: "{token}", description: "Total input tokens consumed.");
-    private static readonly Counter<long> OutputTokens = Meter.CreateCounter<long>(
-        "agent.tokens.output", unit: "{token}", description: "Total output tokens produced.");
+    private static readonly Histogram<long> TokenUsage = Meter.CreateHistogram<long>(
+        "gen_ai.client.token.usage", unit: "{token}", description: "Tokens used per model call, tagged by gen_ai.token.type.");
+    private static readonly Histogram<double> OperationDuration = Meter.CreateHistogram<double>(
+        "gen_ai.client.operation.duration", unit: "s", description: "Duration of a model call or tool execution.");
     private static readonly Counter<double> Cost = Meter.CreateCounter<double>(
-        "agent.cost", unit: "", description: "Accumulated model call cost.");
-    private static readonly Histogram<double> ToolDurationMs = Meter.CreateHistogram<double>(
-        "agent.tool.duration", unit: "ms", description: "Tool execution duration.");
+        "harness.cost", unit: "", description: "Accumulated model call cost (no GenAI equivalent).");
     private static readonly Counter<long> SensorInterventions = Meter.CreateCounter<long>(
-        "agent.sensor.interventions", unit: "{intervention}", description: "Number of sensor interventions raised.");
+        "harness.sensor.interventions", unit: "{intervention}", description: "Number of sensor interventions raised.");
 
     private readonly ConcurrentDictionary<string, Activity?> _activities = new();
 
     public void StartTrace(string taskId, string taskText)
     {
-        var activity = Source.StartActivity("agent.task", ActivityKind.Internal);
-        activity?.SetTag("agent.task.id", taskId);
-        activity?.SetTag("agent.task.text", taskText);
+        var activity = Source.StartActivity("invoke_agent", ActivityKind.Internal);
+        activity?.SetTag("gen_ai.operation.name", "invoke_agent");
+        activity?.SetTag("harness.task.id", taskId);
+        activity?.SetTag("harness.task.text", taskText);
         _activities[taskId] = activity;
     }
 
-    public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response)
+    public IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools)
     {
-        if (_activities.TryGetValue(taskId, out var activity))
+        var activity = Source.StartActivity("chat", ActivityKind.Client, ParentContext(taskId));
+        if (activity is not null)
         {
-            activity?.AddEvent(new ActivityEvent("model_call", tags: new ActivityTagsCollection
-            {
-                ["turn"] = turn,
-                ["prompt.messages"] = prompt.Count,
-                ["tools.count"] = tools.Count,
-                ["stop.reason"] = response.StopReason.ToString(),
-                ["tool.calls"] = response.ToolCalls.Count,
-                ["tokens.input"] = response.Usage.InputTokens,
-                ["tokens.output"] = response.Usage.OutputTokens,
-                ["cost"] = (double)response.Cost,
-            }));
+            activity.SetTag("gen_ai.operation.name", "chat");
+            activity.SetTag("harness.turn", turn);
+            activity.SetTag("harness.prompt.messages", prompt.Count);
+            activity.SetTag("harness.request.tools", tools.Count);
         }
-
-        var tags = new TagList { { "task.id", taskId } };
-        InputTokens.Add(response.Usage.InputTokens, tags);
-        OutputTokens.Add(response.Usage.OutputTokens, tags);
-        Cost.Add((double)response.Cost, tags);
+        return new ModelCallScope(activity);
     }
 
-    public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration)
+    public IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call)
     {
-        if (_activities.TryGetValue(taskId, out var activity))
+        var activity = Source.StartActivity($"execute_tool {call.ToolName}", ActivityKind.Internal, ParentContext(taskId));
+        if (activity is not null)
         {
-            activity?.AddEvent(new ActivityEvent("tool_call", tags: new ActivityTagsCollection
-            {
-                ["turn"] = turn,
-                ["tool.name"] = call.ToolName,
-                ["tool.call.id"] = call.CallId,
-                ["tool.is_error"] = result.IsError,
-                ["tool.duration.ms"] = duration.TotalMilliseconds,
-            }));
+            activity.SetTag("gen_ai.operation.name", "execute_tool");
+            activity.SetTag("gen_ai.tool.name", call.ToolName);
+            activity.SetTag("gen_ai.tool.call.id", call.CallId);
+            activity.SetTag("harness.turn", turn);
         }
-
-        ToolDurationMs.Record(duration.TotalMilliseconds,
-            new TagList { { "tool.name", call.ToolName }, { "task.id", taskId } });
+        return new ToolCallScope(activity, call.ToolName);
     }
 
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result)
@@ -91,35 +78,35 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
 
         if (_activities.TryGetValue(taskId, out var activity))
         {
-            activity?.AddEvent(new ActivityEvent("sensor_intervention", tags: new ActivityTagsCollection
+            activity?.AddEvent(new ActivityEvent("gen_ai.evaluation.result", tags: new ActivityTagsCollection
             {
-                ["turn"] = turn,
-                ["sensor.name"] = sensorName,
-                ["hook.point"] = hookPoint.ToString(),
-                ["sensor.reason"] = result.Reason ?? string.Empty,
+                ["harness.turn"] = turn,
+                ["harness.sensor.name"] = sensorName,
+                ["harness.sensor.hook_point"] = hookPoint.ToString(),
+                ["gen_ai.evaluation.explanation"] = result.Reason ?? string.Empty,
             }));
         }
 
         SensorInterventions.Add(1,
-            new TagList { { "sensor.name", sensorName }, { "hook.point", hookPoint.ToString() }, { "task.id", taskId } });
+            new TagList { { "harness.sensor.name", sensorName }, { "harness.sensor.hook_point", hookPoint.ToString() } });
     }
 
     public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)
     {
         if (!_activities.TryGetValue(taskId, out var activity)) return;
 
-        activity?.AddEvent(new ActivityEvent("guide_contribution", tags: new ActivityTagsCollection
+        activity?.AddEvent(new ActivityEvent("harness.guide.contribution", tags: new ActivityTagsCollection
         {
-            ["turn"] = turn,
-            ["guide.name"] = guideName,
-            ["guide.tools.before"] = contribution.ToolsBefore,
-            ["guide.tools.after"] = contribution.ToolsAfter,
-            ["guide.tools.removed"] = string.Join(",", contribution.ToolsRemoved),
-            ["guide.tools.added"] = string.Join(",", contribution.ToolsAdded),
-            ["guide.memory.added"] = contribution.MemorySnippetsAdded,
-            ["guide.sections.added"] = contribution.SystemSectionsAdded,
-            ["guide.trajectory.added"] = contribution.TrajectoryMessagesAdded,
-            ["guide.prompt.char_delta"] = contribution.SystemPromptCharDelta,
+            ["harness.turn"] = turn,
+            ["harness.guide.name"] = guideName,
+            ["harness.guide.tools.before"] = contribution.ToolsBefore,
+            ["harness.guide.tools.after"] = contribution.ToolsAfter,
+            ["harness.guide.tools.removed"] = string.Join(",", contribution.ToolsRemoved),
+            ["harness.guide.tools.added"] = string.Join(",", contribution.ToolsAdded),
+            ["harness.guide.memory.added"] = contribution.MemorySnippetsAdded,
+            ["harness.guide.sections.added"] = contribution.SystemSectionsAdded,
+            ["harness.guide.trajectory.added"] = contribution.TrajectoryMessagesAdded,
+            ["harness.guide.prompt.char_delta"] = contribution.SystemPromptCharDelta,
         }));
     }
 
@@ -127,9 +114,9 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
     {
         if (!_activities.TryRemove(taskId, out var activity) || activity is null) return;
 
-        activity.SetTag("agent.status", status.ToString());
+        activity.SetTag("harness.status", status.ToString());
         if (failureReason is not null)
-            activity.SetTag("agent.failure.reason", failureReason);
+            activity.SetTag("harness.failure.reason", failureReason);
 
         activity.SetStatus(
             status == AgentStatus.Done ? ActivityStatusCode.Ok : ActivityStatusCode.Error,
@@ -143,5 +130,104 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         foreach (var activity in _activities.Values)
             activity?.Dispose();
         _activities.Clear();
+    }
+
+    // The root activity is not ambient (StartTrace returned), so children must be parented
+    // explicitly by context; default context makes a root span when the task is unknown.
+    private ActivityContext ParentContext(string taskId) =>
+        _activities.TryGetValue(taskId, out var root) && root is not null ? root.Context : default;
+
+    private static string FinishReason(StopReason stop) => stop switch
+    {
+        StopReason.EndTurn => "stop",
+        StopReason.ToolUse => "tool_calls",
+        StopReason.MaxTokens => "length",
+        _ => stop.ToString().ToLowerInvariant()
+    };
+
+    private sealed class ModelCallScope(Activity? activity) : IModelCallScope
+    {
+        private readonly long _start = Stopwatch.GetTimestamp();
+        private bool _completed;
+
+        public void Complete(ModelResponse response)
+        {
+            _completed = true;
+            var provider = response.Provider ?? "unknown";
+            var model = response.Model ?? "unknown";
+
+            if (activity is not null)
+            {
+                if (response.Model is not null)
+                {
+                    activity.SetTag("gen_ai.request.model", response.Model);
+                    activity.DisplayName = $"chat {response.Model}";
+                }
+                if (response.Provider is not null)
+                    activity.SetTag("gen_ai.provider.name", response.Provider);
+                activity.SetTag("gen_ai.usage.input_tokens", response.Usage.InputTokens);
+                activity.SetTag("gen_ai.usage.output_tokens", response.Usage.OutputTokens);
+                activity.SetTag("gen_ai.response.finish_reasons", new[] { FinishReason(response.StopReason) });
+                activity.SetTag("harness.response.tool_calls", response.ToolCalls.Count);
+                activity.SetTag("harness.cost", (double)response.Cost);
+                activity.SetStatus(ActivityStatusCode.Ok);
+            }
+
+            var opTags = new TagList
+            {
+                { "gen_ai.operation.name", "chat" },
+                { "gen_ai.provider.name", provider },
+                { "gen_ai.request.model", model },
+            };
+            OperationDuration.Record(Stopwatch.GetElapsedTime(_start).TotalSeconds, opTags);
+            Cost.Add((double)response.Cost, opTags);
+            TokenUsage.Record(response.Usage.InputTokens, TokenTags(provider, model, "input"));
+            TokenUsage.Record(response.Usage.OutputTokens, TokenTags(provider, model, "output"));
+        }
+
+        public void Dispose()
+        {
+            if (activity is null) return;
+            if (!_completed)
+                activity.SetStatus(ActivityStatusCode.Error, "model call did not complete");
+            activity.Dispose();
+        }
+
+        private static TagList TokenTags(string provider, string model, string tokenType) => new()
+        {
+            { "gen_ai.operation.name", "chat" },
+            { "gen_ai.provider.name", provider },
+            { "gen_ai.request.model", model },
+            { "gen_ai.token.type", tokenType },
+        };
+    }
+
+    private sealed class ToolCallScope(Activity? activity, string toolName) : IToolCallScope
+    {
+        private readonly long _start = Stopwatch.GetTimestamp();
+        private bool _completed;
+
+        public void Complete(ToolResult result)
+        {
+            _completed = true;
+            if (activity is not null)
+            {
+                activity.SetTag("harness.tool.is_error", result.IsError);
+                if (result.IsError)
+                    activity.SetTag("error.type", "tool_error");
+                activity.SetStatus(result.IsError ? ActivityStatusCode.Error : ActivityStatusCode.Ok);
+            }
+
+            OperationDuration.Record(Stopwatch.GetElapsedTime(_start).TotalSeconds,
+                new TagList { { "gen_ai.operation.name", "execute_tool" }, { "gen_ai.tool.name", toolName } });
+        }
+
+        public void Dispose()
+        {
+            if (activity is null) return;
+            if (!_completed)
+                activity.SetStatus(ActivityStatusCode.Error, "tool did not complete");
+            activity.Dispose();
+        }
     }
 }

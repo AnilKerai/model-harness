@@ -143,8 +143,8 @@ public sealed class DefaultGuideRunnerTests
     {
         public List<(string Guide, int Turn, GuideContribution Contribution)> Contributions { get; } = [];
         public void StartTrace(string taskId, string taskText) { }
-        public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) { }
-        public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration) { }
+        public IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools) => NoopScope.Instance;
+        public IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call) => NoopScope.Instance;
         public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) { }
         public void Complete(string taskId, AgentStatus status, string? failureReason) { }
         public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)

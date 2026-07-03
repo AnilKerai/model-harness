@@ -14,14 +14,16 @@ public interface ITracer
     void StartTrace(string taskId, string taskText);
 
     /// <summary>
-    /// Called after each model call with the full prompt, tool definitions, and response.
-    /// <paramref name="turn"/> is the zero-based turn index the call belongs to, shared by
-    /// every event on the same turn so a backend can group them.
+    /// Opens a scope around a model call, letting a tracer bracket it as a real span with
+    /// accurate duration. The loop calls <see cref="IModelCallScope.Complete"/> with the
+    /// response, then disposes the scope; a scope disposed without <c>Complete</c> (the call
+    /// threw) is recorded as a failure. <paramref name="turn"/> is the zero-based turn index,
+    /// shared by every event on the same turn so a backend can group them.
     /// </summary>
-    void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response);
+    IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools);
 
-    /// <summary>Called after each tool execution with the call, result, and wall-clock duration. <paramref name="turn"/> is the zero-based turn index the call belongs to.</summary>
-    void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration);
+    /// <summary>Opens a scope around a tool execution so a tracer can bracket it as a real span. The loop calls <see cref="IToolCallScope.Complete"/> with the result, then disposes the scope. <paramref name="turn"/> is the zero-based turn index the call belongs to.</summary>
+    IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call);
 
     /// <summary>Called after each sensor evaluation that produces an intervention. <paramref name="turn"/> is the zero-based turn index the evaluation belongs to.</summary>
     void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result);
@@ -36,4 +38,16 @@ public interface ITracer
     /// unchanged — override it to observe how the guide pipeline shapes each turn's context.
     /// </summary>
     void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution) { }
+}
+
+/// <summary>Scope bracketing a single model call. Complete it with the response, then dispose (a plain <c>using</c> does this). Disposal without <see cref="Complete"/> marks the span failed.</summary>
+public interface IModelCallScope : IDisposable
+{
+    void Complete(ModelResponse response);
+}
+
+/// <summary>Scope bracketing a single tool execution. Complete it with the result, then dispose.</summary>
+public interface IToolCallScope : IDisposable
+{
+    void Complete(ToolResult result);
 }

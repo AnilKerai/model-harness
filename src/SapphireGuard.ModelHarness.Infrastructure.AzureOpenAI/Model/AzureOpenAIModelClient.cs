@@ -186,7 +186,9 @@ public sealed class AzureOpenAIModelClient : IModelClient
             ToolCalls = toolCalls,
             StopReason = MapStopReason(completion.FinishReason),
             Usage = usage,
-            Cost = CalculateCost(_deploymentName, usage)
+            Cost = CalculateCost(_deploymentName, usage),
+            Model = _deploymentName,
+            Provider = "azure.ai.openai"
         };
     }
 

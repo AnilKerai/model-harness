@@ -13,15 +13,11 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
         foreach (var t in tracers) t.StartTrace(taskId, taskText);
     }
 
-    public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response)
-    {
-        foreach (var t in tracers) t.LogModelCall(taskId, turn, prompt, tools, response);
-    }
+    public IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools)
+        => new CompositeModelCallScope([.. tracers.Select(t => t.BeginModelCall(taskId, turn, prompt, tools))]);
 
-    public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration)
-    {
-        foreach (var t in tracers) t.LogToolCall(taskId, turn, call, result, duration);
-    }
+    public IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call)
+        => new CompositeToolCallScope([.. tracers.Select(t => t.BeginToolCall(taskId, turn, call))]);
 
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result)
     {
@@ -37,4 +33,18 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
     {
         foreach (var t in tracers) t.LogGuideContribution(taskId, turn, guideName, contribution);
     }
+}
+
+[ExcludeFromCodeCoverage]
+file sealed class CompositeModelCallScope(IModelCallScope[] scopes) : IModelCallScope
+{
+    public void Complete(ModelResponse response) { foreach (var s in scopes) s.Complete(response); }
+    public void Dispose() { foreach (var s in scopes) s.Dispose(); }
+}
+
+[ExcludeFromCodeCoverage]
+file sealed class CompositeToolCallScope(IToolCallScope[] scopes) : IToolCallScope
+{
+    public void Complete(ToolResult result) { foreach (var s in scopes) s.Complete(result); }
+    public void Dispose() { foreach (var s in scopes) s.Dispose(); }
 }

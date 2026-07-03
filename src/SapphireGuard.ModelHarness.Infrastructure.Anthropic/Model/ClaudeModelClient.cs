@@ -231,7 +231,9 @@ public sealed class ClaudeModelClient : IModelClient
             ToolCalls = toolCalls,
             StopReason = stopReason,
             Usage = usage,
-            Cost = cost
+            Cost = cost,
+            Model = response.Model,
+            Provider = "anthropic"
         };
     }
 

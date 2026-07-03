@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Context;
 using SapphireGuard.ModelHarness.Framework.Model;
@@ -256,8 +255,9 @@ public sealed class HarnessLoop(
                 .Select(t => new ToolDefinition(t.Name, t.Description, t.InputSchema))
                 .ToArray();
 
+        using var scope = tracer.BeginModelCall(state.TaskId, turn, messages, modelTools);
         var response = await modelClient.CallAsync(messages, modelTools, ct);
-        tracer.LogModelCall(state.TaskId, turn, messages, modelTools, response);
+        scope.Complete(response);
 
         var step = new ModelCallStep(
             Id: Guid.NewGuid(),
@@ -291,8 +291,8 @@ public sealed class HarnessLoop(
                     IsError: true)));
         }
 
-        var sw = Stopwatch.StartNew();
         var ctx = ToolContext.Empty(state.TaskId, call.CallId);
+        using var scope = tracer.BeginToolCall(state.TaskId, turn, call);
         ToolResult result;
         try
         {
@@ -302,8 +302,7 @@ public sealed class HarnessLoop(
         {
             result = new ToolResult(call.CallId, $"Tool threw {ex.GetType().Name}: {ex.Message}", IsError: true);
         }
-        sw.Stop();
-        tracer.LogToolCall(state.TaskId, turn, call, result, sw.Elapsed);
+        scope.Complete(result);
 
         var executed = new ToolCallStep(
             Id: Guid.NewGuid(),

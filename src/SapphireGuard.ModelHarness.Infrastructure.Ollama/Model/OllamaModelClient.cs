@@ -65,7 +65,7 @@ public sealed class OllamaModelClient : IModelClient
 
         return last is null
             ? EmptyResponse()
-            : MapResponse(last);
+            : MapResponse(last, _model);
     }
 
     // ── Message building ─────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ public sealed class OllamaModelClient : IModelClient
 
     // ── Response mapping ─────────────────────────────────────────────────────
 
-    private static ModelResponse MapResponse(ChatResponseStream response)
+    private static ModelResponse MapResponse(ChatResponseStream response, string model)
     {
         var msg = response.Message;
         var toolCalls = new List<FrameworkToolCall>();
@@ -237,7 +237,9 @@ public sealed class OllamaModelClient : IModelClient
             ToolCalls = toolCalls,
             StopReason = stopReason,
             Usage = new FrameworkUsage(inputTokens, outputTokens),
-            Cost = 0m // Ollama is local
+            Cost = 0m, // Ollama is local
+            Model = model,
+            Provider = "ollama"
         };
     }
 

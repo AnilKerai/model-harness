@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Sensors;
@@ -17,36 +18,11 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
     public void StartTrace(string taskId, string taskText) =>
         Emit(new { evt = "trace_started", taskId, taskText, ts = _time.GetUtcNow() });
 
-    public void LogModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools, ModelResponse response) =>
-        Emit(new
-        {
-            evt = "model_call",
-            taskId,
-            turn,
-            ts = _time.GetUtcNow(),
-            promptMessages = prompt.Count,
-            tools = tools.Count,
-            stopReason = response.StopReason.ToString(),
-            toolCalls = response.ToolCalls.Count,
-            textPreview = Truncate(response.Text, 120),
-            usage = new { input = response.Usage.InputTokens, output = response.Usage.OutputTokens },
-            cost = response.Cost
-        });
+    public IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools) =>
+        new ModelCallScope(_time, taskId, turn, prompt.Count, tools.Count);
 
-    public void LogToolCall(string taskId, int turn, ToolCall call, ToolResult result, TimeSpan duration) =>
-        Emit(new
-        {
-            evt = "tool_call",
-            taskId,
-            turn,
-            ts = _time.GetUtcNow(),
-            tool = call.ToolName,
-            callId = call.CallId,
-            args = call.Arguments.GetRawText(),
-            isError = result.IsError,
-            resultPreview = Truncate(result.Content, 120),
-            durationMs = duration.TotalMilliseconds
-        });
+    public IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call) =>
+        new ToolCallScope(_time, taskId, turn, call);
 
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) =>
         Emit(new
@@ -87,4 +63,49 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
 
     private static string? Truncate(string? s, int max) =>
         s is null ? null : s.Length <= max ? s : s[..max] + "…";
+
+    private sealed class ModelCallScope(TimeProvider time, string taskId, int turn, int promptMessages, int tools) : IModelCallScope
+    {
+        public void Complete(ModelResponse response) =>
+            Emit(new
+            {
+                evt = "model_call",
+                taskId,
+                turn,
+                ts = time.GetUtcNow(),
+                model = response.Model,
+                provider = response.Provider,
+                promptMessages,
+                tools,
+                stopReason = response.StopReason.ToString(),
+                toolCalls = response.ToolCalls.Count,
+                textPreview = Truncate(response.Text, 120),
+                usage = new { input = response.Usage.InputTokens, output = response.Usage.OutputTokens },
+                cost = response.Cost
+            });
+
+        public void Dispose() { }
+    }
+
+    private sealed class ToolCallScope(TimeProvider time, string taskId, int turn, ToolCall call) : IToolCallScope
+    {
+        private readonly long _start = Stopwatch.GetTimestamp();
+
+        public void Complete(ToolResult result) =>
+            Emit(new
+            {
+                evt = "tool_call",
+                taskId,
+                turn,
+                ts = time.GetUtcNow(),
+                tool = call.ToolName,
+                callId = call.CallId,
+                args = call.Arguments.GetRawText(),
+                isError = result.IsError,
+                resultPreview = Truncate(result.Content, 120),
+                durationMs = Stopwatch.GetElapsedTime(_start).TotalMilliseconds
+            });
+
+        public void Dispose() { }
+    }
 }

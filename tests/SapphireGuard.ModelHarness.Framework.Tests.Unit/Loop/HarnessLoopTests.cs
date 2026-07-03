@@ -19,7 +19,8 @@ public sealed class HarnessLoopTests
         ScriptedModelClient modelClient,
         IEnumerable<ISensor>? sensors = null,
         StubToolRegistry? toolRegistry = null,
-        BudgetNs.IBudgetEnforcer? budgetEnforcer = null)
+        BudgetNs.IBudgetEnforcer? budgetEnforcer = null,
+        Tracing.ITracer? tracer = null)
     {
         var sensorRunner = new DefaultSensorRunner(sensors ?? []);
         return new HarnessLoop(
@@ -29,7 +30,7 @@ public sealed class HarnessLoopTests
             sensorRunner: sensorRunner,
             budgetEnforcer: budgetEnforcer ?? new AlwaysOkBudgetEnforcer(),
             rateLimiter: new NullRateLimiter(),
-            tracer: new NullTracer(),
+            tracer: tracer ?? new NullTracer(),
             checkpointStore: new NullCheckpointStore());
     }
 
@@ -427,6 +428,51 @@ public sealed class HarnessLoopTests
         Assert.Contains(interventions, s => s.SensorName == "post-model");
         Assert.Contains(interventions, s => s.SensorName == "pre-return");
     }
+
+    // ── Tracer scopes ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RunAsync_ModelCall_CompletesModelScopeWithResponseThenDisposes()
+    {
+        var tracer = new RecordingTracer();
+        var client = new ScriptedModelClient(EndTurnResponse("hello"));
+        var harness = BuildHarness(client, tracer: tracer);
+
+        await harness.RunAsync(NewState(), CancellationToken.None);
+
+        var completed = Assert.Single(tracer.ModelCompletions);
+        Assert.Equal("hello", completed.Text);
+        Assert.Equal(1, tracer.ModelScopesDisposed);
+    }
+
+    [Fact]
+    public async Task RunAsync_ModelCallThrows_DisposesModelScopeWithoutCompleting()
+    {
+        // The loop's `using` must dispose the scope even when the call throws, and must
+        // NOT call Complete — that absence is how a span-aware tracer marks the span failed.
+        var tracer = new RecordingTracer();
+        var harness = BuildHarness(new ScriptedModelClient(), tracer: tracer); // no responses → throws on first call
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Failed, outcome.Status);
+        Assert.Empty(tracer.ModelCompletions);
+        Assert.Equal(1, tracer.ModelScopesDisposed);
+    }
+
+    [Fact]
+    public async Task RunAsync_ToolCall_CompletesToolScopeWithResult()
+    {
+        var tracer = new RecordingTracer();
+        var client = new ScriptedModelClient(
+            ToolUseResponse(MakeToolCall("calc")),
+            EndTurnResponse("done"));
+        var harness = BuildHarness(client, tracer: tracer);
+
+        await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Single(tracer.ToolCompletions);
+    }
 }
 
 // ── Extra test double ─────────────────────────────────────────────────────────
@@ -438,5 +484,31 @@ file sealed class ThrowingModelClient(string message) : Model.IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct) =>
         throw new InvalidOperationException(message);
+}
+
+// Records how the loop drives the model/tool trace scopes.
+file sealed class RecordingTracer : Tracing.ITracer
+{
+    public List<ModelResponse> ModelCompletions { get; } = [];
+    public int ModelScopesDisposed { get; private set; }
+    public List<ToolResult> ToolCompletions { get; } = [];
+
+    public void StartTrace(string taskId, string taskText) { }
+    public Tracing.IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools) => new ModelScope(this);
+    public Tracing.IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call) => new ToolScope(this);
+    public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) { }
+    public void Complete(string taskId, AgentStatus status, string? failureReason) { }
+
+    private sealed class ModelScope(RecordingTracer owner) : Tracing.IModelCallScope
+    {
+        public void Complete(ModelResponse response) => owner.ModelCompletions.Add(response);
+        public void Dispose() => owner.ModelScopesDisposed++;
+    }
+
+    private sealed class ToolScope(RecordingTracer owner) : Tracing.IToolCallScope
+    {
+        public void Complete(ToolResult result) => owner.ToolCompletions.Add(result);
+        public void Dispose() { }
+    }
 }
 

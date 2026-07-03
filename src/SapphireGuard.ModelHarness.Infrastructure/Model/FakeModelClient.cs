@@ -44,7 +44,9 @@ public sealed class FakeModelClient : IModelClient
             ToolCalls = [new ToolCall(Guid.NewGuid().ToString("n"), "calculator", args)],
             StopReason = StopReason.ToolUse,
             Usage = new Usage(InputTokens: 120, OutputTokens: 25),
-            Cost = 0.0012m
+            Cost = 0.0012m,
+            Model = "fake-model",
+            Provider = "fake"
         };
     }
 
@@ -57,7 +59,9 @@ public sealed class FakeModelClient : IModelClient
             ToolCalls = [],
             StopReason = StopReason.EndTurn,
             Usage = new Usage(InputTokens: 160, OutputTokens: 14),
-            Cost = 0.0009m
+            Cost = 0.0009m,
+            Model = "fake-model",
+            Provider = "fake"
         };
     }
 
@@ -67,7 +71,9 @@ public sealed class FakeModelClient : IModelClient
         ToolCalls = [],
         StopReason = StopReason.EndTurn,
         Usage = new Usage(InputTokens: 50, OutputTokens: 10),
-        Cost = 0.0003m
+        Cost = 0.0003m,
+        Model = "fake-model",
+        Provider = "fake"
     };
 
     private static string ExtractNumber(string toolReply)
