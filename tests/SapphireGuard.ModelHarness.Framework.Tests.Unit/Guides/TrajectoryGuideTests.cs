@@ -219,6 +219,31 @@ public sealed class HeadEvictionTrajectoryGuideTests
         Assert.Null(draft.Compaction.UpdatedSummary);
     }
 
+    [Fact]
+    public async Task Contribute_WhenCompacting_PopulatesCompactionTrace()
+    {
+        var state = EmptyState()
+            .AppendStep(ModelStep("tail one to evict"))
+            .AppendStep(ModelStep("tail two to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new RecordingCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.NotNull(draft.CompactionTrace);
+        Assert.True(draft.CompactionTrace!.StepsEvicted > 0);
+        Assert.True(draft.CompactionTrace.TokensReclaimed > 0);
+        Assert.True(draft.CompactionTrace.Folded);   // RecordingCompactionStrategy returns an UpdatedSummary
+    }
+
+    [Fact]
+    public async Task Contribute_NoEviction_LeavesCompactionTraceNull()
+    {
+        var state = EmptyState().AppendStep(ModelStep("small")); // large default window → no eviction
+        var draft = await ContributeAsync(state);
+
+        Assert.Null(draft.CompactionTrace);
+    }
+
     private sealed class RecordingCompactionStrategy : ICompactionStrategy
     {
         public List<CompactionRequest> Calls { get; } = [];

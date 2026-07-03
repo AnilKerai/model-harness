@@ -34,6 +34,8 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         "harness.cost", unit: "", description: "Accumulated model call cost (no GenAI equivalent).");
     private static readonly Counter<long> SensorInterventions = Meter.CreateCounter<long>(
         "harness.sensor.interventions", unit: "{intervention}", description: "Number of sensor interventions raised.");
+    private static readonly Histogram<long> CompactionReclaimed = Meter.CreateHistogram<long>(
+        "harness.compaction.tokens_reclaimed", unit: "{token}", description: "Tokens reclaimed per compaction pass.");
 
     private readonly ConcurrentDictionary<string, Activity?> _activities = new();
 
@@ -108,6 +110,24 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             ["harness.guide.trajectory.added"] = contribution.TrajectoryMessagesAdded,
             ["harness.guide.prompt.char_delta"] = contribution.SystemPromptCharDelta,
         }));
+    }
+
+    public void LogCompaction(string taskId, int turn, CompactionTrace trace)
+    {
+        if (!_activities.TryGetValue(taskId, out var activity)) return;
+
+        activity?.AddEvent(new ActivityEvent("compact_context", tags: new ActivityTagsCollection
+        {
+            ["harness.turn"] = turn,
+            ["harness.compaction.steps_evicted"] = trace.StepsEvicted,
+            ["harness.compaction.tokens_reclaimed"] = trace.TokensReclaimed,
+            ["harness.compaction.folded"] = trace.Folded,
+            ["harness.compaction.usage.input_tokens"] = trace.Usage.InputTokens,
+            ["harness.compaction.usage.output_tokens"] = trace.Usage.OutputTokens,
+            ["harness.cost"] = (double)trace.Cost,
+        }));
+
+        CompactionReclaimed.Record(trace.TokensReclaimed, new TagList { { "harness.compaction.folded", trace.Folded } });
     }
 
     public void Complete(string taskId, AgentStatus status, string? failureReason)

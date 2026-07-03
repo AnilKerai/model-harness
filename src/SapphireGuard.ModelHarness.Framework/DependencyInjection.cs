@@ -186,6 +186,7 @@ public static class DependencyInjection
         services.AddSingleton<IGuide, ToolSelectorGuide>();
         services.AddSingleton<IGuide, ToolCatalogueGuide>();
         services.AddSingleton<IGuide, SkillsGuide>();
+        services.AddSingleton<IGuide, PinnedContextGuide>();
         return services;
     }
 

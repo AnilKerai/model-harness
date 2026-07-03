@@ -1,5 +1,6 @@
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Framework.Tracing;
 
 namespace SapphireGuard.ModelHarness.Framework.Guides;
 
@@ -43,4 +44,12 @@ public sealed class ContextDraft
     /// fold survives into subsequent turns.
     /// </summary>
     public CompactionResult? Compaction { get; set; }
+
+    /// <summary>
+    /// Set by <see cref="HeadEvictionTrajectoryGuide"/> when it compacts this turn: a trace of what was
+    /// reclaimed and the fold's spend. <see langword="null"/> when no compaction happened. Emitted by
+    /// <see cref="DefaultGuideRunner"/> via <see cref="ITracer.LogCompaction"/> — separate from
+    /// <see cref="Compaction"/> (which the loop consumes to persist state).
+    /// </summary>
+    public CompactionTrace? CompactionTrace { get; set; }
 }

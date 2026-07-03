@@ -1,5 +1,6 @@
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Framework.Tracing;
 
 namespace SapphireGuard.ModelHarness.Framework.Guides;
 
@@ -47,7 +48,9 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
 
         if (trimCount > 0)
         {
-            var evictedSteps = liveGroups[..trimCount].Select(g => g.Step).ToList();
+            var evicted = liveGroups[..trimCount];
+            var evictedSteps = evicted.Select(g => g.Step).ToList();
+            var tokensReclaimed = evicted.Sum(g => g.Messages.Sum(m => EstimateTokens(m.Content)));
             CompactionResult result;
             try
             {
@@ -67,6 +70,12 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
 
             summaryToRender = result.InjectedText;
             draft.Compaction = result;
+            draft.CompactionTrace = new CompactionTrace(
+                StepsEvicted: trimCount,
+                TokensReclaimed: tokensReclaimed,
+                Folded: result.UpdatedSummary is not null,
+                Usage: result.Usage,
+                Cost: result.Cost);
             liveGroups = liveGroups[trimCount..];
         }
 

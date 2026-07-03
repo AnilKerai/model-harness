@@ -112,7 +112,8 @@ public sealed class StepJsonConverterTests
         {
             RollingSummary = new RollingSummary("folded so far", 7),
             CompactionUsage = new Usage(500, 120),
-            CompactionCost = 0.25m
+            CompactionCost = 0.25m,
+            Pins = [new PinnedNote("Skill: verify", "the pinned procedure body")]
         };
         var checkpoint = new Checkpoint
         {
@@ -125,5 +126,8 @@ public sealed class StepJsonConverterTests
         Assert.Equal(7, restored.State.RollingSummary?.FoldedStepCount);
         Assert.Equal(0.25m, restored.State.CompactionCost);
         Assert.Equal(620, restored.State.CompactionUsage.TotalTokens);
+        var pin = Assert.Single(restored.State.Pins);
+        Assert.Equal("Skill: verify", pin.Label);
+        Assert.Equal("the pinned procedure body", pin.Content);
     }
 }

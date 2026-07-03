@@ -325,8 +325,17 @@ public sealed class HarnessLoop(
             Result: result);
 
         var afterExec = afterPre.AppendStep(executed);
+        if (result.Pins is { Count: > 0 } pins)
+            afterExec = afterExec with { Pins = MergePins(afterExec.Pins, pins) };
         var (afterPost, _, _) = await RunSensorsAsync(afterExec, turn, HookPoint.PostToolCall, executed, ct);
         return afterPost;
+    }
+
+    // Replace-by-label: existing pins keep their order (minus any the tool re-pinned), new pins appended.
+    private static IReadOnlyList<PinnedNote> MergePins(IReadOnlyList<PinnedNote> existing, IReadOnlyList<PinnedNote> incoming)
+    {
+        var replaced = incoming.Select(p => p.Label).ToHashSet();
+        return [.. existing.Where(p => !replaced.Contains(p.Label)), .. incoming];
     }
 
     private async Task<AgentOutcome> FinaliseOnBudgetAsync(AgentState state, int turn, string reason, CancellationToken ct)

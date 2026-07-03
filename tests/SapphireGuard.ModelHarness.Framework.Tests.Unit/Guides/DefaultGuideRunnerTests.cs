@@ -149,6 +149,31 @@ public sealed class DefaultGuideRunnerTests
         public void Complete(string taskId, AgentStatus status, string? failureReason) { }
         public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)
             => Contributions.Add((guideName, turn, contribution));
+        public List<CompactionTrace> Compactions { get; } = [];
+        public void LogCompaction(string taskId, int turn, CompactionTrace trace) => Compactions.Add(trace);
+    }
+
+    [Fact]
+    public async Task EmitsCompactionTrace_WhenTrajectoryGuidePopulatesOne()
+    {
+        var tracer = new RecordingTracer();
+        var runner = new DefaultGuideRunner([], new CompactingTrajectoryGuide(), tracer);
+
+        await runner.RunAsync(State(), [], CancellationToken.None);
+
+        var trace = Assert.Single(tracer.Compactions);
+        Assert.Equal(3, trace.StepsEvicted);
+        Assert.True(trace.Folded);
+    }
+
+    private sealed class CompactingTrajectoryGuide : ITrajectoryGuide
+    {
+        public string Name => "trajectory";
+        public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+        {
+            draft.CompactionTrace = new CompactionTrace(StepsEvicted: 3, TokensReclaimed: 120, Folded: true, Usage.Zero, Cost: 0.001m);
+            return Task.CompletedTask;
+        }
     }
 }
 

@@ -19,15 +19,16 @@ public sealed class SkillScriptedModelClient : IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct)
     {
-        var lastToolResult = messages.LastOrDefault(m => m.Role == MessageRole.Tool)?.Content ?? "";
-        // The skill name appears in a system message only once the SkillsGuide has
-        // rendered the catalogue — so this is true exactly when the skill exists.
+        // The skill name appears in a system message once the SkillsGuide has rendered the
+        // catalogue — true exactly when the skill exists. The body marker appears in a system
+        // message once skill_view has pinned the body into the persistent context region.
         var skillAvailable = messages.Any(m => m.Role == MessageRole.System && m.Content.Contains(SkillName));
+        var skillLoaded = messages.Any(m => m.Role == MessageRole.System && m.Content.Contains(BodyMarker));
 
         ModelResponse response =
-            lastToolResult.Contains(BodyMarker) ? Reuse()   // skill body just loaded → answer with it
-            : skillAvailable ? ViewSkill()                  // skill exists but not yet loaded → load it
-            : SaveSkill();                                  // no skill yet → capture one
+            skillLoaded ? Reuse()          // skill body is pinned in context → answer with it
+            : skillAvailable ? ViewSkill() // skill exists but not yet loaded → load it (pins the body)
+            : SaveSkill();                 // no skill yet → capture one
 
         return Task.FromResult(response);
     }

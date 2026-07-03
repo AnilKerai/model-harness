@@ -15,7 +15,7 @@ public sealed class SkillViewToolTests
     private static ToolContext Ctx() => ToolContext.Empty("task", "c1");
 
     [Fact]
-    public async Task ExistingSkill_ReturnsBody()
+    public async Task ExistingSkill_PinsBody_AndAcksInContent()
     {
         var store = new InMemorySkillStore();
         await store.SaveAsync(new Skill("deploy", "Deploys things", "when deploying", "step one then step two"),
@@ -25,8 +25,13 @@ public sealed class SkillViewToolTests
         var result = await tool.ExecuteAsync(Call("deploy"), Ctx(), CancellationToken.None);
 
         Assert.False(result.IsError);
-        Assert.Contains("step one then step two", result.Content);
-        Assert.Contains("when deploying", result.Content);
+        // The body is pinned into the persistent region, not returned as an evictable tool result.
+        Assert.Contains("deploy", result.Content);               // a short ack naming the skill
+        Assert.DoesNotContain("step one then step two", result.Content);
+        var pin = Assert.Single(result.Pins!);
+        Assert.Equal("Skill: deploy", pin.Label);
+        Assert.Contains("step one then step two", pin.Content);
+        Assert.Contains("when deploying", pin.Content);
     }
 
     [Fact]

@@ -58,6 +58,20 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
             systemPromptCharDelta = contribution.SystemPromptCharDelta
         });
 
+    public void LogCompaction(string taskId, int turn, CompactionTrace trace) =>
+        Emit(new
+        {
+            evt = "compaction",
+            taskId,
+            turn,
+            ts = _time.GetUtcNow(),
+            stepsEvicted = trace.StepsEvicted,
+            tokensReclaimed = trace.TokensReclaimed,
+            folded = trace.Folded,
+            usage = new { input = trace.Usage.InputTokens, output = trace.Usage.OutputTokens },
+            cost = trace.Cost
+        });
+
     private static void Emit(object payload) =>
         Console.WriteLine(JsonSerializer.Serialize(payload, Options));
 

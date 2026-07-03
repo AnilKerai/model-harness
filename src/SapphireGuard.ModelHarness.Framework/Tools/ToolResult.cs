@@ -13,10 +13,17 @@ namespace SapphireGuard.ModelHarness.Framework.Tools;
 /// </param>
 /// <param name="Cost">Optional cost incurred by the tool (e.g. a sub-agent delegation). Propagated to the parent budget.</param>
 /// <param name="Usage">Optional token usage incurred by the tool (e.g. a sub-agent delegation). Propagated to the parent budget.</param>
+/// <param name="Pins">
+/// Optional reference content to pin into the persistent context region. The loop commits these to
+/// <see cref="SapphireGuard.ModelHarness.Framework.State.AgentState.Pins"/> (replacing any pin with the
+/// same label), where a guide renders them as non-evictable system sections — so a tool that loads a
+/// procedure, contract, or spec can keep it verbatim in context past compaction. Default: none.
+/// </param>
 public sealed record ToolResult(
     string CallId,
     string Content,
     bool IsError = false,
     bool IsPending = false,
     decimal? Cost = null,
-    Usage? Usage = null);
+    Usage? Usage = null,
+    IReadOnlyList<PinnedNote>? Pins = null);

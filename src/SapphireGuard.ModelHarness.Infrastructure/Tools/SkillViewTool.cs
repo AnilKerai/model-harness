@@ -6,9 +6,11 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 
 /// <summary>
-/// Loads the full procedure for a single skill on demand (progressive disclosure):
-/// the skills catalogue shows the model what exists; this returns the body when it
-/// picks one.
+/// Loads the full procedure for a single skill on demand (progressive disclosure): the skills
+/// catalogue shows the model what exists; this loads the body when it picks one. The body is
+/// <b>pinned</b> into the persistent context region (via <see cref="ToolResult.Pins"/>) rather than
+/// returned as an evictable tool result, so a loaded procedure or output contract survives
+/// compaction — progressive disclosure without losing the loaded content to eviction.
 /// </summary>
 public sealed class SkillViewTool(ISkillStore store) : ITool
 {
@@ -48,6 +50,11 @@ public sealed class SkillViewTool(ISkillStore store) : ITool
         sb.AppendLine();
         sb.AppendLine(skill.Body);
 
-        return new ToolResult(call.CallId, sb.ToString().TrimEnd());
+        // Pin the body into the persistent context region so it survives compaction, and return a
+        // short ack rather than the (evictable) body — progressive disclosure without eviction loss.
+        return new ToolResult(
+            call.CallId,
+            $"Loaded skill '{skill.Name}'. Its full guidance is now pinned in your context under \"Skill: {skill.Name}\".",
+            Pins: [new PinnedNote($"Skill: {skill.Name}", sb.ToString().TrimEnd())]);
     }
 }

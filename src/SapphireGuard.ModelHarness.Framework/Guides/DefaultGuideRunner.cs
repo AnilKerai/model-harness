@@ -44,6 +44,9 @@ public sealed class DefaultGuideRunner(
         await trajectoryGuide.ContributeAsync(draft, state, ct);
         _tracer.LogGuideContribution(state.TaskId, turn, trajectoryGuide.Name, Diff(trajectoryBefore, draft));
 
+        if (draft.CompactionTrace is { } compaction)
+            _tracer.LogCompaction(state.TaskId, turn, compaction);
+
         return draft;
     }
 

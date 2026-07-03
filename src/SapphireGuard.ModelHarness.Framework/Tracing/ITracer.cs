@@ -38,6 +38,13 @@ public interface ITracer
     /// unchanged — override it to observe how the guide pipeline shapes each turn's context.
     /// </summary>
     void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution) { }
+
+    /// <summary>
+    /// Called after the trajectory guide evicts and compacts on a turn. <paramref name="turn"/> is the
+    /// zero-based turn index. Default no-op so existing <see cref="ITracer"/> implementations compile
+    /// unchanged — override it to observe when compaction fires, how much it reclaimed, and its spend.
+    /// </summary>
+    void LogCompaction(string taskId, int turn, CompactionTrace trace) { }
 }
 
 /// <summary>Scope bracketing a single model call. Complete it with the response, then dispose (a plain <c>using</c> does this). Disposal without <see cref="Complete"/> marks the span failed.</summary>

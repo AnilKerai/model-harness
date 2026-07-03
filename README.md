@@ -469,6 +469,7 @@ The framework provides the port; the caller provides the adapter. Defaults are n
 | Custom guides | `IGuide` | none (seven built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the built-in guides, before the trajectory guide. |
 | Long-term memory | `IMemoryStore` | `NullMemoryStore` | Supplies retrieved snippets to `MemoryGuide` each turn. `RetrieveAsync` takes a *query*, not a key — it does relevance ranking, so `MemoryGuide` passes the **latest user turn** as the query (falling back to `TaskText`). In a single-task run that *is* `TaskText`; in a multi-turn conversation it tracks the current question instead of anchoring on the opener. Replace with a vector store or knowledge graph for long-term retrieval. |
 | Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note — a stateless view) | Decides what replaces evicted trajectory steps. Default inserts a bare note; `AiCompactionStrategy` (via `WithAiCompaction(model, options)`) folds an incremental prose summary onto a persisted `AgentState.RollingSummary`, so cost stays flat as the run grows. Plug in your own via `WithCompactionStrategy<T>(options)`. Both take `CompactionOptions` (the eviction window, `WindowTokens`), so opting in always states the trigger. |
+| Pinned reference content | `ToolResult.Pins` → `AgentState.Pins` → `PinnedContextGuide` | empty | A tool returns `PinnedNote { Label, Content }` to pin reference content (a loaded procedure, an output contract) into the **non-evictable** system region, so it survives compaction. `skill_view` uses it — the loaded skill body is pinned, not left in the evictable trajectory, so progressive disclosure and post-compaction survival coexist. Checkpointed. |
 | Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) | Filters `AvailableTools` in `ContextDraft` before the catalogue is rendered. Controls what the model *sees*, not what the registry *holds*. |
 | Sub-agents / A2A | `ITool` wrapping a nested `HarnessLoop` or remote endpoint | none | A sub-agent is a tool whose `ExecuteAsync` runs another `HarnessLoop` or calls a remote A2A endpoint. Fully isolated — own model, sensors, and budget. |
 
@@ -500,7 +501,7 @@ overrides. Defaults are applied first; anything you add layers on top.
 Both `AddModelHarness` (core, in `Framework`) and `AddStandardModelHarness` (in
 `Infrastructure`) register the same **framework defaults**: the core loop and `Agent`, the
 full guide pipeline (`HarnessInstructionsGuide → ReActGuide → MemoryGuide → ToolSelectorGuide →
-ToolCatalogueGuide → SkillsGuide`, with `HeadEvictionTrajectoryGuide` always last),
+ToolCatalogueGuide → SkillsGuide → PinnedContextGuide`, with `HeadEvictionTrajectoryGuide` always last),
 `DefaultBudgetEnforcer`, the default context builder / guide runner / sensor runner, and a no-op
 for every remaining port (`NullMemoryStore`, `NullSkillStore`, `PassthroughToolSelector`,
 `NullCompactionStrategy`, `NullCheckpointStore`, `NullRateLimiter`, `NullHumanNotifier`).

@@ -330,12 +330,13 @@ are what let you reconstruct the decisions that shaped it — which tools a sele
 whether memory retrieval returned anything at all — which is often where an undesirable result
 traces back to.
 
-Every per-turn hook — `BeginModelCall`, `BeginToolCall`, `LogSensorResult`, `LogGuideContribution` —
-takes a zero-based `turn` index so a backend can group everything that happened on one turn. The
-loop threads its own turn counter into the model/tool/sensor hooks; the guide runner derives the
-same index from the trajectory (count of prior model calls), so no extra plumbing is needed to
-correlate guide deltas with the call they shaped. `LogGuideContribution` remains a default-interface
-no-op, so a custom `ITracer` that never overrode it still compiles; but replacing the post-hoc
+Every per-turn hook — `BeginModelCall`, `BeginToolCall`, `LogSensorResult`, `LogGuideContribution`,
+`LogCompaction` — takes a zero-based `turn` index so a backend can group everything that happened on
+one turn. The loop threads its own turn counter into the model/tool/sensor hooks; the guide runner
+derives the same index from the trajectory (count of prior model calls) and fires `LogCompaction`
+with a `CompactionTrace` (steps evicted, tokens reclaimed, folded, spend) whenever the trajectory
+guide compacts — the telemetry for watching eviction on a long run. `LogGuideContribution` and
+`LogCompaction` remain default-interface no-ops, so a custom `ITracer` that never overrode them still compiles; but replacing the post-hoc
 `LogModelCall`/`LogToolCall` with the `BeginModelCall`/`BeginToolCall` scope methods is a **breaking
 change** — update your implementation when you upgrade. `ModelResponse` now also carries optional
 `Model`/`Provider` fields (populated by the built-in adapters) that feed `gen_ai.request.model` and
@@ -630,3 +631,20 @@ public sealed class MyCompactionStrategy : ICompactionStrategy
 Return `UpdatedSummary = null` to behave as a stateless view (the `NullCompactionStrategy` default); return a folded `RollingSummary` to compact incrementally. `CompactAsync` runs in the loop's hot path — it should not throw (the harness wraps it and falls back to an omission note) but must honour cancellation.
 
 `samples/Compaction` is a runnable, no-API-key demo: it runs the same task with a narrating view strategy and a narrating fold strategy so you can watch, turn by turn, the view re-summarise the whole growing head while the fold only touches the newly evicted slice at a flat cost.
+
+### Pin reference content so it survives compaction
+
+Head-eviction drops the *oldest* trajectory steps first — but the oldest are often the most load-bearing (a loaded procedure, an output contract). If your agent loads such content via an early tool call and enforces it later, plain eviction will lose it. Pin it instead: a tool returns `PinnedNote { Label, Content }` on `ToolResult.Pins`, and the harness keeps it in the **non-evictable** system region.
+
+```csharp
+public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext ctx, CancellationToken ct)
+{
+    var spec = LoadSpec(call);
+    return Task.FromResult(new ToolResult(
+        call.CallId,
+        "Loaded the API spec — it's now pinned in your context.",   // short ack, not the (evictable) body
+        Pins: [new PinnedNote("API spec", spec)]));                  // the body, pinned to AgentState.Pins
+}
+```
+
+The loop commits pins to `AgentState.Pins` (replacing any pin with the same `Label`), `PinnedContextGuide` renders them as system sections every turn, and they're checkpointed. The built-in `skill_view` uses exactly this, so a loaded skill body survives compaction while progressive disclosure (load on demand) is preserved. Pinned sections count toward the eviction window, so keep them focused — pin the contract, not a whole document.

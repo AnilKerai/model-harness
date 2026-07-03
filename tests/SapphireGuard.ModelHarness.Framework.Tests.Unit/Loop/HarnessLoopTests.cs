@@ -507,6 +507,37 @@ public sealed class HarnessLoopTests
         Assert.Equal(0.5m, outcome.FinalState.CompactionCost);
         Assert.Equal(120, outcome.FinalState.CompactionUsage.TotalTokens);
     }
+
+    // ── Pinned reference content ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task RunAsync_ToolReturnsPins_CommitsThemToState()
+    {
+        var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall("load")), EndTurnResponse("done"));
+        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "ack", Pins: [new PinnedNote("Skill: x", "the body")]));
+        var harness = BuildHarness(client, toolRegistry: registry);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        var pin = Assert.Single(outcome.FinalState.Pins);
+        Assert.Equal("Skill: x", pin.Label);
+        Assert.Equal("the body", pin.Content);
+    }
+
+    [Fact]
+    public async Task RunAsync_ToolRepinsSameLabel_ReplacesNotDuplicates()
+    {
+        var client = new ScriptedModelClient(
+            ToolUseResponse(MakeToolCall("a")), ToolUseResponse(MakeToolCall("b")), EndTurnResponse("done"));
+        var n = 0;
+        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "ack", Pins: [new PinnedNote("Skill: x", $"body {++n}")]));
+        var harness = BuildHarness(client, toolRegistry: registry);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        var pin = Assert.Single(outcome.FinalState.Pins);   // replaced by label, not duplicated
+        Assert.Equal("body 2", pin.Content);
+    }
 }
 
 // ── Extra test double ─────────────────────────────────────────────────────────

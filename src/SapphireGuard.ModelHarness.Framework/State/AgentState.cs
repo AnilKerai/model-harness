@@ -33,6 +33,14 @@ public sealed record AgentState
     /// <summary>Arbitrary key-value metadata forwarded to tools via <see cref="SapphireGuard.ModelHarness.Framework.Tools.ToolContext"/>.</summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// Reference content pinned into the persistent context region — rendered as non-evictable system
+    /// sections every turn, never subject to trajectory eviction/compaction. Populated by the loop from
+    /// <see cref="Tools.ToolResult.Pins"/> (replacing any pin with the same label). Checkpointed, so a
+    /// resumed run keeps its loaded procedures and contracts.
+    /// </summary>
+    public IReadOnlyList<PinnedNote> Pins { get; init; } = [];
+
     /// <summary>Cumulative token usage incurred by AI-powered sensors during this run.</summary>
     public Usage SensorUsage { get; init; } = Usage.Zero;
 
