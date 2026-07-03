@@ -27,7 +27,7 @@ public sealed class DefaultContextBuilder(IGuideRunner guideRunner) : IContextBu
 
         messages.AddRange(draft.TrajectoryMessages);
 
-        return new ContextBuildResult(messages, draft.AvailableTools);
+        return new ContextBuildResult(messages, draft.AvailableTools, draft.Compaction);
     }
 
     private static string AssembleSystemMessage(ContextDraft draft)

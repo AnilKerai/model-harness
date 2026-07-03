@@ -34,4 +34,13 @@ public sealed class ContextDraft
     /// rendering instead of the context builder hard-coding each section.
     /// </summary>
     public List<string> SystemSections { get; } = [];
+
+    /// <summary>
+    /// Set by <see cref="HeadEvictionTrajectoryGuide"/> when it compacts this turn: the compaction
+    /// strategy's result, carrying the rolling summary to persist and any model spend to attribute.
+    /// <see langword="null"/> when no compaction happened. The loop reads it to commit the summary
+    /// and spend onto the next <see cref="State.AgentState"/> — the channel by which the guide's
+    /// fold survives into subsequent turns.
+    /// </summary>
+    public CompactionResult? Compaction { get; set; }
 }

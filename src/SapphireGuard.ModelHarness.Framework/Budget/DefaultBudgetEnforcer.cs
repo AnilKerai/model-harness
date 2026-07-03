@@ -16,8 +16,8 @@ public sealed class DefaultBudgetEnforcer(TimeProvider? timeProvider = null) : I
         var budget = state.Budget;
 
         var turns = 0;
-        var totalCost = state.SensorCost;
-        var totalTokens = state.SensorUsage.TotalTokens;
+        var totalCost = state.SensorCost + state.CompactionCost;
+        var totalTokens = state.SensorUsage.TotalTokens + state.CompactionUsage.TotalTokens;
         foreach (var step in state.Trajectory)
         {
             if (step is ModelCallStep call)

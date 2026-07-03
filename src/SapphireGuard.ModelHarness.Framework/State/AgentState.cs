@@ -40,6 +40,20 @@ public sealed record AgentState
     public decimal SensorCost { get; init; } = 0m;
 
     /// <summary>
+    /// The rolling summary of trajectory steps folded out of the live context by an incremental
+    /// compaction strategy. <see langword="null"/> until the first fold (or always null for the
+    /// default view strategy). Carried across turns and checkpointed so a resumed run continues
+    /// folding from the watermark instead of re-summarising.
+    /// </summary>
+    public RollingSummary? RollingSummary { get; init; }
+
+    /// <summary>Cumulative token usage incurred by the compaction strategy during this run.</summary>
+    public Usage CompactionUsage { get; init; } = Usage.Zero;
+
+    /// <summary>Cumulative cost incurred by the compaction strategy during this run.</summary>
+    public decimal CompactionCost { get; init; } = 0m;
+
+    /// <summary>
     /// Set when <see cref="Status"/> is <see cref="AgentStatus.AwaitingHuman"/>. Identifies the
     /// pending <c>ask_human</c> call so a checkpoint loaded from disk is fully self-describing —
     /// callers can read this to know which call to resolve before passing the state back to

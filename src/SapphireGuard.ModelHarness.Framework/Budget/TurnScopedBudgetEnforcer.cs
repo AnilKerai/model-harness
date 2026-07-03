@@ -43,10 +43,11 @@ public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) 
             }
         }
 
-        // ponytail: sensor spend is whole-run cumulative on AgentState, not per-turn — chat mode
-        // wires no AI sensors so this is ~0. Per-turn sensor accounting would need per-step usage.
-        totalCost += state.SensorCost;
-        totalTokens += state.SensorUsage.TotalTokens;
+        // ponytail: sensor + compaction spend is whole-run cumulative on AgentState, not per-turn —
+        // chat mode wires no AI sensors and defaults to the no-cost view compaction, so this is ~0.
+        // Per-turn accounting would need per-step usage.
+        totalCost += state.SensorCost + state.CompactionCost;
+        totalTokens += state.SensorUsage.TotalTokens + state.CompactionUsage.TotalTokens;
 
         if (turns >= budget.MaxTurns)
             return BudgetCheckResult.Exhausted($"Reached MaxTurns ({budget.MaxTurns}) this turn.");

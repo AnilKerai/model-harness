@@ -12,6 +12,10 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// When steps are evicted, the injected <see cref="ICompactionStrategy"/> decides what
 /// to put in their place — a bare omission note (<see cref="NullCompactionStrategy"/>)
 /// or an AI-generated prose summary (<c>AiCompactionStrategy</c> in Infrastructure).
+/// Steps already represented by <see cref="AgentState.RollingSummary"/> are skipped and only
+/// the newly evicted slice is passed to the strategy; a folded result is handed back to the loop
+/// via <see cref="ContextDraft.Compaction"/> to persist onto the next state, so an incremental
+/// strategy never re-summarises the whole evicted head.
 /// Must run last in the guide pipeline so it can measure all prior guide contributions
 /// and compute an accurate token budget rather than relying on a fixed reserve.
 /// When <paramref name="pinOriginalGoal"/> is <see langword="false"/> (chat mode) the
@@ -24,26 +28,56 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
 
     public async Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
     {
-        var stepGroups = RenderSteps(state.Trajectory);
+        var allGroups = RenderSteps(state.Trajectory);
+
+        // Steps already represented by the rolling summary are not re-rendered — the fold watermark.
+        // Head-only eviction keeps the trajectory head stable, so this group index is stable across turns.
+        var foldedCount = Math.Min(state.RollingSummary?.FoldedStepCount ?? 0, allGroups.Count);
+        var liveGroups = allGroups[foldedCount..];
+        var priorSummary = state.RollingSummary;
 
         var budget = state.Budget.MaxContextTokens - EstimateDraftTokens(draft);
-        var trimCount = ComputeTrimCount(stepGroups, budget);
+        if (priorSummary is not null)
+            budget -= EstimateTokens(priorSummary.Text);
+
+        var trimCount = ComputeTrimCount(liveGroups, budget);
+
+        // Default: carry the prior summary forward unchanged (nothing new evicted this turn).
+        var summaryToRender = priorSummary?.Text;
 
         if (trimCount > 0)
         {
-            var evictedContent = stepGroups[..trimCount]
-                .SelectMany(g => g.Messages.Select(m => m.Content))
-                .ToList();
-            var summary = await compactionStrategy.SummariseAsync(trimCount, evictedContent, budget, ct);
-            draft.TrajectoryMessages.Add(new Message(MessageRole.System, summary));
-            stepGroups = stepGroups[trimCount..];
+            var evictedSteps = liveGroups[..trimCount].Select(g => g.Step).ToList();
+            CompactionResult result;
+            try
+            {
+                result = await compactionStrategy.CompactAsync(new CompactionRequest
+                {
+                    State = state,
+                    EvictedSteps = evictedSteps,
+                    PriorSummary = priorSummary,
+                    RemainingTokenBudget = budget
+                }, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // A third-party strategy must never take down the run — fall back to a bare note.
+                result = CompactionResult.OmissionNote(trimCount);
+            }
+
+            summaryToRender = result.InjectedText;
+            draft.Compaction = result;
+            liveGroups = liveGroups[trimCount..];
         }
+
+        if (!string.IsNullOrEmpty(summaryToRender))
+            draft.TrajectoryMessages.Add(new Message(MessageRole.System, summaryToRender));
 
         if (pinOriginalGoal)
             draft.TrajectoryMessages.Add(new Message(MessageRole.System,
                 $"[ORIGINAL GOAL] {state.TaskText}"));
 
-        foreach (var (_, messages) in stepGroups)
+        foreach (var (_, messages) in liveGroups)
             draft.TrajectoryMessages.AddRange(messages);
     }
 

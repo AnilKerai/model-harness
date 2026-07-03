@@ -270,6 +270,24 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
         return this;
     }
 
+    /// <summary>
+    /// Replaces the default <see cref="ICompactionStrategy"/> (a bare omission note) with a custom
+    /// strategy — e.g. structured clearing or semantic compression. For the built-in AI fold, prefer
+    /// the <c>WithAiCompaction(model)</c> shortcut in Infrastructure.
+    /// </summary>
+    public ModelHarnessBuilder WithCompactionStrategy<TImpl>() where TImpl : class, ICompactionStrategy
+    {
+        Services.Replace(ServiceDescriptor.Singleton<ICompactionStrategy, TImpl>());
+        return this;
+    }
+
+    /// <summary>Replaces the default <see cref="ICompactionStrategy"/> with a custom implementation via factory.</summary>
+    public ModelHarnessBuilder WithCompactionStrategy(Func<IServiceProvider, ICompactionStrategy> factory)
+    {
+        Services.Replace(ServiceDescriptor.Singleton(factory));
+        return this;
+    }
+
     internal void ApplyGuides()
     {
         foreach (var factory in _customGuides)

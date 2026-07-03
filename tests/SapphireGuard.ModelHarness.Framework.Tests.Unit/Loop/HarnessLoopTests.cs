@@ -1,4 +1,6 @@
 using System.Text.Json;
+using SapphireGuard.ModelHarness.Framework.Context;
+using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Loop;
 using BudgetNs = SapphireGuard.ModelHarness.Framework.Budget;
 using SapphireGuard.ModelHarness.Framework.Persistence;
@@ -473,6 +475,38 @@ public sealed class HarnessLoopTests
 
         Assert.Single(tracer.ToolCompletions);
     }
+
+    // ── Compaction persistence ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RunAsync_ContextBuildReportsCompaction_PersistsSummaryAndCountsSpend()
+    {
+        // The write-back: when the trajectory guide folds (surfaced on ContextBuildResult), the loop
+        // commits the rolling summary onto the next state and accumulates the strategy's spend.
+        var compaction = new CompactionResult
+        {
+            InjectedText = "rolling",
+            UpdatedSummary = new RollingSummary("rolling", 3),
+            Usage = new Usage(100, 20),
+            Cost = 0.5m
+        };
+        var harness = new HarnessLoop(
+            modelClient: new ScriptedModelClient(EndTurnResponse("done")),
+            toolRegistry: new StubToolRegistry(),
+            contextBuilder: new CompactingContextBuilder(compaction),
+            sensorRunner: new DefaultSensorRunner([]),
+            budgetEnforcer: new AlwaysOkBudgetEnforcer(),
+            rateLimiter: new NullRateLimiter(),
+            tracer: new NullTracer(),
+            checkpointStore: new NullCheckpointStore());
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal("rolling", outcome.FinalState.RollingSummary?.Text);
+        Assert.Equal(3, outcome.FinalState.RollingSummary?.FoldedStepCount);
+        Assert.Equal(0.5m, outcome.FinalState.CompactionCost);
+        Assert.Equal(120, outcome.FinalState.CompactionUsage.TotalTokens);
+    }
 }
 
 // ── Extra test double ─────────────────────────────────────────────────────────
@@ -484,6 +518,14 @@ file sealed class ThrowingModelClient(string message) : Model.IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct) =>
         throw new InvalidOperationException(message);
+}
+
+// Reports a fixed compaction result on every build, as the trajectory guide would after a fold.
+file sealed class CompactingContextBuilder(CompactionResult compaction) : IContextBuilder
+{
+    public Task<ContextBuildResult> BuildAsync(AgentState state, IReadOnlyList<ITool> tools, CancellationToken ct) =>
+        Task.FromResult(new ContextBuildResult(
+            [new Message(MessageRole.User, state.TaskText)], tools, compaction));
 }
 
 // Records how the loop drives the model/tool trace scopes.

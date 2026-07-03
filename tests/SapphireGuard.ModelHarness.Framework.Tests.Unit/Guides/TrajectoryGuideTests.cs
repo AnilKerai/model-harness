@@ -163,4 +163,81 @@ public sealed class HeadEvictionTrajectoryGuideTests
         Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("bad content"));
         Assert.Single(draft.TrajectoryMessages, m => m.Role == MessageRole.Assistant && m.Content == "clean answer");
     }
+
+    // ── Incremental fold compaction ───────────────────────────────────────────
+
+    // MaxContextTokens = 1 forces the whole live tail to be evicted, so compaction always fires.
+    private static AgentState TinyBudgetState() =>
+        AgentState.NewTask("test", new StateBudget
+        {
+            MaxTurns = 10, MaxContextTokens = 1, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(1)
+        }, DateTimeOffset.UtcNow);
+
+    [Fact]
+    public async Task Contribute_Fold_PassesOnlyNewSliceAndPriorSummary_SkipsFoldedHead()
+    {
+        // The "fold, not view" guarantee: with a prior summary covering the first 2 groups, only the
+        // newly evicted tail is handed to the strategy — never the whole head again — and the
+        // watermark advances by exactly that slice.
+        var strategy = new RecordingCompactionStrategy();
+        var built = TinyBudgetState()
+            .AppendStep(ModelStep("FOLDED_M1"))
+            .AppendStep(ModelStep("LIVE_TAIL"));
+        var state = built with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 2) };
+
+        var draft = new ContextDraft();
+        await new HeadEvictionTrajectoryGuide(strategy).ContributeAsync(draft, state, CancellationToken.None);
+
+        var call = Assert.Single(strategy.Calls);
+        Assert.Equal("PRIOR SUMMARY", call.PriorSummary?.Text);
+        Assert.DoesNotContain(call.EvictedSteps, s => s is UserMessageStep);       // folded head not re-evicted
+        Assert.All(call.EvictedSteps, s => Assert.IsType<ModelCallStep>(s));       // only live-tail steps
+        Assert.Equal(2 + call.EvictedSteps.Count, draft.Compaction!.UpdatedSummary!.FoldedStepCount);
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("FOLDED_M1"));
+    }
+
+    [Fact]
+    public async Task Contribute_ViewStrategy_CompactsButPersistsNothing()
+    {
+        var state = TinyBudgetState().AppendStep(ModelStep("some tail content to evict"));
+        var draft = await ContributeAsync(state); // uses NullCompactionStrategy (a view)
+
+        Assert.NotNull(draft.Compaction);                 // compaction happened
+        Assert.Null(draft.Compaction!.UpdatedSummary);    // but nothing to persist — stays a view
+    }
+
+    [Fact]
+    public async Task Contribute_StrategyThrows_FailsOpenWithOmissionNoteAndDoesNotThrow()
+    {
+        var state = TinyBudgetState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await new HeadEvictionTrajectoryGuide(new ThrowingCompactionStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains("omitted", draft.Compaction!.InjectedText);
+        Assert.Null(draft.Compaction.UpdatedSummary);
+    }
+
+    private sealed class RecordingCompactionStrategy : ICompactionStrategy
+    {
+        public List<CompactionRequest> Calls { get; } = [];
+
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct)
+        {
+            Calls.Add(request);
+            var folded = (request.PriorSummary?.FoldedStepCount ?? 0) + request.EvictedSteps.Count;
+            return Task.FromResult(new CompactionResult
+            {
+                InjectedText = "SUMMARY",
+                UpdatedSummary = new RollingSummary("SUMMARY", folded)
+            });
+        }
+    }
+
+    private sealed class ThrowingCompactionStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            throw new InvalidOperationException("strategy boom");
+    }
 }

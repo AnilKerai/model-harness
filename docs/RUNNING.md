@@ -61,12 +61,15 @@ dotnet run --project samples/OllamaToolCall
 
 ## No API key
 
-Several samples use `FakeModelClient` and need no external dependencies:
+Several samples use a scripted model client and need no external dependencies:
 
 ```bash
 dotnet run --project samples/SubAgent
 dotnet run --project samples/SkillLearning
+dotnet run --project samples/Compaction
 ```
+
+`samples/Compaction` runs the same investigation twice — once with a stateless *view* strategy and once with an incremental *fold* — with a tiny context window so eviction fires most turns. Each strategy prints what it does, so you can watch the view re-summarise the whole growing head every turn while the fold only ever touches the newly evicted slice (and persists a rolling summary at a flat cost).
 
 ## What you'll see
 

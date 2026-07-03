@@ -224,4 +224,28 @@ public sealed class DefaultBudgetEnforcerTests
         Assert.True(result.IsExhausted);
         Assert.Contains("MaxCost", result.Reason);
     }
+
+    [Fact]
+    public void Check_CompactionCostAtLimit_ReturnsExhausted()
+    {
+        var budget = Generous with { MaxCost = 1m };
+        var state = EmptyState(budget) with { CompactionCost = 1m };
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
+    }
+
+    [Fact]
+    public void Check_CompactionUsageAtLimit_ReturnsExhausted()
+    {
+        var budget = Generous with { MaxContextTokens = 100 };
+        var state = EmptyState(budget) with { CompactionUsage = new Usage(60, 40) };
+
+        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxContextTokens", result.Reason);
+    }
 }

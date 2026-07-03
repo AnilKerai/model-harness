@@ -1,9 +1,11 @@
 using System.Text.Json;
+using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 using SapphireGuard.ModelHarness.Infrastructure.Persistence.Serialization;
 using Xunit;
+using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
 
 namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Infrastructure.Persistence;
 
@@ -95,5 +97,33 @@ public sealed class StepJsonConverterTests
     {
         var json = """{"$type":"UnknownStep","Id":"00000000-0000-0000-0000-000000000001"}""";
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Step>(json, Options));
+    }
+
+    [Fact]
+    public void Checkpoint_with_rolling_summary_and_compaction_spend_round_trips()
+    {
+        // The resume-without-recompute guarantee: the folded summary and its watermark must survive
+        // a checkpoint so a reloaded run folds onward instead of re-summarising from scratch.
+        var budget = new StateBudget
+        {
+            MaxTurns = 10, MaxContextTokens = 100_000, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(5)
+        };
+        var state = AgentState.NewTask("task", budget, DateTimeOffset.UtcNow) with
+        {
+            RollingSummary = new RollingSummary("folded so far", 7),
+            CompactionUsage = new Usage(500, 120),
+            CompactionCost = 0.25m
+        };
+        var checkpoint = new Checkpoint
+        {
+            CheckpointId = "c1", RunId = "r1", CreatedAt = DateTimeOffset.UtcNow, TurnNumber = 3, State = state
+        };
+
+        var restored = CheckpointSerializer.Deserialize(CheckpointSerializer.Serialize(checkpoint))!;
+
+        Assert.Equal("folded so far", restored.State.RollingSummary?.Text);
+        Assert.Equal(7, restored.State.RollingSummary?.FoldedStepCount);
+        Assert.Equal(0.25m, restored.State.CompactionCost);
+        Assert.Equal(620, restored.State.CompactionUsage.TotalTokens);
     }
 }

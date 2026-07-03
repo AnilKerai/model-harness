@@ -267,7 +267,21 @@ public sealed class HarnessLoop(
             Usage: response.Usage,
             Cost: response.Cost);
 
-        return (state.AppendStep(step), response);
+        var next = state.AppendStep(step);
+
+        // Commit any compaction the trajectory guide performed this build: persist the rolling
+        // summary (null keeps the prior — a view strategy) and accumulate its spend onto the budget.
+        if (buildResult.Compaction is { } compaction)
+            next = next with
+            {
+                RollingSummary = compaction.UpdatedSummary ?? next.RollingSummary,
+                CompactionUsage = new Usage(
+                    next.CompactionUsage.InputTokens + compaction.Usage.InputTokens,
+                    next.CompactionUsage.OutputTokens + compaction.Usage.OutputTokens),
+                CompactionCost = next.CompactionCost + compaction.Cost
+            };
+
+        return (next, response);
     }
 
     private async Task<AgentState> ExecuteToolAsync(AgentState state, int turn, ToolCall call, CancellationToken ct)
