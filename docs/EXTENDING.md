@@ -599,6 +599,8 @@ builder.WithAiCompaction(
 
 `CompactionOptions` is **required** when you opt into compaction, so a strategy is never wired without stating its trigger. `WindowTokens` is the per-turn context-window size the guide keeps each turn under by evicting — it is deliberately separate from `Budget.MaxTotalTokens`, which is the *cumulative* run-total token cap the enforcer checks. Set `WindowTokens` to your model's usable context window and `MaxTotalTokens` to however many tokens the whole run may consume; conflating them (the old single `MaxContextTokens`) hard-stopped compacted runs at ~one window. To tune the window without changing the strategy, use `WithCompactionOptions(...)`.
 
+**Size `WindowTokens` to the task, not tight.** Below the window the trajectory guide does nothing, so a task that fits never compacts and pays zero cost or lossiness. Compaction trades fidelity for bounded context — it earns its keep only on long-horizon runs (deep research, multi-hour coding, long chat). A bounded task (e.g. a verification agent that loads a procedure, checks a few sources, and emits a report) should keep a generous window and leave compaction dormant; forcing a small window just pays the fidelity cost for no benefit.
+
 The rolling summary is checkpointed, so a resumed run rehydrates it and folds onward rather than recomputing. The strategy's token usage and cost accumulate on `AgentState.CompactionUsage` / `CompactionCost` and are counted by the budget enforcer. It fails open — on model error or empty output the prior summary is preserved and a bare note is injected for the newly evicted slice (retried next turn), so a compaction failure never blocks the run. Use a fast, cheap model (Haiku-class).
 
 ### Write a custom compaction strategy
