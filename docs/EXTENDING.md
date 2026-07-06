@@ -581,7 +581,10 @@ builder.WithResilientModel(_ => new AzureOpenAIModelClient(new AzureOpenAIClient
 
 The provider SDKs already retry transient failures and apply a request timeout — tune those via
 the adapter's `ConfigureClient` hook (e.g. `ConfigureClient = o => o.Timeout = TimeSpan.FromMinutes(2)`
-on `ClaudeClientOptions`, or `o => o.NetworkTimeout = ...` on `AzureOpenAIClientOptions`). For an
+on `ClaudeClientOptions`, or `o => o.NetworkTimeout = ...` on `AzureOpenAIClientOptions`). Cap
+per-call output length with `MaxOutputTokens` on any of the three options records — Anthropic
+defaults to 8096 when unset (the API requires a value), Azure and Ollama fall back to the
+service/model default. For an
 additional circuit breaker that fast-fails during a sustained outage, wrap the client with
 `WithResilientModel` from the Resilience package; pass a custom `ResiliencePipeline<ModelResponse>` as
 a second argument to override the default breaker.

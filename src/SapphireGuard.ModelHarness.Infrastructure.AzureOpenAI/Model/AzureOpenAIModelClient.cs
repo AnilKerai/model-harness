@@ -24,6 +24,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
 {
     private readonly ChatClient _chatClient;
     private readonly string _deploymentName;
+    private readonly int? _maxOutputTokens;
 
     public AzureOpenAIModelClient(AzureOpenAIClientOptions options)
     {
@@ -36,6 +37,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
 
         _chatClient = client.GetChatClient(options.DeploymentName);
         _deploymentName = options.DeploymentName;
+        _maxOutputTokens = options.MaxOutputTokens;
     }
 
     public async Task<ModelResponse> CallAsync(
@@ -46,6 +48,8 @@ public sealed class AzureOpenAIModelClient : IModelClient
         var chatMessages = BuildMessages(messages);
 
         var options = new ChatCompletionOptions();
+        if (_maxOutputTokens is { } max)
+            options.MaxOutputTokenCount = max;
         foreach (var tool in availableTools)
             options.Tools.Add(MapTool(tool));
 

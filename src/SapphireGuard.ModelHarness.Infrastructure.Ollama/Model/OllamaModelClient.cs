@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using OllamaSharp;
+using OllamaSharp.Models;
 using OllamaSharp.Models.Chat;
 using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.State;
@@ -36,6 +37,7 @@ public sealed class OllamaModelClient : IModelClient
 {
     private readonly OllamaApiClient _client;
     private readonly string _model;
+    private readonly int? _maxOutputTokens;
 
     public OllamaModelClient(OllamaClientOptions options)
     {
@@ -43,6 +45,7 @@ public sealed class OllamaModelClient : IModelClient
         options.ConfigureHttpClient?.Invoke(http);
         _client = new OllamaApiClient(http);
         _model = options.ModelId;
+        _maxOutputTokens = options.MaxOutputTokens;
     }
 
     public async Task<ModelResponse> CallAsync(
@@ -58,7 +61,8 @@ public sealed class OllamaModelClient : IModelClient
             Model = _model,
             Messages = ollamaMessages,
             Tools = ollamaTools.Count > 0 ? ollamaTools : null,
-            Stream = false
+            Stream = false,
+            Options = _maxOutputTokens is { } max ? new RequestOptions { NumPredict = max } : null
         };
 
         ChatResponseStream? last = null;

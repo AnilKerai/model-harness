@@ -20,6 +20,12 @@ public sealed record AzureOpenAIClientOptions
     public string? ApiKey { get; init; }
 
     /// <summary>
+    /// Maximum number of output tokens the model may generate per call. When null the
+    /// service/model default applies. Set it to cap per-call cost and latency, or to allow longer completions.
+    /// </summary>
+    public int? MaxOutputTokens { get; init; }
+
+    /// <summary>
     /// Optional hook to configure the underlying SDK client — retry policy, network timeout, etc.
     /// Azure OpenAI's System.ClientModel pipeline already retries transient failures and applies a
     /// per-attempt network timeout by default; use this to tune them

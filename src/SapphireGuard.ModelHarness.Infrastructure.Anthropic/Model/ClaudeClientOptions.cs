@@ -16,6 +16,13 @@ public sealed record ClaudeClientOptions
     public string ModelId { get; init; } = "claude-sonnet-4-5-20251001";
 
     /// <summary>
+    /// Maximum number of output tokens the model may generate per call. The Anthropic API requires
+    /// this value; when null it defaults to 8096. Raise it for tasks that need longer completions,
+    /// lower it to cap per-call cost and latency.
+    /// </summary>
+    public int? MaxOutputTokens { get; init; }
+
+    /// <summary>
     /// Optional hook to configure the underlying SDK client — retry count, request timeout, base URL,
     /// custom headers, etc. The Anthropic SDK already retries transient failures and applies a request
     /// timeout by default; use this to tune them (e.g. <c>o =&gt; o.Timeout = TimeSpan.FromMinutes(2)</c>).

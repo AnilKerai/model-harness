@@ -26,6 +26,7 @@ public sealed class ClaudeModelClient : IModelClient
 {
     private readonly AnthropicClient _client;
     private readonly string _modelId;
+    private readonly int _maxTokens;
 
     public ClaudeModelClient(ClaudeClientOptions options)
     {
@@ -33,6 +34,7 @@ public sealed class ClaudeModelClient : IModelClient
         options.ConfigureClient?.Invoke(clientOptions);
         _client = new AnthropicClient(clientOptions);
         _modelId = options.ModelId;
+        _maxTokens = options.MaxOutputTokens ?? 8096;
     }
 
     public async Task<ModelResponse> CallAsync(
@@ -51,7 +53,7 @@ public sealed class ClaudeModelClient : IModelClient
         var request = new MessageCreateParams
         {
             Model = _modelId,
-            MaxTokens = 8096,
+            MaxTokens = _maxTokens,
             Messages = sdkMessages,
             Tools = sdkTools.Length > 0 ? sdkTools : null,
             System = systemText is null ? (MessageCreateParamsSystem?)null : systemText

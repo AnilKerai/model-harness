@@ -9,6 +9,12 @@ public sealed record OllamaClientOptions
     public required string ModelId { get; init; }
 
     /// <summary>
+    /// Maximum number of output tokens the model may generate per call (Ollama's <c>num_predict</c>).
+    /// When null the server/model default applies.
+    /// </summary>
+    public int? MaxOutputTokens { get; init; }
+
+    /// <summary>
     /// Optional hook to configure the <see cref="HttpClient"/> backing the Ollama client — most
     /// usefully its <see cref="HttpClient.Timeout"/> (OllamaSharp has no built-in retry or timeout).
     /// <see cref="OllamaClientOptions.BaseUrl"/> is applied first, then this hook runs.
