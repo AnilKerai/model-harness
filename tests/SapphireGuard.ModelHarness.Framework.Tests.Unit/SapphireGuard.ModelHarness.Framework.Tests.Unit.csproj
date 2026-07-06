@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\src\SapphireGuard.ModelHarness.Infrastructure\SapphireGuard.ModelHarness.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\SapphireGuard.ModelHarness.Infrastructure.Persistence\SapphireGuard.ModelHarness.Infrastructure.Persistence.csproj" />
     <ProjectReference Include="..\..\src\SapphireGuard.ModelHarness.Infrastructure.Ollama\SapphireGuard.ModelHarness.Infrastructure.Ollama.csproj" />
+    <ProjectReference Include="..\..\src\SapphireGuard.ModelHarness.Infrastructure.Resilience\SapphireGuard.ModelHarness.Infrastructure.Resilience.csproj" />
   </ItemGroup>
 
   <ItemGroup>

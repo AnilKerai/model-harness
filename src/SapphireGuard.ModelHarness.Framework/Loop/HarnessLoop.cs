@@ -307,10 +307,22 @@ public sealed class HarnessLoop(
 
         var ctx = ToolContext.Empty(state.TaskId, call.CallId);
         using var scope = tracer.BeginToolCall(state.TaskId, turn, call);
+
+        var deadline = state.Budget.MaxToolCallDuration;
+        using var deadlineCts = deadline is { } d ? new CancellationTokenSource(d, _time) : null;
+        using var linkedCts = deadlineCts is null ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(ct, deadlineCts.Token);
+
         ToolResult result;
         try
         {
-            result = await toolRegistry.DispatchAsync(call, ctx, ct);
+            result = await toolRegistry.DispatchAsync(call, ctx, linkedCts?.Token ?? ct);
+        }
+        catch (OperationCanceledException) when (deadlineCts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
+        {
+            result = new ToolResult(call.CallId,
+                $"Tool '{call.ToolName}' exceeded the {deadline!.Value.TotalSeconds:0}s tool-call deadline.",
+                IsError: true);
         }
         catch (Exception ex)
         {

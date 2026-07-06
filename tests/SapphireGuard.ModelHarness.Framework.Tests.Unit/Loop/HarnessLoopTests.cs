@@ -20,7 +20,7 @@ public sealed class HarnessLoopTests
     private static HarnessLoop BuildHarness(
         ScriptedModelClient modelClient,
         IEnumerable<ISensor>? sensors = null,
-        StubToolRegistry? toolRegistry = null,
+        IToolRegistry? toolRegistry = null,
         BudgetNs.IBudgetEnforcer? budgetEnforcer = null,
         Tracing.ITracer? tracer = null)
     {
@@ -118,6 +118,39 @@ public sealed class HarnessLoopTests
         await harness.RunAsync(NewState(), CancellationToken.None);
 
         Assert.Equal(2, toolRegistry.DispatchCount);
+    }
+
+    // ── Tool-call deadline ────────────────────────────────────────────────────
+
+    [Fact(Timeout = 5000)]
+    public async Task RunAsync_ToolExceedsDeadline_ReturnsRecoverableErrorAndContinues()
+    {
+        // A tool that blocks on its token is cancelled by the per-tool deadline, surfaced as an
+        // IsError result; the run continues so the model can replan (it does not fail the run).
+        var registry = new BlockingToolRegistry();
+        var client = new ScriptedModelClient(
+            ToolUseResponse(MakeToolCall("slow-tool")),
+            EndTurnResponse("recovered after timeout"));
+        var harness = BuildHarness(client, toolRegistry: registry);
+
+        var state = AgentState.NewTask("test task", new SapphireGuard.ModelHarness.Framework.State.Budget
+        {
+            MaxTurns = 10,
+            MaxTotalTokens = 100_000,
+            MaxCost = 10m,
+            MaxWallClock = TimeSpan.FromMinutes(1),
+            MaxToolCallDuration = TimeSpan.FromMilliseconds(50)
+        }, DateTimeOffset.UtcNow);
+
+        var outcome = await harness.RunAsync(state, CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal("recovered after timeout", outcome.FinalAnswer);
+        Assert.Equal(1, registry.DispatchCount);
+
+        var toolStep = outcome.FinalState.Trajectory.OfType<ToolCallStep>().Single();
+        Assert.True(toolStep.Result.IsError);
+        Assert.Contains("deadline", toolStep.Result.Content);
     }
 
     // ── Budget ────────────────────────────────────────────────────────────────
@@ -549,6 +582,23 @@ file sealed class ThrowingModelClient(string message) : Model.IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct) =>
         throw new InvalidOperationException(message);
+}
+
+// A tool that blocks until its cancellation token fires — used to exercise the per-tool deadline.
+file sealed class BlockingToolRegistry : IToolRegistry
+{
+    private int _dispatchCount;
+    public int DispatchCount => _dispatchCount;
+
+    public IReadOnlyList<ITool> List() => [];
+    public ITool? Get(string name) => null;
+
+    public async Task<ToolResult> DispatchAsync(ToolCall call, ToolContext context, CancellationToken ct)
+    {
+        Interlocked.Increment(ref _dispatchCount);
+        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        return new ToolResult(call.CallId, "unreachable");
+    }
 }
 
 // Reports a fixed compaction result on every build, as the trajectory guide would after a fold.
