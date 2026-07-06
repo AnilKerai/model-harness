@@ -18,4 +18,12 @@ public sealed record AzureOpenAIClientOptions
     /// recommended for production where managed identity is available.
     /// </summary>
     public string? ApiKey { get; init; }
+
+    /// <summary>
+    /// Optional hook to configure the underlying SDK client — retry policy, network timeout, etc.
+    /// Azure OpenAI's System.ClientModel pipeline already retries transient failures and applies a
+    /// per-attempt network timeout by default; use this to tune them
+    /// (e.g. <c>o =&gt; o.NetworkTimeout = TimeSpan.FromMinutes(2)</c>).
+    /// </summary>
+    public Action<Azure.AI.OpenAI.AzureOpenAIClientOptions>? ConfigureClient { get; init; }
 }

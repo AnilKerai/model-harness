@@ -59,7 +59,7 @@ where the implementation would live.
 
 ### Infrastructure
 - [x] `FakeModelClient` — scripted responses for local development without an API key
-- [x] `ResilientModelClientDecorator` — wraps any `IModelClient` with Polly retry (exponential back-off) + circuit breaker; lives in `Infrastructure.Resilience` so the Polly dependency is isolated
+- [x] `ResilientModelClientDecorator` — wraps any `IModelClient` with a Polly **circuit breaker** only. The official provider SDKs (Anthropic, Azure OpenAI) already retry transient failures (connection errors, 408/409/429/5xx) with back-off and apply a request timeout, so a second Polly retry layer stacked on top caused compounding back-off / retry storms under rate limits; retry count and timeout are now tuned via each adapter's `ConfigureClient` hook. `ResilientTool` keeps retry + breaker (arbitrary tools have no built-in resilience). Lives in `Infrastructure.Resilience` so the Polly dependency is isolated
 - [x] `ConsoleTracer` — streams JSON trace events to stdout
 - [x] `OpenTelemetryTracer` — emits spans via `ActivitySource` and metrics via `Meter`; no OTel SDK dependency
 - [x] `CompositeTracer` — fans out to multiple `ITracer` instances simultaneously

@@ -27,9 +27,12 @@ public sealed class AzureOpenAIModelClient : IModelClient
 
     public AzureOpenAIModelClient(AzureOpenAIClientOptions options)
     {
+        var sdkOptions = new Azure.AI.OpenAI.AzureOpenAIClientOptions();
+        options.ConfigureClient?.Invoke(sdkOptions);
+
         AzureOpenAIClient client = options.ApiKey is not null
-            ? new AzureOpenAIClient(options.Endpoint, new ApiKeyCredential(options.ApiKey))
-            : new AzureOpenAIClient(options.Endpoint, new DefaultAzureCredential());
+            ? new AzureOpenAIClient(options.Endpoint, new ApiKeyCredential(options.ApiKey), sdkOptions)
+            : new AzureOpenAIClient(options.Endpoint, new DefaultAzureCredential(), sdkOptions);
 
         _chatClient = client.GetChatClient(options.DeploymentName);
         _deploymentName = options.DeploymentName;

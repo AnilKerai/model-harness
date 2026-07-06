@@ -579,9 +579,12 @@ builder.WithResilientModel(_ => new AzureOpenAIModelClient(new AzureOpenAIClient
 }))
 ```
 
-For resilience (Polly retry + circuit-breaker), use `WithResilientModel` from the
-Resilience package. Pass a custom `ResiliencePipeline<ModelResponse>` as a second
-argument to override the default policy.
+The provider SDKs already retry transient failures and apply a request timeout — tune those via
+the adapter's `ConfigureClient` hook (e.g. `ConfigureClient = o => o.Timeout = TimeSpan.FromMinutes(2)`
+on `ClaudeClientOptions`, or `o => o.NetworkTimeout = ...` on `AzureOpenAIClientOptions`). For an
+additional circuit breaker that fast-fails during a sustained outage, wrap the client with
+`WithResilientModel` from the Resilience package; pass a custom `ResiliencePipeline<ModelResponse>` as
+a second argument to override the default breaker.
 
 ## Enable AI-powered compaction
 

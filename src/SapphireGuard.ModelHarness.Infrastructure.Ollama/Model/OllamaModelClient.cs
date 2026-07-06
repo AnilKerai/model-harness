@@ -39,7 +39,9 @@ public sealed class OllamaModelClient : IModelClient
 
     public OllamaModelClient(OllamaClientOptions options)
     {
-        _client = new OllamaApiClient(new Uri(options.BaseUrl));
+        var http = new HttpClient { BaseAddress = new Uri(options.BaseUrl) };
+        options.ConfigureHttpClient?.Invoke(http);
+        _client = new OllamaApiClient(http);
         _model = options.ModelId;
     }
 

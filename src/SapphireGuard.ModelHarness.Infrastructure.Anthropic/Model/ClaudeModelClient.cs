@@ -6,6 +6,7 @@ using SapphireGuard.ModelHarness.Framework.Model;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
+using AnthropicSdkOptions = Anthropic.Core.ClientOptions;
 using SdkMessage = Anthropic.Models.Messages.Message;
 using SdkRole = Anthropic.Models.Messages.Role;
 using FrameworkMessage = SapphireGuard.ModelHarness.Framework.State.Message;
@@ -28,10 +29,9 @@ public sealed class ClaudeModelClient : IModelClient
 
     public ClaudeModelClient(ClaudeClientOptions options)
     {
-        _client = new AnthropicClient(new global::Anthropic.Core.ClientOptions
-        {
-            ApiKey = options.ApiKey
-        });
+        var clientOptions = new AnthropicSdkOptions { ApiKey = options.ApiKey };
+        options.ConfigureClient?.Invoke(clientOptions);
+        _client = new AnthropicClient(clientOptions);
         _modelId = options.ModelId;
     }
 
