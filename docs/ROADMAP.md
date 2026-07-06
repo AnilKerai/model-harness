@@ -5,6 +5,22 @@ where the implementation would live.
 
 ---
 
+### Production hardening (shipped milestone)
+
+A focused pass closing the production/enterprise-readiness gaps found in a full-framework audit.
+Each item's detail lives in its themed section below (Core loop, Sensor pattern, Robustness,
+Persistence, Infrastructure); consolidated here because the pass cross-cuts them:
+
+- **Resilience de-duplication** — `ResilientModelClientDecorator` is now breaker-only. The official provider SDKs already retry transient failures and apply a request timeout; a stacked Polly retry (used by every sample) caused compounding back-off / retry storms under rate limits. Retry/timeout are tuned via each adapter's `ConfigureClient` hook.
+- **Per-tool-call deadline** — `Budget.MaxToolCallDuration` bounds a slow/hung tool as a recoverable `IsError` result (the run continues). Model calls rely on the SDK's own request timeout.
+- **Fail-open sensors & guides** — a throwing sensor or supporting guide degrades that turn (recorded as an error in telemetry via `LogSensorResult`/`LogGuideError`) instead of propagating to the loop's catch-all and failing the whole run.
+- **Durable checkpoints** — `FileCheckpointStore` writes atomically (temp file + rename) and `LoadLatestAsync` skips torn/corrupt files to fall back to the most recent intact one; `ICheckpointStore.DeleteAsync(taskId)` adds cleanup / coarse data-erasure.
+- **Failed-model-call diagnostics** — `IModelCallScope.Fail(exception)` puts `exception.type`/`message`/`stacktrace` on the `chat` span instead of a bare "did not complete".
+
+Explicitly evaluated and **deliberately not built** (the audit's highest-value output — avoided work that didn't matter): a 429/`Retry-After` retry layer (the SDKs already retry — the real bug was the *double*-retry above), tool-argument size caps (model output is token-bounded, so an oversized arg isn't reachable), a pricing-config seam, and startup config validation. Left **above the harness**: fleet/tenant-level budget & rate governance, checkpoint encryption-at-rest, fine-grained PII redaction within a retained trajectory, and exactly-once resume for side-effecting tools (a tool-idempotency concern).
+
+---
+
 ### Core loop
 - [x] `HarnessLoop` — turn-by-turn orchestration (build context → call model → act on response)
 - [x] `IBudgetEnforcer` / `DefaultBudgetEnforcer` — hard limits on turns, tokens, cost, and wall clock
