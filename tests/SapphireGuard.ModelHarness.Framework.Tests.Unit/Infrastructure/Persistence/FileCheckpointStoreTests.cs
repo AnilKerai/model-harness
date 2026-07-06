@@ -134,4 +134,62 @@ public sealed class FileCheckpointStoreTests : IDisposable
 
         await Assert.ThrowsAsync<ArgumentException>(() => store.LoadLatestAsync(taskId));
     }
+
+    [Fact]
+    public async Task LoadLatest_SkipsCorruptNewest_FallsBackToPriorIntact()
+    {
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "older", T0, turn: 1));
+        await store.SaveAsync(At(state, "newer", T0.AddSeconds(1), turn: 2));
+
+        // Simulate a crash mid-write: the newest file is left as incomplete/garbage JSON.
+        var taskDir = Path.Combine(_dir, state.TaskId);
+        var newest = Directory.GetFiles(taskDir, "*.json").OrderDescending().First();
+        await File.WriteAllTextAsync(newest, "{ this is not valid json");
+
+        var loaded = await store.LoadLatestAsync(state.TaskId);
+
+        Assert.NotNull(loaded);
+        Assert.Equal("older", loaded!.CheckpointId);
+        Assert.Equal(1, loaded.TurnNumber);
+    }
+
+    [Fact]
+    public async Task Save_LeavesNoTempFilesBehind()
+    {
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "c1", T0, turn: 0));
+
+        var taskDir = Path.Combine(_dir, state.TaskId);
+        Assert.Empty(Directory.GetFiles(taskDir, "*.tmp"));
+        Assert.Single(Directory.GetFiles(taskDir, "*.json"));
+    }
+
+    [Fact]
+    public async Task Delete_RemovesAllCheckpointsForTask()
+    {
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+        await store.SaveAsync(At(state, "c1", T0, turn: 0));
+        await store.SaveAsync(At(state, "c2", T0.AddSeconds(1), turn: 1));
+
+        await store.DeleteAsync(state.TaskId);
+
+        Assert.Null(await store.LoadLatestAsync(state.TaskId));
+    }
+
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("nested/segment")]
+    [InlineData("..")]
+    public async Task Delete_RejectsUnsafeTaskId(string taskId)
+    {
+        var store = new FileCheckpointStore(_dir);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.DeleteAsync(taskId));
+    }
 }

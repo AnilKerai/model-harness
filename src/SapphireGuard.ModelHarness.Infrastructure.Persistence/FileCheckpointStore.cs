@@ -1,3 +1,4 @@
+using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Infrastructure.Persistence.Serialization;
 
@@ -17,11 +18,15 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
         var dir = TaskDirectory(checkpoint.State.TaskId);
         Directory.CreateDirectory(dir);
 
-        var filename = $"{checkpoint.CreatedAt:yyyyMMddHHmmssfff}_{checkpoint.CheckpointId}.json";
-        var path = Path.Combine(dir, filename);
+        var name = $"{checkpoint.CreatedAt:yyyyMMddHHmmssfff}_{checkpoint.CheckpointId}";
+        var path = Path.Combine(dir, name + ".json");
+        var tmp = Path.Combine(dir, name + ".tmp");
         var json = CheckpointSerializer.Serialize(checkpoint);
 
-        await File.WriteAllTextAsync(path, json, ct);
+        // Write to a temp file then atomically rename, so a crash mid-write can't leave a torn
+        // .json for LoadLatestAsync to trip over. The .tmp suffix keeps it out of the *.json glob.
+        await File.WriteAllTextAsync(tmp, json, ct);
+        File.Move(tmp, path, overwrite: true);
     }
 
     public async Task<Checkpoint?> LoadAsync(string checkpointId, CancellationToken ct = default)
@@ -48,15 +53,33 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
         if (!Directory.Exists(dir))
             return null;
 
-        var files = Directory.GetFiles(dir, "*.json")
-            .OrderDescending()
-            .ToArray();
+        // Newest first. Skip any file that's torn or corrupt (a crash mid-write can leave an
+        // incomplete newest file) and fall back to the most recent intact checkpoint.
+        foreach (var file in Directory.GetFiles(dir, "*.json").OrderDescending())
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var json = await File.ReadAllTextAsync(file, ct);
+                if (CheckpointSerializer.Deserialize(json) is { } checkpoint)
+                    return checkpoint;
+            }
+            catch (Exception ex) when (ex is JsonException or IOException)
+            {
+                // corrupt or unreadable — try the next-newest
+            }
+        }
 
-        if (files.Length == 0)
-            return null;
+        return null;
+    }
 
-        var json = await File.ReadAllTextAsync(files[0], ct);
-        return CheckpointSerializer.Deserialize(json);
+    public Task DeleteAsync(string taskId, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var dir = TaskDirectory(taskId);
+        if (Directory.Exists(dir))
+            Directory.Delete(dir, recursive: true);
+        return Task.CompletedTask;
     }
 
     // Task IDs may be caller-supplied (AgentState.NewTask), so a hostile or careless value could

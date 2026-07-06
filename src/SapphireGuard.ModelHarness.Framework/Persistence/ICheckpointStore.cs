@@ -16,4 +16,12 @@ public interface ICheckpointStore
 
     /// <summary>Returns the most recent checkpoint for the given task, or <see langword="null"/> if none exist.</summary>
     Task<Checkpoint?> LoadLatestAsync(string taskId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes all checkpoints for the given task. A no-op if none exist. Use for retention/cleanup
+    /// and for data-erasure requests (GDPR/CCPA right-to-erasure) against the persisted trajectory.
+    /// Not a default-interface no-op: a silently-unimplemented delete would make an erasure request
+    /// appear to succeed while leaving the data on disk.
+    /// </summary>
+    Task DeleteAsync(string taskId, CancellationToken ct = default);
 }
