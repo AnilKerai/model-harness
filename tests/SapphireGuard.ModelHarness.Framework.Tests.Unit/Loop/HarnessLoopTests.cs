@@ -499,8 +499,8 @@ public sealed class HarnessLoopTests
     [Fact]
     public async Task RunAsync_ModelCallThrows_DisposesModelScopeWithoutCompleting()
     {
-        // The loop's `using` must dispose the scope even when the call throws, and must
-        // NOT call Complete — that absence is how a span-aware tracer marks the span failed.
+        // When the call throws, the loop must NOT call Complete, must record the exception via
+        // Fail (so the span carries the detail), and must still dispose the scope.
         var tracer = new RecordingTracer();
         var harness = BuildHarness(new ScriptedModelClient(), tracer: tracer); // no responses → throws on first call
 
@@ -509,6 +509,7 @@ public sealed class HarnessLoopTests
         Assert.Equal(AgentStatus.Failed, outcome.Status);
         Assert.Empty(tracer.ModelCompletions);
         Assert.Equal(1, tracer.ModelScopesDisposed);
+        Assert.IsType<InvalidOperationException>(Assert.Single(tracer.ModelFailures));
     }
 
     [Fact]
@@ -630,6 +631,7 @@ file sealed class RecordingTracer : Tracing.ITracer
 {
     public List<ModelResponse> ModelCompletions { get; } = [];
     public int ModelScopesDisposed { get; private set; }
+    public List<Exception> ModelFailures { get; } = [];
     public List<ToolResult> ToolCompletions { get; } = [];
 
     public void StartTrace(string taskId, string taskText) { }
@@ -641,6 +643,7 @@ file sealed class RecordingTracer : Tracing.ITracer
     private sealed class ModelScope(RecordingTracer owner) : Tracing.IModelCallScope
     {
         public void Complete(ModelResponse response) => owner.ModelCompletions.Add(response);
+        public void Fail(Exception exception) => owner.ModelFailures.Add(exception);
         public void Dispose() => owner.ModelScopesDisposed++;
     }
 

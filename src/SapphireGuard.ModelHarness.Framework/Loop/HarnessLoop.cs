@@ -256,7 +256,16 @@ public sealed class HarnessLoop(
                 .ToArray();
 
         using var scope = tracer.BeginModelCall(state.TaskId, turn, messages, modelTools);
-        var response = await modelClient.CallAsync(messages, modelTools, ct);
+        ModelResponse response;
+        try
+        {
+            response = await modelClient.CallAsync(messages, modelTools, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            scope.Fail(ex);
+            throw;
+        }
         scope.Complete(response);
 
         var step = new ModelCallStep(

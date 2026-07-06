@@ -222,6 +222,20 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             TokenUsage.Record(response.Usage.OutputTokens, TokenTags(provider, model, "output"));
         }
 
+        public void Fail(Exception exception)
+        {
+            _completed = true; // finalised — keep Dispose from overwriting with the generic message
+            if (activity is null) return;
+            // Standard OTel exception event (Activity.AddException is .NET 9+, but this project also targets net8.0).
+            activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+            {
+                ["exception.type"] = exception.GetType().FullName,
+                ["exception.message"] = exception.Message,
+                ["exception.stacktrace"] = exception.ToString(),
+            }));
+            activity.SetStatus(ActivityStatusCode.Error, exception.Message);
+        }
+
         public void Dispose()
         {
             if (activity is null) return;

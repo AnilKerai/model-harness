@@ -49,6 +49,7 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
 file sealed class CompositeModelCallScope(IModelCallScope[] scopes) : IModelCallScope
 {
     public void Complete(ModelResponse response) { foreach (var s in scopes) s.Complete(response); }
+    public void Fail(Exception exception) { foreach (var s in scopes) s.Fail(exception); }
     public void Dispose() { foreach (var s in scopes) s.Dispose(); }
 }
 

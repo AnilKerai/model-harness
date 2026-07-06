@@ -60,6 +60,14 @@ public interface ITracer
 public interface IModelCallScope : IDisposable
 {
     void Complete(ModelResponse response);
+
+    /// <summary>
+    /// Records that the model call threw, capturing the exception type/message/stack on the span
+    /// (a bare disposal-without-<see cref="Complete"/> only marks it failed with no detail). Default
+    /// no-op so existing implementations compile unchanged. Cancellation is deliberately not reported
+    /// through this — it is expected control flow, not a call failure.
+    /// </summary>
+    void Fail(Exception exception) { }
 }
 
 /// <summary>Scope bracketing a single tool execution. Complete it with the result, then dispose.</summary>

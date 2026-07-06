@@ -102,6 +102,18 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
                 cost = response.Cost
             });
 
+        public void Fail(Exception exception) =>
+            Emit(new
+            {
+                evt = "model_call",
+                taskId,
+                turn,
+                ts = time.GetUtcNow(),
+                promptMessages,
+                tools,
+                error = new { type = exception.GetType().Name, message = exception.Message }
+            });
+
         public void Dispose() { }
     }
 
