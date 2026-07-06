@@ -35,7 +35,24 @@ public sealed class DefaultGuideRunner(
         {
             ct.ThrowIfCancellationRequested();
             var before = Snapshot(draft);
-            await guide.ContributeAsync(draft, state, ct);
+            try
+            {
+                await guide.ContributeAsync(draft, state, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Fail open: a supporting guide's contribution is an optional enhancement (memory,
+                // skills, tool filtering). If it throws — a memory store times out, a skill store
+                // can't read — skip it and carry on rather than failing the whole run. The trajectory
+                // guide below is deliberately NOT wrapped: it is mandatory, and a turn with no rendered
+                // trajectory is worse than surfacing the failure.
+                _tracer.LogGuideError(state.TaskId, turn, guide.Name, $"{ex.GetType().Name}: {ex.Message}");
+                continue;
+            }
             _tracer.LogGuideContribution(state.TaskId, turn, guide.Name, Diff(before, draft));
         }
 

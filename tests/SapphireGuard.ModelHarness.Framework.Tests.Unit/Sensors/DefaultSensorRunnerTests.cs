@@ -71,6 +71,29 @@ public sealed class DefaultSensorRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_SensorThrows_FailsOpenWithErrorResult_OtherSensorsUnaffected()
+    {
+        // One sensor throwing must not fault the Task.WhenAll batch and take down the run: it is
+        // surfaced as an error result (IsError, not an intervention) and the other sensor still runs.
+        var throwing = new ThrowingSensor(HookPoint.PreModelCall, name: "boom");
+        var healthy = new CountdownSensor(HookPoint.PreModelCall, blockCount: 0, name: "ok");
+        var runner = new DefaultSensorRunner([throwing, healthy]);
+
+        var results = await runner.RunAsync(HookPoint.PreModelCall, State(), null, CancellationToken.None);
+
+        Assert.Equal(2, results.Count);
+
+        var failed = results.Single(r => r.Sensor.Name == "boom").Result;
+        Assert.True(failed.IsError);
+        Assert.False(failed.IsIntervene);
+        Assert.Contains("boom threw", failed.Reason);
+
+        var ok = results.Single(r => r.Sensor.Name == "ok").Result;
+        Assert.False(ok.IsError);
+        Assert.False(ok.IsIntervene);
+    }
+
+    [Fact]
     public async Task RunAsync_SensorAtDifferentHookpoint_NotInResults()
     {
         var preModel = new CountdownSensor(HookPoint.PreModelCall, blockCount: 0);

@@ -76,21 +76,25 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
 
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result)
     {
-        if (!result.IsIntervene) return;
+        if (!result.IsIntervene && !result.IsError) return;
 
         if (_activities.TryGetValue(taskId, out var activity))
         {
-            activity?.AddEvent(new ActivityEvent("gen_ai.evaluation.result", tags: new ActivityTagsCollection
+            var tags = new ActivityTagsCollection
             {
                 ["harness.turn"] = turn,
                 ["harness.sensor.name"] = sensorName,
                 ["harness.sensor.hook_point"] = hookPoint.ToString(),
                 ["gen_ai.evaluation.explanation"] = result.Reason ?? string.Empty,
-            }));
+            };
+            if (result.IsError) tags["error.type"] = "sensor_error";
+            activity?.AddEvent(new ActivityEvent("gen_ai.evaluation.result", tags: tags));
         }
 
-        SensorInterventions.Add(1,
-            new TagList { { "harness.sensor.name", sensorName }, { "harness.sensor.hook_point", hookPoint.ToString() } });
+        // A sensor that threw and failed open is not an intervention — don't inflate the count.
+        if (result.IsIntervene)
+            SensorInterventions.Add(1,
+                new TagList { { "harness.sensor.name", sensorName }, { "harness.sensor.hook_point", hookPoint.ToString() } });
     }
 
     public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)
@@ -109,6 +113,19 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             ["harness.guide.sections.added"] = contribution.SystemSectionsAdded,
             ["harness.guide.trajectory.added"] = contribution.TrajectoryMessagesAdded,
             ["harness.guide.prompt.char_delta"] = contribution.SystemPromptCharDelta,
+        }));
+    }
+
+    public void LogGuideError(string taskId, int turn, string guideName, string error)
+    {
+        if (!_activities.TryGetValue(taskId, out var activity)) return;
+
+        activity?.AddEvent(new ActivityEvent("harness.guide.error", tags: new ActivityTagsCollection
+        {
+            ["harness.turn"] = turn,
+            ["harness.guide.name"] = guideName,
+            ["error.type"] = "guide_error",
+            ["exception.message"] = error,
         }));
     }
 

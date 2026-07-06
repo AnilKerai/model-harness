@@ -397,6 +397,22 @@ public sealed class HarnessLoopTests
         Assert.Contains("API unavailable", outcome.FailureReason);
     }
 
+    [Fact]
+    public async Task RunAsync_SensorThrows_FailsOpenAndRunCompletes()
+    {
+        // A throwing sensor must not take the run down: the runner surfaces it as a non-intervention
+        // error result, so the model keeps its turn and the run completes normally.
+        var sensor = new ThrowingSensor(HookPoint.PreModelCall);
+        var client = new ScriptedModelClient(EndTurnResponse("ok"));
+        var harness = BuildHarness(client, sensors: [sensor]);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal("ok", outcome.FinalAnswer);
+        Assert.Empty(outcome.FinalState.Trajectory.OfType<SensorInterventionStep>());
+    }
+
     // ── Trajectory integrity ──────────────────────────────────────────────────
 
     [Fact]

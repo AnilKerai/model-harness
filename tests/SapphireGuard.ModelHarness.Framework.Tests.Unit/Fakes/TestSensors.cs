@@ -31,6 +31,16 @@ public sealed class CountdownSensor : ISensor
     }
 }
 
+/// <summary>Throws on every check — verifies the runner fails open instead of faulting the run.</summary>
+public sealed class ThrowingSensor(HookPoint hookPoint, string name = "throwing") : ISensor
+{
+    public string Name => name;
+    public IReadOnlySet<HookPoint> HookPoints { get; } = new HashSet<HookPoint> { hookPoint };
+
+    public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
+        => throw new InvalidOperationException("sensor exploded");
+}
+
 /// <summary>Always passes. Useful as an explicit no-op in sensor lists.</summary>
 public sealed class AlwaysPassSensor : ISensor
 {

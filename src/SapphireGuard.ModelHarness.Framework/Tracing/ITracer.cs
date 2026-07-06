@@ -45,6 +45,15 @@ public interface ITracer
     /// unchanged — override it to observe when compaction fires, how much it reclaimed, and its spend.
     /// </summary>
     void LogCompaction(string taskId, int turn, CompactionTrace trace) { }
+
+    /// <summary>
+    /// Called when a supporting guide throws and is skipped (fail-open) so one guide's failure can't
+    /// take down the run. <paramref name="error"/> is the exception type and message. <paramref name="turn"/>
+    /// is the zero-based turn index. Default no-op so existing <see cref="ITracer"/> implementations compile
+    /// unchanged — override it to alert on guides that are silently degrading the context (e.g. a memory
+    /// store timing out or a skill store failing to read).
+    /// </summary>
+    void LogGuideError(string taskId, int turn, string guideName, string error) { }
 }
 
 /// <summary>Scope bracketing a single model call. Complete it with the response, then dispose (a plain <c>using</c> does this). Disposal without <see cref="Complete"/> marks the span failed.</summary>

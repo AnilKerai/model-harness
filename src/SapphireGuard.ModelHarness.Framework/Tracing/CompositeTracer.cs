@@ -38,6 +38,11 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
     {
         foreach (var t in tracers) t.LogCompaction(taskId, turn, trace);
     }
+
+    public void LogGuideError(string taskId, int turn, string guideName, string error)
+    {
+        foreach (var t in tracers) t.LogGuideError(taskId, turn, guideName, error);
+    }
 }
 
 [ExcludeFromCodeCoverage]

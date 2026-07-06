@@ -34,6 +34,7 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
             hookPoint = hookPoint.ToString(),
             sensor = sensorName,
             intervene = result.IsIntervene,
+            error = result.IsError,
             reason = result.Reason
         });
 
@@ -71,6 +72,9 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
             usage = new { input = trace.Usage.InputTokens, output = trace.Usage.OutputTokens },
             cost = trace.Cost
         });
+
+    public void LogGuideError(string taskId, int turn, string guideName, string error) =>
+        Emit(new { evt = "guide_error", taskId, turn, ts = _time.GetUtcNow(), guide = guideName, error });
 
     private static void Emit(object payload) =>
         Console.WriteLine(JsonSerializer.Serialize(payload, Options));

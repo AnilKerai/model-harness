@@ -151,6 +151,37 @@ public sealed class DefaultGuideRunnerTests
             => Contributions.Add((guideName, turn, contribution));
         public List<CompactionTrace> Compactions { get; } = [];
         public void LogCompaction(string taskId, int turn, CompactionTrace trace) => Compactions.Add(trace);
+        public List<(string Guide, string Error)> GuideErrors { get; } = [];
+        public void LogGuideError(string taskId, int turn, string guideName, string error) => GuideErrors.Add((guideName, error));
+    }
+
+    private sealed class ThrowingGuide(string name) : IGuide
+    {
+        public string Name => name;
+        public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+            => throw new InvalidOperationException("guide exploded");
+    }
+
+    [Fact]
+    public async Task SupportingGuideThrows_IsSkippedAndLoggedAsError_OtherGuidesAndTrajectoryStillRun()
+    {
+        // A supporting guide's contribution is an optional enhancement; if it throws, the pipeline
+        // must skip it (recording an error) and still run the remaining guides + the trajectory guide.
+        var tracer = new RecordingTracer();
+        var log = new List<string>();
+        var runner = new DefaultGuideRunner(
+            [new RecordingGuide("a", log), new ThrowingGuide("boom"), new RecordingGuide("c", log)],
+            new RecordingTrajectoryGuide(log),
+            tracer);
+
+        await runner.RunAsync(State(), [], CancellationToken.None);
+
+        Assert.Equal(new[] { "a", "c", "trajectory" }, log);
+
+        var error = Assert.Single(tracer.GuideErrors);
+        Assert.Equal("boom", error.Guide);
+        Assert.Contains("InvalidOperationException", error.Error);
+        Assert.DoesNotContain(tracer.Contributions, c => c.Guide == "boom");
     }
 
     [Fact]

@@ -31,7 +31,21 @@ public sealed class DefaultSensorRunner(IEnumerable<ISensor> sensors) : ISensorR
     private static async Task<(ISensor Sensor, SensorResult Result)> RunOne(
         ISensor sensor, HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
     {
-        var result = await sensor.CheckAsync(hookPoint, state, triggeringStep, ct);
-        return (sensor, result);
+        try
+        {
+            var result = await sensor.CheckAsync(hookPoint, state, triggeringStep, ct);
+            return (sensor, result);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Fail open: one misbehaving sensor must not fault the whole batch (Task.WhenAll) and
+            // take down the run. The failure is surfaced as an error result for telemetry, and the
+            // loop treats it as a non-intervention so the model keeps its turn.
+            return (sensor, SensorResult.Failed($"{sensor.Name} threw {ex.GetType().Name}: {ex.Message}"));
+        }
     }
 }
