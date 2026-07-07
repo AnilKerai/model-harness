@@ -28,7 +28,7 @@ Loop engineering stacks feedback loops from the single run outward; each layer w
 | **3. Event-driven loop** | Start runs from cron / webhooks / events, not by hand | ⛔ above the harness — the host composes a scheduler around `Agent` |
 | **4. Hill-climbing loop** | Read traces + outcomes, then update the agent's own config to do better next time | ⛔ above the harness — the harness only *emits* the traces (`ITracer`) it would consume; see [ROADMAP](ROADMAP.md) |
 
-The kit a loop assembles from — skills, sub-agents, connectors, persistence, a human gate — is the [agentic primitives](#agentic-primitives) below, all provided by the framework as in-run features. The two a loop adds on top are robust **termination** and **verification**. The harness even ships the *mutation primitive* a hill-climbing loop would use — `skill_manage` lets the agent persist reusable skills ([Agent Learning](../README.md#agent-learning-experimental)) — but in-episode and model-driven; the outcome-scored controller that decides *when* to write is the part left above.
+The kit a loop assembles from — skills, sub-agents, connectors, persistence, a human gate — is the [agentic primitives](#agentic-primitives) below, all provided by the framework as in-run features. The two a loop adds on top are robust **termination** and **verification**. The harness even ships the *mutation primitive* a hill-climbing loop would use — `skill_manage` lets the agent persist reusable skills ([Agent Learning](FEATURES.md#agent-learning-experimental)) — but in-episode and model-driven; the outcome-scored controller that decides *when* to write is the part left above.
 
 ### Termination is the part naive loops get wrong
 
@@ -100,7 +100,7 @@ A "research agent" is control flow + tools + memory. An "orchestrated pipeline" 
 
 ## Prompt injection and taint tracking
 
-Prompt injection is the security threat specific to agentic systems: an LLM cannot reliably distinguish **instructions** (from the operator) from **data** (tool results, web pages, documents), so hostile text embedded in external content can hijack the agent into *acting* — sending email, executing code, exfiltrating data. The threat scales with what the agent can do. The [README](../README.md#prompt-injection-and-taint-tracking-experimental) covers how this framework defends; this is the theory underneath.
+Prompt injection is the security threat specific to agentic systems: an LLM cannot reliably distinguish **instructions** (from the operator) from **data** (tool results, web pages, documents), so hostile text embedded in external content can hijack the agent into *acting* — sending email, executing code, exfiltrating data. The threat scales with what the agent can do. The [feature write-up](FEATURES.md#prompt-injection-and-taint-tracking-experimental) covers how this framework defends; this is the theory underneath.
 
 **Taint tracking** is the defence, borrowed from systems security:
 
@@ -108,4 +108,4 @@ Prompt injection is the security threat specific to agentic systems: an LLM cann
 2. Taint propagates forward: any computation that *uses* tainted data produces tainted output.
 3. Tainted data is never permitted to flow into a **privileged action** — an operation with real-world side effects.
 
-This is what the [CaMeL framework](https://arxiv.org/abs/2503.18813) (Google DeepMind, 2025) proposes for LLM agents: track the provenance of every value flowing through the system, and gate privileged tool calls on whether their arguments trace back to untrusted sources. The catch is that LLMs are opaque — you cannot instrument the model's reasoning to track which parts of its output derived from which parts of its input — so full CaMeL-style taint tracking is an active research problem. This harness ships a practical approximation, described in the [README](../README.md#prompt-injection-and-taint-tracking-experimental).
+This is what the [CaMeL framework](https://arxiv.org/abs/2503.18813) (Google DeepMind, 2025) proposes for LLM agents: track the provenance of every value flowing through the system, and gate privileged tool calls on whether their arguments trace back to untrusted sources. The catch is that LLMs are opaque — you cannot instrument the model's reasoning to track which parts of its output derived from which parts of its input — so full CaMeL-style taint tracking is an active research problem. This harness ships a practical approximation, described in the [feature write-up](FEATURES.md#prompt-injection-and-taint-tracking-experimental).
