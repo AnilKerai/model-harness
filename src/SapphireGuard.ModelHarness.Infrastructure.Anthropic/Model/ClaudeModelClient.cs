@@ -225,12 +225,22 @@ public sealed class ClaudeModelClient : IModelClient
             }
         }
 
+        // With prompt caching on, Anthropic reports input_tokens as the uncached remainder only;
+        // the cached prefix is billed separately (read ~0.1x, 5-min write 1.25x). Fold all three
+        // buckets into the reported input count so token budgets and the TPM limiter still see the
+        // true prompt size, and price each bucket at its own rate below.
+        var uncachedInput = response.Usage.InputTokens;
+        var cacheReadTokens = response.Usage.CacheReadInputTokens ?? 0;
+        var cacheWriteTokens = response.Usage.CacheCreationInputTokens ?? 0;
+        var outputTokens = response.Usage.OutputTokens;
+
         var usage = new FrameworkUsage(
-            InputTokens: (int)response.Usage.InputTokens,
-            OutputTokens: (int)response.Usage.OutputTokens);
+            InputTokens: (int)(uncachedInput + cacheReadTokens + cacheWriteTokens),
+            OutputTokens: (int)outputTokens);
 
         var stopReason = MapStopReason(response.StopReason?.Raw());
-        var cost = CalculateCost(ExtractModelFamily(response.Model), usage);
+        var cost = CalculateCost(
+            ExtractModelFamily(response.Model), uncachedInput, cacheReadTokens, cacheWriteTokens, outputTokens);
 
         return new ModelResponse
         {
@@ -254,7 +264,9 @@ public sealed class ClaudeModelClient : IModelClient
 
     // Approximate cost based on published pricing (May 2026).
     // Prices change — update from https://www.anthropic.com/pricing when stale.
-    private static decimal CalculateCost(string modelFamily, FrameworkUsage usage)
+    // Cache reads bill at ~0.1x the input rate; 5-minute cache writes at 1.25x.
+    private static decimal CalculateCost(
+        string modelFamily, long uncachedInput, long cacheReadTokens, long cacheWriteTokens, long outputTokens)
     {
         var (inputPer1M, outputPer1M) = modelFamily switch
         {
@@ -263,8 +275,10 @@ public sealed class ClaudeModelClient : IModelClient
             _ => (3.00m, 15.00m) // sonnet default
         };
 
-        return (usage.InputTokens * inputPer1M / 1_000_000m)
-             + (usage.OutputTokens * outputPer1M / 1_000_000m);
+        return (uncachedInput * inputPer1M
+              + cacheReadTokens * inputPer1M * 0.1m
+              + cacheWriteTokens * inputPer1M * 1.25m) / 1_000_000m
+             + (outputTokens * outputPer1M / 1_000_000m);
     }
 
     private static string ExtractModelFamily(string? modelId)
