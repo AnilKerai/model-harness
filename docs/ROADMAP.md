@@ -212,6 +212,9 @@ optimisation decisions.
   `cache_control` breakpoint each turn (auto-placed on the last block), so the stable
   tool + system + prior-turn prefix is a cache read (~0.1× input cost) on the next turn
   instead of re-billed in full. Opt out via `ClaudeClientOptions.EnablePromptCaching = false`.
+  Usage/cost accounting folds the cache buckets into `Usage.InputTokens` so token budgets see the
+  true prompt size, and `ModelResponse.CachedInputTokens`/`CacheWriteTokens` surface the breakdown
+  as `cache_read`/`cache_creation` token types in telemetry so hit-rate is observable.
   Azure/OpenAI caches prefixes automatically server-side (no code); Ollama is local. Kept
   adapter-local — the harness annotates no caching hints on `ContextDraft`. If a shared
   abstraction ever earns its keep (adapters with diverging caching semantics), revisit then.

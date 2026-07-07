@@ -195,7 +195,10 @@ public sealed class AzureOpenAIModelClient : IModelClient
             Usage = usage,
             Cost = CalculateCost(_deploymentName, usage),
             Model = _deploymentName,
-            Provider = "azure.ai.openai"
+            Provider = "azure.ai.openai",
+            // OpenAI's InputTokenCount already includes cached tokens (a subset), so no fold is needed —
+            // surface the cached count for telemetry. There is no separate cache-write bucket on OpenAI.
+            CachedInputTokens = completion.Usage.InputTokenDetails?.CachedTokenCount ?? 0
         };
     }
 

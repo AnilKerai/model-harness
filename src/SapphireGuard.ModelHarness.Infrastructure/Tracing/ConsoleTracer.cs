@@ -98,7 +98,13 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
                 stopReason = response.StopReason.ToString(),
                 toolCalls = response.ToolCalls.Count,
                 textPreview = Truncate(response.Text, 120),
-                usage = new { input = response.Usage.InputTokens, output = response.Usage.OutputTokens },
+                usage = new
+                {
+                    input = response.Usage.InputTokens,
+                    output = response.Usage.OutputTokens,
+                    cacheRead = response.CachedInputTokens,
+                    cacheWrite = response.CacheWriteTokens
+                },
                 cost = response.Cost
             });
 

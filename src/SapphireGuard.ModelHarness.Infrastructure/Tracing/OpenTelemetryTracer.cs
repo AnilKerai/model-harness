@@ -204,6 +204,10 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
                     activity.SetTag("gen_ai.provider.name", response.Provider);
                 activity.SetTag("gen_ai.usage.input_tokens", response.Usage.InputTokens);
                 activity.SetTag("gen_ai.usage.output_tokens", response.Usage.OutputTokens);
+                if (response.CachedInputTokens > 0)
+                    activity.SetTag("gen_ai.usage.cache_read_input_tokens", response.CachedInputTokens);
+                if (response.CacheWriteTokens > 0)
+                    activity.SetTag("gen_ai.usage.cache_creation_input_tokens", response.CacheWriteTokens);
                 activity.SetTag("gen_ai.response.finish_reasons", new[] { FinishReason(response.StopReason) });
                 activity.SetTag("harness.response.tool_calls", response.ToolCalls.Count);
                 activity.SetTag("harness.cost", (double)response.Cost);
@@ -218,7 +222,14 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             };
             OperationDuration.Record(Stopwatch.GetElapsedTime(_start).TotalSeconds, opTags);
             Cost.Add((double)response.Cost, opTags);
-            TokenUsage.Record(response.Usage.InputTokens, TokenTags(provider, model, "input"));
+            // Report cache read/creation as their own token types so the "input" bucket stays the uncached
+            // tokens and hit-rate = cache_read / (input + cache_read + cache_creation) — the buckets are disjoint.
+            var uncachedInput = Math.Max(0, response.Usage.InputTokens - response.CachedInputTokens - response.CacheWriteTokens);
+            TokenUsage.Record(uncachedInput, TokenTags(provider, model, "input"));
+            if (response.CachedInputTokens > 0)
+                TokenUsage.Record(response.CachedInputTokens, TokenTags(provider, model, "cache_read"));
+            if (response.CacheWriteTokens > 0)
+                TokenUsage.Record(response.CacheWriteTokens, TokenTags(provider, model, "cache_creation"));
             TokenUsage.Record(response.Usage.OutputTokens, TokenTags(provider, model, "output"));
         }
 

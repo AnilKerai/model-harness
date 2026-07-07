@@ -250,7 +250,9 @@ public sealed class ClaudeModelClient : IModelClient
             Usage = usage,
             Cost = cost,
             Model = response.Model,
-            Provider = "anthropic"
+            Provider = "anthropic",
+            CachedInputTokens = (int)cacheReadTokens,
+            CacheWriteTokens = (int)cacheWriteTokens
         };
     }
 
