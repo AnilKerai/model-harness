@@ -27,11 +27,7 @@ always a product decision, not a model decision.
 
 ## Concepts
 
-The agentic-AI ideas this framework implements — **loop engineering**, **context engineering**, and the **agentic primitives** — are written up in **[docs/CONCEPTS.md](docs/CONCEPTS.md)**. This README stays focused on the framework itself: its patterns, ports, and wiring.
-
----
-
-See **[RUNNING.md](docs/RUNNING.md)** for setup and run instructions for each sample.
+The agentic-AI ideas this framework implements — **loop engineering**, **context engineering**, and the **agentic primitives** — are written up in **[docs/CONCEPTS.md](docs/CONCEPTS.md)**. This README stays focused on the framework itself: its patterns, ports, and wiring. To customise and extend the harness, see **[EXTENDING.md](docs/EXTENDING.md)**; to run the samples, see **[RUNNING.md](docs/RUNNING.md)**.
 
 ---
 
@@ -384,38 +380,16 @@ No single defence fully solves this. The right approach is layered:
 
 These layers address different failure modes. The sensor catches recognisable patterns. Taint tracking guards actions even when no pattern was detected. The quarantine model stops content at the boundary before it enters the trajectory. All three together are more robust than any one alone.
 
-### The theory: taint tracking
+### How this harness defends
 
-Taint tracking is a technique borrowed from systems security. The idea:
+Full CaMeL-style taint tracking is an active research problem — LLMs are opaque, so you cannot instrument the model's reasoning to see which output derived from which input. This harness uses a practical approximation: **the trajectory itself is the taint ledger**. `TaintTrackingSensor` treats the whole trajectory as potentially influenced once any tainted step is present:
 
-1. Any data that originates from an untrusted external source is marked as **tainted**.
-2. Taint propagates forward: any computation that *uses* tainted data produces tainted output.
-3. Tainted data is never permitted to flow into a **privileged action** — an operation with real-world side effects.
+- When a result arrives from an operator-declared **untrusted source** (e.g. a web fetch), a `PostToolCall` annotation warns the model not to follow any instructions it contains.
+- When the model then attempts an operator-declared **privileged action** (e.g. send email, execute code), `PreToolCall` scans the trajectory and **blocks** the call if any untrusted-source result is present — the model gets an error and replans, and the action never runs.
 
-This is exactly what the [CaMeL framework](https://arxiv.org/abs/2503.18813) (Google DeepMind, 2025) proposes for LLM agents: track the provenance of every value flowing through the system, and gate privileged tool calls based on whether their arguments trace back to untrusted sources.
+It **fails closed**: an agent that legitimately fetches a page and then needs to email is blocked, and clearing taint is an operator concern the sensor never does itself. The intended escape hatch is `ask_human` — gate the privileged action behind human approval so an operator judges it safe in context (see [ROADMAP](docs/ROADMAP.md) for the known limitation that taint does not auto-clear after `ask_human`).
 
-The challenge is that LLMs are opaque — you cannot instrument the model's reasoning to track which parts of its output derived from which parts of its input. Full CaMeL-style taint tracking is an active research problem.
-
-### The implementation: trajectory-level taint
-
-This harness uses a practical approximation: **the trajectory itself is the taint ledger**.
-
-Rather than trying to track taint through the model's reasoning, the `TaintTrackingSensor` treats the entire trajectory as potentially influenced once any tainted step is present. Concretely:
-
-- When a tool result arrives from an **untrusted source** (e.g. a web fetch), a `PostToolCall` annotation warns the model that untrusted content is now in context and that it should not follow any instructions it contains.
-- When the model subsequently attempts to call a **privileged action** (e.g. send email, execute code), `PreToolCall` scans the trajectory. If any successful untrusted-source result is present, the tool is **blocked** — the model receives an error and can replan without the action ever executing.
-
-This fails closed: a model that legitimately fetches a web page and then legitimately needs to send an email will be blocked. Clearing taint is an **operator-level** concern — the sensor never does it. Taint persists for the whole trajectory, and `TaintTrackingSensor` does not detect an intervening `ask_human` step (see ROADMAP, known limitations). The intended workaround is to gate the privileged action behind `ask_human` and structure the flow so the human-approved path is not on the `privilegedActions` list — explicit approval then stands in for taint clearance, because the human has judged the action safe in context.
-
-Neither list is hardcoded. What counts as an untrusted source or a privileged action is declared entirely at the composition root by the operator — because only the operator knows the deployment context. MCP tools and any remote tool whose author cannot be verified should be listed as untrusted sources:
-
-```csharp
-builder.WithTaintTracking(
-    untrustedSources: ["fetch_webpage", "read_document", "query_database"],
-    privilegedActions: ["send_email",   "execute_code",  "make_payment"]);
-```
-
-The sensor is not registered by default — calling `WithTaintTracking` is the explicit opt-in. Agents that do not call it are unaffected.
+Both lists are declared by the operator at the composition root — only they know the deployment context, and MCP or unverifiable remote tools belong in `untrustedSources`. The sensor is opt-in. See the **[taint-tracking theory in CONCEPTS.md](docs/CONCEPTS.md#prompt-injection-and-taint-tracking)** for the CaMeL background, and **[EXTENDING.md](docs/EXTENDING.md#taint-tracking-experimental)** for wiring (`WithTaintTracking`, a custom `ITrustPolicy`, and system-prompt guidance).
 
 ---
 
@@ -479,7 +453,7 @@ The framework provides the port; the caller provides the adapter. Defaults are n
 
 ---
 
-## Extending the framework
+## Architecture & setup
 
 ### The three layers
 

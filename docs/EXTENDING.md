@@ -297,7 +297,7 @@ builder.WithSensor<TaintTrackingSensor>();
 ## Add a guide
 
 ```csharp
-builder.WithGuide<MyGuide>() // runs after the eight built-in guides
+builder.WithGuide<MyGuide>() // runs after the built-in guides, before the trajectory guide
 ```
 
 See the [guide pattern](../README.md#the-guide-pattern--shaping-perception) for how to implement `IGuide`.

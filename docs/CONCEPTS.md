@@ -7,6 +7,7 @@ These are teaching notes. Where a framing is the wider field's standard, it is c
 - [Loop engineering](#loop-engineering)
 - [Context engineering](#context-engineering)
 - [Agentic primitives](#agentic-primitives)
+- [Prompt injection and taint tracking](#prompt-injection-and-taint-tracking)
 
 ---
 
@@ -94,3 +95,17 @@ A "research agent" is control flow + tools + memory. An "orchestrated pipeline" 
 > **How this maps to the classic decomposition.** These six are a lens tuned to *this framework's ports*, not the canonical taxonomy. The most-taught framing of agent building blocks ([Lilian Weng, "LLM Powered Autonomous Agents"](https://lilianweng.github.io/posts/2023-06-23-agent/)) is **Planning, Memory, Tools,** and **Reflection** around an LLM core. The mapping: *Tools* and *Memory* match; *Perception* is context construction; *Control flow* is the agent loop; *Guardrails* (sensors) carry the externally-driven half of *Reflection*; and *Planning* lives in the model's own reasoning — primed by `ReActGuide` — rather than as a separate named component. Use the six to navigate the code; use Planning/Memory/Tools/Reflection to connect to the wider literature.
 
 > **On the memory varieties.** The *external / retrieved* bucket above is where the cognitive-science taxonomy (working / episodic / semantic / procedural, popularised for agents by the **CoALA** framework) splits *episodic* memory (what happened) from *semantic* memory (abstracted facts) — this framework treats both as retrieval and does not distinguish them. The *in-weights* variety is what that literature calls **parametric** memory; the other three are **non-parametric** — they live in, or are pulled into, the context window rather than the model's weights.
+
+---
+
+## Prompt injection and taint tracking
+
+Prompt injection is the security threat specific to agentic systems: an LLM cannot reliably distinguish **instructions** (from the operator) from **data** (tool results, web pages, documents), so hostile text embedded in external content can hijack the agent into *acting* — sending email, executing code, exfiltrating data. The threat scales with what the agent can do. The [README](../README.md#prompt-injection-and-taint-tracking-experimental) covers how this framework defends; this is the theory underneath.
+
+**Taint tracking** is the defence, borrowed from systems security:
+
+1. Any data that originates from an untrusted external source is marked **tainted**.
+2. Taint propagates forward: any computation that *uses* tainted data produces tainted output.
+3. Tainted data is never permitted to flow into a **privileged action** — an operation with real-world side effects.
+
+This is what the [CaMeL framework](https://arxiv.org/abs/2503.18813) (Google DeepMind, 2025) proposes for LLM agents: track the provenance of every value flowing through the system, and gate privileged tool calls on whether their arguments trace back to untrusted sources. The catch is that LLMs are opaque — you cannot instrument the model's reasoning to track which parts of its output derived from which parts of its input — so full CaMeL-style taint tracking is an active research problem. This harness ships a practical approximation, described in the [README](../README.md#prompt-injection-and-taint-tracking-experimental).
