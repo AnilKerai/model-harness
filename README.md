@@ -49,7 +49,7 @@ No API key? Samples fall back to a `FakeModelClient`, so the harness runs withou
 
 ## Extension points
 
-Every port in the framework ships with a working default — swap any of them by registering your own implementation via the builder. The distinction below is between concerns the framework manages automatically (override when needed) and concerns the framework exposes a port for but leaves entirely to the caller.
+Every part of the harness is a port you replace via the builder — but be clear-eyed about what ships: many ports default to a deliberate **no-op**, several have a **real** default that works out of the box, and a couple you **supply** yourself. The map, then the three groups:
 
 ```mermaid
 flowchart LR
@@ -73,37 +73,44 @@ flowchart LR
     TL --- HN["IHumanNotifier\nhuman-in-the-loop"]
 ```
 
-### Harness concerns
+### Works out of the box — real defaults
 
-The framework manages these in every agent. Defaults work out of the box — replace via the builder when needed.
+A real implementation runs unless you override it.
 
-| Concern | Port | Default | What it is |
-|---|---|---|---|
-| Model transport | `IModelClient` | none — caller supplies | Sends messages to the model and returns responses. **No default is registered** — supply one via `.WithModel(...)` / `.WithResilientModel(...)`. Swap for any provider — Anthropic, Azure, Ollama, or custom. |
-| Budget enforcement | `IBudgetEnforcer` | `DefaultBudgetEnforcer` | Checks turn, token, cost, and wall-clock limits at the top of each turn. Returns `PartialResult` on exhaustion rather than throwing. |
-| Rate limiting | `IRateLimiter` | `NullRateLimiter` (no limiting) | Checks provider sliding-window limits before each model call. Waits and retries; degrades to `PartialResult` if the wait would exceed `MaxWallClock`. |
-| Context assembly | `IContextBuilder` | `DefaultContextBuilder` | Assembles the final prompt from the `ContextDraft` that guides produce. Rarely needs replacing. |
-| Trajectory rendering & compaction | `ITrajectoryGuide` | `HeadEvictionTrajectoryGuide` (bare omission note on eviction) | Renders turn history into the context window, evicting oldest steps when the token budget is tight. Always runs last in the guide pipeline. |
-| Tool registry | `IToolRegistry` | `InMemoryToolRegistry` | Holds all registered tools and dispatches tool calls to the right implementation. Replace for dynamic or gateway-backed tool sets (e.g. MCP). |
-| Skills & learning storage | `ISkillStore` | `NullSkillStore` (no-op until opted in) | Persists `SKILL.md` files the agent reads (skills) or writes (learning). No-op until opted in via `WithSkills` or `WithLearning`. |
-| Human-in-the-loop notification | `IHumanNotifier` | none | Delivers `ask_human` questions to a human via any channel. The loop suspends with `AwaitingHuman` until resumed. |
-| Tracing & metrics | `ITracer` | `NullTracer`; use `WithConsoleTracer()` / `WithOtelTracer()` | Brackets model and tool calls as scopes and receives events for task lifecycle, sensor interventions, and per-guide context-shaping deltas. `WithOtelTracer()` emits a nested OpenTelemetry GenAI span tree (`invoke_agent` → `chat` / `execute_tool`) with `gen_ai.*` attributes and metrics. Multiple tracers are composed automatically. |
-| Checkpoint / resume | `ICheckpointStore` | `NullCheckpointStore` (no persistence) | Saves `AgentState` at the start of each turn. Load the latest checkpoint to resume after a crash or restart. |
+| Port | Default | What it does |
+|---|---|---|
+| `IBudgetEnforcer` | `DefaultBudgetEnforcer` | Enforces turn / token / cost / wall-clock limits at the top of each turn; returns `PartialResult` on exhaustion rather than throwing. |
+| `IContextBuilder` | `DefaultContextBuilder` | Assembles the final prompt from the `ContextDraft` guides produce. |
+| `ITrajectoryGuide` | `HeadEvictionTrajectoryGuide` | Renders turn history into the context window, evicting the oldest steps when the budget is tight. Always runs last. |
+| `IToolSelector` | `PassthroughToolSelector` | Filters which tools the model sees each turn — all of them, by default. |
+| `IToolRegistry` | `InMemoryToolRegistry` *(standard)* | Holds and dispatches tools. Bare `AddModelHarness` starts empty with `NullToolRegistry`. |
+| `ITracer` | `OpenTelemetryTracer` *(standard)* | Nested `gen_ai.*` spans + metrics. Bare uses `NullTracer`; add `WithConsoleTracer()` / `WithOtelTracer()`. |
 
-### User concerns
+### No-op until you opt in
 
-The framework provides the port; the caller provides the adapter. Defaults are no-ops or dev-time stubs.
+A null default does nothing until you wire a real one — free until used.
 
-| Concern | Port | Default | What it is |
-|---|---|---|---|
-| Domain tools | `ITool` | none | Functions the model can invoke. The only way an agent acts on the world. |
-| Domain sensors | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` via `AddStandardModelHarness` | Observe the loop at declared hookpoints and intervene. Run in parallel; the loop's response depends on the hookpoint. |
-| Custom guides | `IGuide` | none (seven built-in guides always run) | Shape what the model sees each turn by contributing to `ContextDraft`. Slot in after the built-in guides, before the trajectory guide. |
-| Long-term memory | `IMemoryStore` | `NullMemoryStore` | Supplies retrieved snippets to `MemoryGuide` each turn. `RetrieveAsync` takes a *query*, not a key — it does relevance ranking, so `MemoryGuide` passes the **latest user turn** as the query (falling back to `TaskText`). In a single-task run that *is* `TaskText`; in a multi-turn conversation it tracks the current question instead of anchoring on the opener. Replace with a vector store or knowledge graph for long-term retrieval. |
-| Trajectory compaction | `ICompactionStrategy` | `NullCompactionStrategy` (bare omission note — a stateless view) | Decides what replaces evicted trajectory steps. Default inserts a bare note; `AiCompactionStrategy` (via `WithAiCompaction(model, options)`) folds an incremental prose summary onto a persisted `AgentState.RollingSummary`, so cost stays flat as the run grows. Plug in your own via `WithCompactionStrategy<T>(options)`. Both take `CompactionOptions` (the eviction window, `WindowTokens`), so opting in always states the trigger. |
-| Pinned reference content | `ToolResult.Pins` → `AgentState.Pins` → `PinnedContextGuide` | empty | A tool returns `PinnedNote { Label, Content }` to pin reference content (a loaded procedure, an output contract) into the **non-evictable** system region, so it survives compaction. `skill_view` uses it — the loaded skill body is pinned, not left in the evictable trajectory, so progressive disclosure and post-compaction survival coexist. Checkpointed. |
-| Tool relevance filtering | `IToolSelector` | `PassthroughToolSelector` (all tools, every turn) | Filters `AvailableTools` in `ContextDraft` before the catalogue is rendered. Controls what the model *sees*, not what the registry *holds*. |
-| Sub-agents / A2A | `ITool` wrapping a nested `HarnessLoop` or remote endpoint | none | A sub-agent is a tool whose `ExecuteAsync` runs another `HarnessLoop` or calls a remote A2A endpoint. Fully isolated — own model, sensors, and budget. |
+| Port | Default | Opt in with |
+|---|---|---|
+| `IMemoryStore` | `NullMemoryStore` | a vector store or knowledge graph for retrieval-augmented context, queried by the latest user turn. |
+| `ISkillStore` | `NullSkillStore` | `WithSkills` / `WithLearning` — `SKILL.md` procedures the agent reads and writes. |
+| `ICompactionStrategy` | `NullCompactionStrategy` | `WithAiCompaction(...)` — fold a rolling summary instead of the bare omission note. |
+| `ICheckpointStore` | `NullCheckpointStore` | `FileCheckpointStore` — save `AgentState` each turn and resume after a crash. |
+| `IRateLimiter` | `NullRateLimiter` | a provider sliding-window limiter checked before each model call. |
+| `IHumanNotifier` | `NullHumanNotifier` | a channel that delivers `ask_human` questions and suspends the run with `AwaitingHuman`. |
+
+### You supply
+
+No default — the harness needs these from you. The last three are **additive**: what you register runs alongside the built-ins.
+
+| Port | Default | What it is |
+|---|---|---|
+| `IModelClient` | none — **required** | Model transport. Supply via `.WithModel(...)` / `.WithResilientModel(...)` — Anthropic, Azure, Ollama, or custom. |
+| `ITool` | none | Domain tools — the only way the agent acts on the world. |
+| `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` *(standard)* | Observe and intervene at the five hookpoints; bare wires none. |
+| `IGuide` | the seven built-in guides | Shape what the model sees each turn; custom guides slot in before the trajectory guide. |
+
+Beyond the ports: a tool can pin reference content (`ToolResult.Pins`) into the non-evictable region so it survives compaction, and any `ITool` can wrap a nested `HarnessLoop` as a fully-isolated sub-agent — see [EXTENDING.md](docs/EXTENDING.md).
 
 ---
 
