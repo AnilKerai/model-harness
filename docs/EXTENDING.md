@@ -616,7 +616,10 @@ the adapter's `ConfigureClient` hook (e.g. `ConfigureClient = o => o.Timeout = T
 on `ClaudeClientOptions`, or `o => o.NetworkTimeout = ...` on `AzureOpenAIClientOptions`). Cap
 per-call output length with `MaxOutputTokens` on any of the three options records — Anthropic
 defaults to 8096 when unset (the API requires a value), Azure and Ollama fall back to the
-service/model default. For an
+service/model default. `ClaudeClientOptions` turns on Anthropic prompt caching by default
+(`EnablePromptCaching`): the stable tool + system + prior-turn prefix is cached and re-read at
+~0.1× input cost each turn — a win for the turn-by-turn loop; set it `false` for single-shot use
+(Azure/OpenAI caches automatically server-side; Ollama is local). For an
 additional circuit breaker that fast-fails during a sustained outage, wrap the client with
 `WithResilientModel` from the Resilience package; pass a custom `ResiliencePipeline<ModelResponse>` as
 a second argument to override the default breaker.

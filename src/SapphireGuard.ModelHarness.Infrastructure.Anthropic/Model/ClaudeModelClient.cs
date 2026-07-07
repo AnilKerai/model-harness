@@ -27,6 +27,7 @@ public sealed class ClaudeModelClient : IModelClient
     private readonly AnthropicClient _client;
     private readonly string _modelId;
     private readonly int _maxTokens;
+    private readonly bool _enablePromptCaching;
 
     public ClaudeModelClient(ClaudeClientOptions options)
     {
@@ -35,6 +36,7 @@ public sealed class ClaudeModelClient : IModelClient
         _client = new AnthropicClient(clientOptions);
         _modelId = options.ModelId;
         _maxTokens = options.MaxOutputTokens ?? 8096;
+        _enablePromptCaching = options.EnablePromptCaching;
     }
 
     public async Task<ModelResponse> CallAsync(
@@ -56,7 +58,10 @@ public sealed class ClaudeModelClient : IModelClient
             MaxTokens = _maxTokens,
             Messages = sdkMessages,
             Tools = sdkTools.Length > 0 ? sdkTools : null,
-            System = systemText is null ? (MessageCreateParamsSystem?)null : systemText
+            System = systemText is null ? (MessageCreateParamsSystem?)null : systemText,
+            // Top-level cache_control auto-places on the last cacheable block, so the tool + system +
+            // prior-turn prefix is a cache read on the next turn rather than re-billed in full.
+            CacheControl = _enablePromptCaching ? new CacheControlEphemeral() : null
         };
 
         var response = await _client.Messages.Create(request, ct);

@@ -208,11 +208,13 @@ These are provider-specific wire-format optimisations. The harness does not anno
 `Framework` with concepts that only some providers support. Each adapter owns its own
 optimisation decisions.
 
-- **Token / prompt caching** (`cache_control` breakpoints in `ClaudeModelClient`,
-  equivalent mechanisms in other adapters) — the system prompt and tool catalogue are
-  stable across turns and are natural cache targets; the adapter can identify and mark
-  them without any harness involvement. If a shared abstraction ever earns its keep
-  (three adapters with diverging caching semantics), revisit then.
+- **Token / prompt caching** — **done for Anthropic**: `ClaudeModelClient` sets a top-level
+  `cache_control` breakpoint each turn (auto-placed on the last block), so the stable
+  tool + system + prior-turn prefix is a cache read (~0.1× input cost) on the next turn
+  instead of re-billed in full. Opt out via `ClaudeClientOptions.EnablePromptCaching = false`.
+  Azure/OpenAI caches prefixes automatically server-side (no code); Ollama is local. Kept
+  adapter-local — the harness annotates no caching hints on `ContextDraft`. If a shared
+  abstraction ever earns its keep (adapters with diverging caching semantics), revisit then.
 
 ---
 
