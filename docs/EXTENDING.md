@@ -132,6 +132,38 @@ retry + circuit-breaking via the Resilience package:
 builder.WithResilientTool<MyApiTool>()
 ```
 
+### Large tool results
+
+A `ToolResult.Content` is stored verbatim on an **append-only** trajectory and checkpointed with the
+whole state every turn. `HeadEvictionTrajectoryGuide` keeps an oversized result out of the *prompt*
+(it is evicted and compacted once it exceeds the window), but the step stays in the trajectory — so a
+multi-megabyte result is re-serialised to disk on every remaining turn, and under AI compaction it is
+fed to the summariser.
+
+The harness deliberately **does not truncate** tool output: only the tool knows which bytes are
+disposable, so bounding output is the tool's job. Three patterns, cheapest first:
+
+**Paginate** — a `read_file` / `list_*` tool takes `offset` + `limit` and returns one page plus a hint:
+
+```csharp
+return new ToolResult(call.CallId,
+    $"{pageText}\n\n[rows {offset}–{offset + count} of {total}; call again with offset={offset + count} for more]");
+```
+
+**Cap at the source** — a `sql_query` / `search` tool pushes a `LIMIT` down to the query and reports
+what it dropped (`[top 50 of 4,200 matches — refine your filter]`), rather than materialising the whole
+result set and trimming after.
+
+**Summary + handle** — for a large fetch (a web page, a document), return a short summary and an id,
+and expose a follow-up tool (`fetch_section(id, …)`) so the agent pulls only the slice it needs. This
+keeps the full payload out of the trajectory entirely.
+
+In each case the result carries a marker telling the model there is more and how to reach it, so the
+model narrows its next call instead of drowning in one turn. If you need a blunt safety net against a
+*misbehaving* tool (rather than routine trimming), the opt-in `ToolResultSanityCheckSensor` flags a
+result over a character limit at `PostToolCall` — but it annotates, it does not shrink what was already
+committed, so tool-side bounding is the real fix.
+
 ## Replace the tool registry
 
 `IToolRegistry` is the port that sits between the loop and your tools. It has two jobs: supply the tool list to the guide pipeline each turn (`List()`), and route model-issued tool calls to the right implementation (`DispatchAsync()`).
