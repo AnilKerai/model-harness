@@ -43,7 +43,7 @@ var outcome = await provider.GetRequiredService<Agent>()
 Console.WriteLine(outcome.FinalAnswer);
 ```
 
-No API key? Samples fall back to a `FakeModelClient`, so the harness runs without one. A minimal runnable project is in [`getting-started/`](getting-started/) — open `GettingStarted.slnx`, drop an `appsettings.local.json` with your key, and run. Then: **[RUNNING.md](docs/RUNNING.md)** to run the samples, **[EXTENDING.md](docs/EXTENDING.md)** for how-to recipes, **[CONCEPTS.md](docs/CONCEPTS.md)** for the ideas behind it.
+No API key? Samples fall back to a `FakeModelClient`, so the harness runs without one. A minimal runnable project is in [`getting-started/`](getting-started/) — open `GettingStarted.slnx`, drop an `appsettings.local.json` with your key, and run. Then: **[RUNNING.md](docs/RUNNING.md)** to run the samples, **[EXTENDING.md](docs/EXTENDING.md)** for how-to recipes, **[PRIMER.md](docs/PRIMER.md)** for the ideas behind it.
 
 ---
 
@@ -117,7 +117,7 @@ Beyond the ports: a tool can pin reference content (`ToolResult.Pins`) into the 
 ## Core patterns
 
 The framework is built around two composable patterns that together give
-fine-grained control over agent behaviour without modifying the loop. The agentic-AI theory behind them is written up in [CONCEPTS.md](docs/CONCEPTS.md).
+fine-grained control over agent behaviour without modifying the loop. The agentic-AI theory behind them is written up in [PRIMER.md](docs/PRIMER.md).
 
 ### The Guide pattern — shaping perception
 
@@ -477,7 +477,7 @@ to a sub-agent specialist).
 - [RUNNING.md](docs/RUNNING.md) — setup and run instructions for each sample
 - [EXTENDING.md](docs/EXTENDING.md) — code recipes for every extension point
 - [FEATURES.md](docs/FEATURES.md) — deep write-ups for the experimental features (learning, AI sensors, taint tracking)
-- [CONCEPTS.md](docs/CONCEPTS.md) — the agentic-AI concepts behind the framework: loop / context engineering and the agentic primitives
+- [PRIMER.md](docs/PRIMER.md) — a primer on the agentic-AI ideas behind the framework: loop / context engineering and the agentic primitives
 - [GLOSSARY.md](docs/GLOSSARY.md) — definitions of all framework terms
 - [ROADMAP.md](docs/ROADMAP.md) — what's done and what's still to implement
 - [FAQ.md](docs/FAQ.md) — design decision FAQs

@@ -1,4 +1,4 @@
-# Concepts
+# Agentic-AI primer
 
 Background on the agentic-AI ideas this framework implements — **loop engineering**, **context engineering**, and the **agentic primitives**. The [README](../README.md) covers the framework itself (patterns, ports, wiring); this guide covers the *why* behind it.
 

@@ -248,7 +248,7 @@ at the same hookpoint. See the [sensor pattern](../README.md#the-sensor-pattern-
 
 ## Taint tracking *(Experimental)*
 
-Taint tracking guards against prompt injection attacks that attempt to use external content to trigger privileged side-effecting actions. See the [Prompt injection and taint tracking](FEATURES.md#prompt-injection-and-taint-tracking-experimental) feature write-up for the threat model, and [CONCEPTS.md](CONCEPTS.md#prompt-injection-and-taint-tracking) for the theory.
+Taint tracking guards against prompt injection attacks that attempt to use external content to trigger privileged side-effecting actions. See the [Prompt injection and taint tracking](FEATURES.md#prompt-injection-and-taint-tracking-experimental) feature write-up for the threat model, and [PRIMER.md](PRIMER.md#prompt-injection-and-taint-tracking) for the theory.
 
 **Wiring:**
 

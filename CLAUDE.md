@@ -116,7 +116,7 @@ The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContext
 - **Commit and push after every changeset** — do not wait to be asked.
 - Before designing a non-trivial solution, ask clarifying questions to improve the spec.
 - When using external SDKs or APIs, fetch up-to-date docs rather than relying on training data.
-- **After any change, re-check the docs for staleness and fix them in the same changeset** — `README.md`, `CLAUDE.md`, and `docs/*.md` (CONCEPTS, EXTENDING, ROADMAP). If a change renames a symbol, removes a project, alters a default, or adds/removes a feature, update every doc that referenced it so the docs never drift from the code.
+- **After any change, re-check the docs for staleness and fix them in the same changeset** — `README.md`, `CLAUDE.md`, and `docs/*.md` (PRIMER, EXTENDING, ROADMAP). If a change renames a symbol, removes a project, alters a default, or adds/removes a feature, update every doc that referenced it so the docs never drift from the code.
 
 ## Testing
 
