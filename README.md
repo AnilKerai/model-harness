@@ -196,6 +196,78 @@ the default policy — useful for dynamic limits, per-user quotas, or cost alloc
 
 ---
 
+## The loop (`HarnessLoop`)
+
+```mermaid
+sequenceDiagram
+    participant C as Caller
+    participant L as HarnessLoop
+    participant CP as ICheckpointStore
+    participant B as IBudgetEnforcer
+    participant RL as IRateLimiter
+    participant S as ISensorRunner
+    participant CB as IContextBuilder
+    participant M as IModelClient
+    participant R as IToolRegistry
+
+    C->>L: RunAsync(AgentState)
+
+    loop Each turn
+        L->>CP: SaveAsync(Checkpoint{turn, state})
+        L->>B: Check(state, startedAt)
+        alt Budget exhausted
+            B-->>L: Exhausted(reason)
+            L->>CB: BuildAsync — force-finalise prompt
+            L->>M: CallAsync (no tools)
+            M-->>L: ModelResponse
+            L-->>C: AgentOutcome { PartialResult }
+        else Budget ok
+            B-->>L: Ok
+            L->>RL: CheckAsync(state)
+            alt Rate limited
+                RL-->>L: Limited(retryAfter)
+                note over L: wait retryAfter then continue
+            else Not limited
+            L->>S: RunAsync(PreModelCall)
+            S-->>L: Pass / Intervene → SensorInterventionStep
+            L->>CB: BuildAsync(state, allTools)
+            CB-->>L: ContextBuildResult(messages, selectedTools)
+            L->>M: CallAsync(messages, toolDefinitions)
+            M-->>L: ModelResponse
+            L->>S: RunAsync(PostModelCall)
+            S-->>L: Pass / Intervene → SensorInterventionStep
+            alt No tool calls in response
+                L->>S: RunAsync(PreReturn)
+                S-->>L: Pass / Intervene → SensorInterventionStep
+                L-->>C: AgentOutcome { Done, FinalAnswer }
+            else Tool calls requested
+                loop Each tool call
+                    L->>S: RunAsync(PreToolCall)
+                    alt Sensor intervenes
+                        S-->>L: Intervene → SensorInterventionStep + ToolCallStep(IsError)
+                    else Sensor passes
+                        L->>R: DispatchAsync(call)
+                        R-->>L: ToolResult
+                        L->>S: RunAsync(PostToolCall)
+                    end
+                end
+            end
+            end
+        end
+    end
+```
+
+Budget exhaustion is not an exception — `IBudgetEnforcer.Check` returns
+`Exhausted(reason)` and the loop makes one final model call with tools disabled,
+returning `AgentOutcome { Status = PartialResult }`. `BudgetExceededException`
+is reserved for tools or sub-agents that violate budget from underneath the loop.
+
+---
+
+## Built on the two patterns
+
+The three capabilities that follow aren't separate subsystems — each is composed entirely from the guide and sensor patterns above, with **no changes to the loop**. They're as much worked examples as features: *agent learning* is a guide plus two tools; *AI-powered sensors* and *taint tracking* are just sensors. Each is opt-in.
+
 ## Agent Learning *(Experimental)*
 
 An agent can accumulate knowledge over time by writing its own **skills** — markdown
@@ -344,74 +416,6 @@ builder.WithTaintTracking(
 ```
 
 The sensor is not registered by default — calling `WithTaintTracking` is the explicit opt-in. Agents that do not call it are unaffected.
-
----
-
-## The loop (`HarnessLoop`)
-
-```mermaid
-sequenceDiagram
-    participant C as Caller
-    participant L as HarnessLoop
-    participant CP as ICheckpointStore
-    participant B as IBudgetEnforcer
-    participant RL as IRateLimiter
-    participant S as ISensorRunner
-    participant CB as IContextBuilder
-    participant M as IModelClient
-    participant R as IToolRegistry
-
-    C->>L: RunAsync(AgentState)
-
-    loop Each turn
-        L->>CP: SaveAsync(Checkpoint{turn, state})
-        L->>B: Check(state, startedAt)
-        alt Budget exhausted
-            B-->>L: Exhausted(reason)
-            L->>CB: BuildAsync — force-finalise prompt
-            L->>M: CallAsync (no tools)
-            M-->>L: ModelResponse
-            L-->>C: AgentOutcome { PartialResult }
-        else Budget ok
-            B-->>L: Ok
-            L->>RL: CheckAsync(state)
-            alt Rate limited
-                RL-->>L: Limited(retryAfter)
-                note over L: wait retryAfter then continue
-            else Not limited
-            L->>S: RunAsync(PreModelCall)
-            S-->>L: Pass / Intervene → SensorInterventionStep
-            L->>CB: BuildAsync(state, allTools)
-            CB-->>L: ContextBuildResult(messages, selectedTools)
-            L->>M: CallAsync(messages, toolDefinitions)
-            M-->>L: ModelResponse
-            L->>S: RunAsync(PostModelCall)
-            S-->>L: Pass / Intervene → SensorInterventionStep
-            alt No tool calls in response
-                L->>S: RunAsync(PreReturn)
-                S-->>L: Pass / Intervene → SensorInterventionStep
-                L-->>C: AgentOutcome { Done, FinalAnswer }
-            else Tool calls requested
-                loop Each tool call
-                    L->>S: RunAsync(PreToolCall)
-                    alt Sensor intervenes
-                        S-->>L: Intervene → SensorInterventionStep + ToolCallStep(IsError)
-                    else Sensor passes
-                        L->>R: DispatchAsync(call)
-                        R-->>L: ToolResult
-                        L->>S: RunAsync(PostToolCall)
-                    end
-                end
-            end
-            end
-        end
-    end
-```
-
-Budget exhaustion is not an exception — `IBudgetEnforcer.Check` returns
-`Exhausted(reason)` and the loop makes one final model call with tools disabled,
-returning `AgentOutcome { Status = PartialResult }`. `BudgetExceededException`
-is reserved for tools or sub-agents that violate budget from underneath the loop.
 
 ---
 
