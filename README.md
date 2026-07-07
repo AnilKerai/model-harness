@@ -160,42 +160,6 @@ Model re-plans without that tool
 
 ---
 
-## Budget enforcement
-
-Every run is bounded by a `Budget` — four hard limits checked at the top of each turn
-before any sensor or model call:
-
-| Limit | What it controls |
-|---|---|
-| `MaxTurns` | Maximum number of loop iterations |
-| `MaxTotalTokens` | Cumulative token ceiling across the whole run (all model, tool, sensor, and compaction calls). Not the per-turn context window — that's `CompactionOptions.WindowTokens`. |
-| `MaxCost` | Maximum spend (based on the model client's cost tracking) |
-| `MaxWallClock` | Maximum elapsed time from the first turn |
-
-Budget exhaustion is **not an exception** — it is control flow. When a limit is hit,
-the loop makes one final model call with tools disabled so the model can produce a
-best-effort answer from what it already knows, then returns
-`AgentOutcome { Status = PartialResult }`. This keeps the agent composable — callers
-always get a result, never an unhandled exception from the harness itself.
-
-```csharp
-var outcome = await agent.RunAsync(task, budget: new Budget
-{
-    MaxTurns       = 10,
-    MaxTotalTokens = 100_000,
-    MaxCost        = 0.50m,
-    MaxWallClock   = TimeSpan.FromMinutes(2)
-});
-
-if (outcome.Status == AgentStatus.PartialResult)
-    // The agent hit a limit — outcome.FinalAnswer is its best-effort response.
-```
-
-Implement `IBudgetEnforcer` and register via `builder.WithBudgetEnforcer<T>()` to replace
-the default policy — useful for dynamic limits, per-user quotas, or cost allocation.
-
----
-
 ## The loop (`HarnessLoop`)
 
 ```mermaid
@@ -261,6 +225,42 @@ Budget exhaustion is not an exception — `IBudgetEnforcer.Check` returns
 `Exhausted(reason)` and the loop makes one final model call with tools disabled,
 returning `AgentOutcome { Status = PartialResult }`. `BudgetExceededException`
 is reserved for tools or sub-agents that violate budget from underneath the loop.
+
+---
+
+## Budget enforcement
+
+Every run is bounded by a `Budget` — four hard limits checked at the top of each turn
+before any sensor or model call:
+
+| Limit | What it controls |
+|---|---|
+| `MaxTurns` | Maximum number of loop iterations |
+| `MaxTotalTokens` | Cumulative token ceiling across the whole run (all model, tool, sensor, and compaction calls). Not the per-turn context window — that's `CompactionOptions.WindowTokens`. |
+| `MaxCost` | Maximum spend (based on the model client's cost tracking) |
+| `MaxWallClock` | Maximum elapsed time from the first turn |
+
+Budget exhaustion is **not an exception** — it is control flow. When a limit is hit,
+the loop makes one final model call with tools disabled so the model can produce a
+best-effort answer from what it already knows, then returns
+`AgentOutcome { Status = PartialResult }`. This keeps the agent composable — callers
+always get a result, never an unhandled exception from the harness itself.
+
+```csharp
+var outcome = await agent.RunAsync(task, budget: new Budget
+{
+    MaxTurns       = 10,
+    MaxTotalTokens = 100_000,
+    MaxCost        = 0.50m,
+    MaxWallClock   = TimeSpan.FromMinutes(2)
+});
+
+if (outcome.Status == AgentStatus.PartialResult)
+    // The agent hit a limit — outcome.FinalAnswer is its best-effort response.
+```
+
+Implement `IBudgetEnforcer` and register via `builder.WithBudgetEnforcer<T>()` to replace
+the default policy — useful for dynamic limits, per-user quotas, or cost allocation.
 
 ---
 
