@@ -33,7 +33,7 @@ services.AddStandardModelHarness(builder => builder
     .WithSystemPrompt("You are a helpful assistant.")
     .WithConsoleTracer()
     .WithTool<CalculatorTool>()
-    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
+    .WithClaudeModel(new ClaudeClientOptions { ApiKey = apiKey }));
 
 await using var provider = services.BuildServiceProvider();
 
@@ -105,7 +105,7 @@ No default — the harness needs these from you. The last three are **additive**
 
 | Port | Default | What it is |
 |---|---|---|
-| `IModelClient` | none — **required** | Model transport. Supply via `.WithModel(...)` / `.WithResilientModel(...)` — Anthropic, Azure, Ollama, or custom. |
+| `IModelClient` | none — **required** | Model transport. Supply via a provider convenience method (`.WithClaudeModel(...)` / `.WithOllamaModel(...)` / `.WithAzureOpenAIModel(...)`), the generic `.WithModel(...)`, or `.WithResilientModel(...)` for a production circuit breaker. |
 | `ITool` | none | Domain tools — the only way the agent acts on the world. |
 | `ISensor` | `StuckDetector`, `ProgressCheckSensor`, `PromptInjectionSensor` *(standard)* | Observe and intervene at the five hookpoints; bare wires none. |
 | `IGuide` | the seven built-in guides | Shape what the model sees each turn; custom guides slot in before the trajectory guide. |
@@ -396,8 +396,8 @@ ToolCatalogueGuide → SkillsGuide → PinnedContextGuide`, with `HeadEvictionTr
 `DefaultBudgetEnforcer`, the default context builder / guide runner / sensor runner, and a no-op
 for every remaining port (`NullMemoryStore`, `NullSkillStore`, `PassthroughToolSelector`,
 `NullCompactionStrategy`, `NullCheckpointStore`, `NullRateLimiter`, `NullHumanNotifier`).
-**Neither registers a model client** — you always supply one in the `configure` callback via
-`.WithModel(...)` / `.WithResilientModel(...)`.
+**Neither registers a model client** — you always supply one in the `configure` callback: a provider
+convenience method like `.WithClaudeModel(...)`, the generic `.WithModel(...)`, or `.WithResilientModel(...)` (adds a production circuit breaker).
 
 `AddStandardModelHarness` then layers the opinionated extras on top:
 
@@ -449,7 +449,7 @@ Carry the conversation forward by passing the prior outcome's state back with `W
 ```csharp
 services.AddStandardChatHarness(builder => builder
     .WithSystemPrompt("You are a friendly assistant.")
-    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
+    .WithClaudeModel(new ClaudeClientOptions { ApiKey = apiKey }));
 
 await using var provider = services.BuildServiceProvider();
 var agent = provider.GetRequiredService<Agent>();

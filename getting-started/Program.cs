@@ -5,8 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Infrastructure;
+using SapphireGuard.ModelHarness.Infrastructure.Anthropic;
 using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
-using SapphireGuard.ModelHarness.Infrastructure.Resilience;
 using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 
 var config = new ConfigurationBuilder()
@@ -38,11 +38,11 @@ services.AddStandardModelHarness(builder =>
         .WithConsoleTracer();                  // stream the loop's decisions to stdout
 
     if (usingRealModel)
-        builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
+        builder.WithClaudeModel(new ClaudeClientOptions
         {
             ApiKey = anthropicKey!,
             ModelId = config["Anthropic:ModelId"] ?? "claude-haiku-4-5"
-        }));
+        });
     else
         builder.WithModel(_ => new SupportScriptedModelClient());
 });

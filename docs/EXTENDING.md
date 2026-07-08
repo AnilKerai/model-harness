@@ -16,7 +16,7 @@ services.AddModelHarness(builder => builder
     .WithTool<CalculatorTool>()
     .WithSensor<MySensor>()
     .WithGuide<MyGuide>()
-    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
+    .WithClaudeModel(new ClaudeClientOptions { ApiKey = apiKey }));
 ```
 
 Everything below is opt-in whether you use `AddStandardModelHarness` or `AddModelHarness`.
@@ -31,7 +31,7 @@ user turns, each with its own goal. Use `AddChatHarness` (bare, `Framework`) or
 ```csharp
 services.AddStandardChatHarness(builder => builder
     .WithSystemPrompt("You are a friendly assistant.")
-    .WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey })));
+    .WithClaudeModel(new ClaudeClientOptions { ApiKey = apiKey }));
 ```
 
 These are thin siblings of the model-harness entry points — same `HarnessLoop`, `AgentState`, and
@@ -596,23 +596,31 @@ builder
 
 ```csharp
 // Anthropic (via Infrastructure.Anthropic)
-builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions
+builder.WithClaudeModel(new ClaudeClientOptions
 {
     ApiKey = apiKey,
     ModelId = "claude-haiku-4-5-20251001"
-}))
+})
 
 // Ollama — local inference (via Infrastructure.Ollama)
 builder.WithOllamaModel(new OllamaClientOptions { ModelId = "qwen2.5:7b" })
 
 // Azure AI Foundry / Azure OpenAI Service (via Infrastructure.AzureOpenAI)
 // ApiKey = null uses DefaultAzureCredential (managed identity) — recommended for production
-builder.WithResilientModel(_ => new AzureOpenAIModelClient(new AzureOpenAIClientOptions
+builder.WithAzureOpenAIModel(new AzureOpenAIClientOptions
 {
     Endpoint = new Uri("https://your-resource.openai.azure.com"),
     DeploymentName = "gpt-4o",
     ApiKey = null
-}))
+})
+```
+
+For a custom transport, implement `IModelClient` and register it with the generic `builder.WithModel(_ => new MyModelClient(...))`.
+
+**Production resilience (opt-in).** `builder.WithResilientModel(...)` (from `Infrastructure.Resilience`) wraps any model client in a Polly **circuit breaker** — after a run of failures it fast-fails for a cooldown instead of hammering a down provider, which matters under high throughput or across a fleet. It deliberately adds *no* retry or timeout (the provider SDKs already own those — a stacked second retry caused compounding back-off), so a single agent run rarely needs it:
+
+```csharp
+builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey }))
 ```
 
 The provider SDKs already retry transient failures and apply a request timeout — tune those via
