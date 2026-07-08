@@ -21,12 +21,6 @@ public sealed record AgentState
     /// <summary>Current lifecycle status of the run.</summary>
     public required AgentStatus Status { get; init; }
 
-    /// <summary>Optional high-level plan the model has produced for this task.</summary>
-    public string? Plan { get; init; }
-
-    /// <summary>Optional working scratchpad the model uses for intermediate reasoning.</summary>
-    public string? Scratchpad { get; init; }
-
     /// <summary>Ordered log of every <see cref="Step"/> taken during this run.</summary>
     public IReadOnlyList<Step> Trajectory { get; init; } = [];
 

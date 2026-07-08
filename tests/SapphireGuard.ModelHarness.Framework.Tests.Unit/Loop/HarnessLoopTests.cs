@@ -120,6 +120,24 @@ public sealed class HarnessLoopTests
         Assert.Equal(2, toolRegistry.DispatchCount);
     }
 
+    [Fact]
+    public async Task RunAsync_DispatchesTool_ForwardsAgentStateMetadataToToolContext()
+    {
+        // AgentState.Metadata is documented as reaching tools via ToolContext — assert the loop wires it.
+        var toolRegistry = new StubToolRegistry();
+        var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall("t")), EndTurnResponse("done"));
+        var harness = BuildHarness(client, toolRegistry: toolRegistry);
+
+        var state = AgentState.NewTask("task", new SapphireGuard.ModelHarness.Framework.State.Budget
+        {
+            MaxTurns = 10, MaxTotalTokens = 100_000, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(1)
+        }, DateTimeOffset.UtcNow, metadata: new Dictionary<string, string> { ["channel"] = "email" });
+
+        await harness.RunAsync(state, CancellationToken.None);
+
+        Assert.Equal("email", toolRegistry.CapturedContext!.Metadata["channel"]);
+    }
+
     // ── Tool-call deadline ────────────────────────────────────────────────────
 
     [Fact(Timeout = 5000)]

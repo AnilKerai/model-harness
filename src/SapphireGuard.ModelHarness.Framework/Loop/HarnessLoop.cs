@@ -322,7 +322,7 @@ public sealed class HarnessLoop(
                     IsError: true)));
         }
 
-        var ctx = ToolContext.Empty(state.TaskId, call.CallId);
+        var ctx = new ToolContext(state.TaskId, call.CallId, state.Metadata);
         using var scope = tracer.BeginToolCall(state.TaskId, turn, call);
 
         var deadline = state.Budget.MaxToolCallDuration;

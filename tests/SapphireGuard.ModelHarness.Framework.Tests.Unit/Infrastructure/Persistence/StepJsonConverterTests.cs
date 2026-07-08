@@ -175,7 +175,6 @@ public sealed class StepJsonConverterTests
         {
             TaskId = "job-42", TaskText = "where is my order?", Budget = budget,
             Status = AgentStatus.AwaitingHuman,
-            Plan = "1. look up  2. reply", Scratchpad = "customer seems anxious",
             Trajectory = trajectory,
             Metadata = new Dictionary<string, string> { ["channel"] = "email", ["priority"] = "high" },
             Pins = [new PinnedNote("Skill: order", "the pinned body")],
@@ -196,8 +195,6 @@ public sealed class StepJsonConverterTests
         Assert.Equal("job-42", s.TaskId);
         Assert.Equal("where is my order?", s.TaskText);
         Assert.Equal(AgentStatus.AwaitingHuman, s.Status);
-        Assert.Equal("1. look up  2. reply", s.Plan);
-        Assert.Equal("customer seems anxious", s.Scratchpad);
         Assert.Equal(budget, s.Budget); // record equality also covers the optional MaxToolCallDuration
 
         Assert.Equal("email", s.Metadata["channel"]);

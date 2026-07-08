@@ -9,6 +9,8 @@ public sealed class StubToolRegistry : IToolRegistry
 
     public int DispatchCount => _dispatchCount;
 
+    public ToolContext? CapturedContext { get; private set; }
+
     public StubToolRegistry(Func<ToolCall, ToolResult>? dispatch = null)
     {
         _dispatch = dispatch;
@@ -19,6 +21,7 @@ public sealed class StubToolRegistry : IToolRegistry
 
     public Task<ToolResult> DispatchAsync(ToolCall call, ToolContext context, CancellationToken ct)
     {
+        CapturedContext = context;
         Interlocked.Increment(ref _dispatchCount);
         var result = _dispatch?.Invoke(call) ?? new ToolResult(call.CallId, "stub-result");
         return Task.FromResult(result);
