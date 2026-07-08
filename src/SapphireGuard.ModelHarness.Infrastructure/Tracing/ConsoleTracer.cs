@@ -76,6 +76,29 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
     public void LogGuideError(string taskId, int turn, string guideName, string error) =>
         Emit(new { evt = "guide_error", taskId, turn, ts = _time.GetUtcNow(), guide = guideName, error });
 
+    public void LogRateLimit(string taskId, int turn, TimeSpan delay) =>
+        Emit(new { evt = "rate_limit", taskId, turn, ts = _time.GetUtcNow(), delayMs = delay.TotalMilliseconds });
+
+    public void LogCheckpoint(string taskId, int turn, string checkpointId, TimeSpan elapsed) =>
+        Emit(new { evt = "checkpoint", taskId, turn, ts = _time.GetUtcNow(), checkpointId, durationMs = elapsed.TotalMilliseconds });
+
+    public void LogBudgetSnapshot(string taskId, int turn, BudgetSnapshot snapshot) =>
+        Emit(new
+        {
+            evt = "budget",
+            taskId,
+            turn,
+            ts = _time.GetUtcNow(),
+            turnsUsed = snapshot.TurnsUsed,
+            maxTurns = snapshot.MaxTurns,
+            tokensUsed = snapshot.TokensUsed,
+            maxTotalTokens = snapshot.MaxTotalTokens,
+            costUsed = snapshot.CostUsed,
+            maxCost = snapshot.MaxCost,
+            elapsedMs = snapshot.Elapsed.TotalMilliseconds,
+            maxWallClockMs = snapshot.MaxWallClock.TotalMilliseconds
+        });
+
     private static void Emit(object payload) =>
         Console.WriteLine(JsonSerializer.Serialize(payload, Options));
 

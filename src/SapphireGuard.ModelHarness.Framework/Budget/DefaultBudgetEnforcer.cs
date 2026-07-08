@@ -14,44 +14,17 @@ public sealed class DefaultBudgetEnforcer(TimeProvider? timeProvider = null) : I
     public BudgetCheckResult Check(AgentState state, DateTimeOffset startedAt)
     {
         var budget = state.Budget;
+        // Accounting is shared with the per-turn telemetry snapshot so the two never drift.
+        var s = BudgetSnapshot.From(state, _time.GetUtcNow() - startedAt);
 
-        var turns = 0;
-        var totalCost = state.SensorCost + state.CompactionCost;
-        var totalTokens = state.SensorUsage.TotalTokens + state.CompactionUsage.TotalTokens;
-        foreach (var step in state.Trajectory)
-        {
-            if (step is ModelCallStep call)
-            {
-                turns++;
-                totalCost += call.Cost;
-                totalTokens += call.Usage.TotalTokens;
-            }
-            else if (step is ToolCallStep toolStep)
-            {
-                if (toolStep.Result.Cost is { } delegatedCost)
-                    totalCost += delegatedCost;
-                if (toolStep.Result.Usage is { } delegatedUsage)
-                    totalTokens += delegatedUsage.TotalTokens;
-            }
-        }
-
-        if (turns >= budget.MaxTurns)
-        {
+        if (s.TurnsUsed >= budget.MaxTurns)
             return BudgetCheckResult.Exhausted($"Reached MaxTurns ({budget.MaxTurns}).");
-        }
-        if (totalCost >= budget.MaxCost)
-        {
+        if (s.CostUsed >= budget.MaxCost)
             return BudgetCheckResult.Exhausted($"Reached MaxCost ({budget.MaxCost:F4}).");
-        }
-        if (totalTokens >= budget.MaxTotalTokens)
-        {
+        if (s.TokensUsed >= budget.MaxTotalTokens)
             return BudgetCheckResult.Exhausted($"Reached MaxTotalTokens ({budget.MaxTotalTokens}).");
-        }
-        var elapsed = _time.GetUtcNow() - startedAt;
-        if (elapsed >= budget.MaxWallClock)
-        {
+        if (s.Elapsed >= budget.MaxWallClock)
             return BudgetCheckResult.Exhausted($"Reached MaxWallClock ({budget.MaxWallClock}).");
-        }
 
         return BudgetCheckResult.Ok;
     }

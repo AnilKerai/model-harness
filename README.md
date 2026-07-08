@@ -84,7 +84,7 @@ A real implementation runs unless you override it.
 | `ITrajectoryGuide` | `HeadEvictionTrajectoryGuide` | Renders turn history into the context window, evicting the oldest steps when the budget is tight. Always runs last. |
 | `IToolSelector` | `PassthroughToolSelector` | Filters which tools the model sees each turn — all of them, by default. |
 | `IToolRegistry` | `InMemoryToolRegistry` *(standard)* | Holds and dispatches tools. Bare `AddModelHarness` starts empty with `NullToolRegistry`. |
-| `ITracer` | `OpenTelemetryTracer` *(standard)* | Nested `gen_ai.*` spans + metrics. Bare uses `NullTracer`; add `WithConsoleTracer()` / `WithOtelTracer()`. |
+| `ITracer` | `OpenTelemetryTracer` *(standard)* | Nested `gen_ai.*` spans + metrics; per-turn events for sensors, guides, compaction, checkpoints, rate-limit waits, and budget burn-down. Bare uses `NullTracer`; add `WithConsoleTracer()` / `WithOtelTracer()`. |
 
 ### No-op until you opt in
 

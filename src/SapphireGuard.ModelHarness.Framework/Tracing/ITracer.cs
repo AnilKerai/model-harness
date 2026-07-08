@@ -25,7 +25,7 @@ public interface ITracer
     /// <summary>Opens a scope around a tool execution so a tracer can bracket it as a real span. The loop calls <see cref="IToolCallScope.Complete"/> with the result, then disposes the scope. <paramref name="turn"/> is the zero-based turn index the call belongs to.</summary>
     IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call);
 
-    /// <summary>Called after each sensor evaluation that produces an intervention. <paramref name="turn"/> is the zero-based turn index the evaluation belongs to.</summary>
+    /// <summary>Called after <em>every</em> sensor evaluation — pass, intervention, or error, not only interventions. <paramref name="turn"/> is the zero-based turn index the evaluation belongs to.</summary>
     void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result);
 
     /// <summary>Called once when the run finishes with the terminal status and, on failure, a reason.</summary>
@@ -54,6 +54,25 @@ public interface ITracer
     /// store timing out or a skill store failing to read).
     /// </summary>
     void LogGuideError(string taskId, int turn, string guideName, string error) { }
+
+    /// <summary>
+    /// Called when the loop waits on a rate-limit backoff before a turn. <paramref name="delay"/> is
+    /// how long it will wait. Default no-op — override to observe throttling (how often, how long).
+    /// </summary>
+    void LogRateLimit(string taskId, int turn, TimeSpan delay) { }
+
+    /// <summary>
+    /// Called after each turn's checkpoint is saved. <paramref name="elapsed"/> is the save duration.
+    /// Default no-op — override to observe persistence latency (a slow or failing store is otherwise invisible).
+    /// </summary>
+    void LogCheckpoint(string taskId, int turn, string checkpointId, TimeSpan elapsed) { }
+
+    /// <summary>
+    /// Called once per turn with the run's cumulative resource usage against its budget, so consumption
+    /// is observable before exhaustion (not only at the terminal <c>PartialResult</c>). Default no-op —
+    /// override to chart budget burn-down per turn.
+    /// </summary>
+    void LogBudgetSnapshot(string taskId, int turn, BudgetSnapshot snapshot) { }
 }
 
 /// <summary>Scope bracketing a single model call. Complete it with the response, then dispose (a plain <c>using</c> does this). Disposal without <see cref="Complete"/> marks the span failed.</summary>

@@ -51,16 +51,20 @@ public sealed class HarnessLoop(
                 // so a trace backend can group all the work of a single turn together.
                 var turnIndex = turn++;
 
+                var checkpointId = Guid.NewGuid().ToString("n");
+                var checkpointStart = _time.GetTimestamp();
                 await checkpointStore.SaveAsync(new Checkpoint
                 {
-                    CheckpointId = Guid.NewGuid().ToString("n"),
+                    CheckpointId = checkpointId,
                     RunId = runId,
                     CreatedAt = _time.GetUtcNow(),
                     TurnNumber = turnIndex,
                     State = state
                 }, ct);
+                tracer.LogCheckpoint(state.TaskId, turnIndex, checkpointId, _time.GetElapsedTime(checkpointStart));
 
                 var budgetCheck = budgetEnforcer.Check(state, startedAt);
+                tracer.LogBudgetSnapshot(state.TaskId, turnIndex, BudgetSnapshot.From(state, _time.GetUtcNow() - startedAt));
                 if (budgetCheck.IsExhausted)
                     return await FinaliseOnBudgetAsync(state, turnIndex, budgetCheck.Reason!, ct);
 
@@ -71,6 +75,7 @@ public sealed class HarnessLoop(
                     if (_time.GetUtcNow() + delay > startedAt + state.Budget.MaxWallClock)
                         return await FinaliseOnBudgetAsync(state, turnIndex,
                             $"Rate limit wait ({delay.TotalSeconds:0}s) would exceed MaxWallClock.", ct);
+                    tracer.LogRateLimit(state.TaskId, turnIndex, delay);
                     await Task.Delay(delay, ct);
                     continue;
                 }
@@ -176,14 +181,17 @@ public sealed class HarnessLoop(
             Status = AgentStatus.AwaitingHuman,
             PendingHumanInput = pending
         };
+        var checkpointId = Guid.NewGuid().ToString("n");
+        var checkpointStart = _time.GetTimestamp();
         await checkpointStore.SaveAsync(new Checkpoint
         {
-            CheckpointId = Guid.NewGuid().ToString("n"),
+            CheckpointId = checkpointId,
             RunId = runId,
             CreatedAt = _time.GetUtcNow(),
             TurnNumber = turn,
             State = suspended
         }, ct);
+        tracer.LogCheckpoint(suspended.TaskId, turn, checkpointId, _time.GetElapsedTime(checkpointStart));
         tracer.Complete(suspended.TaskId, AgentStatus.AwaitingHuman, failureReason: null);
         return new AgentOutcome
         {

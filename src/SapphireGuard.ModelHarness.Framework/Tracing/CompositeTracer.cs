@@ -43,6 +43,21 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
     {
         foreach (var t in tracers) t.LogGuideError(taskId, turn, guideName, error);
     }
+
+    public void LogRateLimit(string taskId, int turn, TimeSpan delay)
+    {
+        foreach (var t in tracers) t.LogRateLimit(taskId, turn, delay);
+    }
+
+    public void LogCheckpoint(string taskId, int turn, string checkpointId, TimeSpan elapsed)
+    {
+        foreach (var t in tracers) t.LogCheckpoint(taskId, turn, checkpointId, elapsed);
+    }
+
+    public void LogBudgetSnapshot(string taskId, int turn, BudgetSnapshot snapshot)
+    {
+        foreach (var t in tracers) t.LogBudgetSnapshot(taskId, turn, snapshot);
+    }
 }
 
 [ExcludeFromCodeCoverage]

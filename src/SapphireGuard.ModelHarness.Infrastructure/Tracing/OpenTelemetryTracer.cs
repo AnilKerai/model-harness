@@ -36,6 +36,12 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         "harness.sensor.interventions", unit: "{intervention}", description: "Number of sensor interventions raised.");
     private static readonly Histogram<long> CompactionReclaimed = Meter.CreateHistogram<long>(
         "harness.compaction.tokens_reclaimed", unit: "{token}", description: "Tokens reclaimed per compaction pass.");
+    private static readonly Counter<long> SensorEvaluations = Meter.CreateCounter<long>(
+        "harness.sensor.evaluations", unit: "{evaluation}", description: "Sensor evaluations, tagged by verdict (pass/intervene/error).");
+    private static readonly Histogram<double> RateLimitWait = Meter.CreateHistogram<double>(
+        "harness.ratelimit.wait", unit: "s", description: "Duration the loop waited on a rate-limit backoff before a turn.");
+    private static readonly Histogram<double> CheckpointDuration = Meter.CreateHistogram<double>(
+        "harness.checkpoint.duration", unit: "s", description: "Duration of a per-turn checkpoint save.");
 
     private readonly ConcurrentDictionary<string, Activity?> _activities = new();
 
@@ -76,6 +82,15 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
 
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result)
     {
+        // Every evaluation (pass included) is counted so full sensor activity is visible in metrics;
+        // only interventions/errors become span events, to keep the root span from bloating on passes.
+        SensorEvaluations.Add(1, new TagList
+        {
+            { "harness.sensor.name", sensorName },
+            { "harness.sensor.hook_point", hookPoint.ToString() },
+            { "harness.sensor.verdict", result.IsError ? "error" : result.IsIntervene ? "intervene" : "pass" },
+        });
+
         if (!result.IsIntervene && !result.IsError) return;
 
         if (_activities.TryGetValue(taskId, out var activity))
@@ -145,6 +160,46 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         }));
 
         CompactionReclaimed.Record(trace.TokensReclaimed, new TagList { { "harness.compaction.folded", trace.Folded } });
+    }
+
+    public void LogRateLimit(string taskId, int turn, TimeSpan delay)
+    {
+        if (_activities.TryGetValue(taskId, out var activity))
+            activity?.AddEvent(new ActivityEvent("harness.rate_limit", tags: new ActivityTagsCollection
+            {
+                ["harness.turn"] = turn,
+                ["harness.ratelimit.delay_seconds"] = delay.TotalSeconds,
+            }));
+        RateLimitWait.Record(delay.TotalSeconds, new TagList { { "harness.turn", turn } });
+    }
+
+    public void LogCheckpoint(string taskId, int turn, string checkpointId, TimeSpan elapsed)
+    {
+        if (_activities.TryGetValue(taskId, out var activity))
+            activity?.AddEvent(new ActivityEvent("harness.checkpoint", tags: new ActivityTagsCollection
+            {
+                ["harness.turn"] = turn,
+                ["harness.checkpoint.id"] = checkpointId,
+                ["harness.checkpoint.duration_seconds"] = elapsed.TotalSeconds,
+            }));
+        CheckpointDuration.Record(elapsed.TotalSeconds, new TagList { { "harness.turn", turn } });
+    }
+
+    public void LogBudgetSnapshot(string taskId, int turn, BudgetSnapshot snapshot)
+    {
+        if (!_activities.TryGetValue(taskId, out var activity)) return;
+        activity?.AddEvent(new ActivityEvent("harness.budget", tags: new ActivityTagsCollection
+        {
+            ["harness.turn"] = turn,
+            ["harness.budget.turns_used"] = snapshot.TurnsUsed,
+            ["harness.budget.turns_max"] = snapshot.MaxTurns,
+            ["harness.budget.tokens_used"] = snapshot.TokensUsed,
+            ["harness.budget.tokens_max"] = snapshot.MaxTotalTokens,
+            ["harness.budget.cost_used"] = (double)snapshot.CostUsed,
+            ["harness.budget.cost_max"] = (double)snapshot.MaxCost,
+            ["harness.budget.wallclock_used_seconds"] = snapshot.Elapsed.TotalSeconds,
+            ["harness.budget.wallclock_max_seconds"] = snapshot.MaxWallClock.TotalSeconds,
+        }));
     }
 
     public void Complete(string taskId, AgentStatus status, string? failureReason)

@@ -526,6 +526,43 @@ public sealed class HarnessLoopTests
         Assert.Single(tracer.ToolCompletions);
     }
 
+    [Fact]
+    public async Task RunAsync_EachTurn_LogsCheckpointAndBudgetSnapshot()
+    {
+        // Every turn opens with a checkpoint save and a budget snapshot — both must reach the tracer.
+        var tracer = new RecordingTracer();
+        var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall("t")), EndTurnResponse("done"));
+        var harness = BuildHarness(client, tracer: tracer);
+
+        await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(new[] { 0, 1 }, tracer.CheckpointTurns);       // one per turn (ToolUse turn, then EndTurn turn)
+        Assert.Equal(new[] { 0, 1 }, tracer.BudgetSnapshotTurns);
+        Assert.Equal(10, tracer.BudgetSnapshots[0].MaxTurns);
+        Assert.Equal(0, tracer.BudgetSnapshots[0].TurnsUsed);       // snapshot taken at the top of the turn, before that turn's model call
+        Assert.Equal(1, tracer.BudgetSnapshots[1].TurnsUsed);       // turn 0's model call is now counted
+    }
+
+    [Fact]
+    public async Task RunAsync_RateLimited_LogsTheWaitThenProceeds()
+    {
+        var tracer = new RecordingTracer();
+        var harness = new HarnessLoop(
+            modelClient: new ScriptedModelClient(EndTurnResponse("done")),
+            toolRegistry: new StubToolRegistry(),
+            contextBuilder: new StubContextBuilder(),
+            sensorRunner: new DefaultSensorRunner([]),
+            budgetEnforcer: new AlwaysOkBudgetEnforcer(),
+            rateLimiter: new OnceLimitingRateLimiter(TimeSpan.FromMilliseconds(1)),
+            tracer: tracer,
+            checkpointStore: new NullCheckpointStore());
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal(TimeSpan.FromMilliseconds(1), Assert.Single(tracer.RateLimitDelays));
+    }
+
     // ── Compaction persistence ────────────────────────────────────────────────
 
     [Fact]
@@ -633,12 +670,19 @@ file sealed class RecordingTracer : Tracing.ITracer
     public int ModelScopesDisposed { get; private set; }
     public List<Exception> ModelFailures { get; } = [];
     public List<ToolResult> ToolCompletions { get; } = [];
+    public List<int> CheckpointTurns { get; } = [];
+    public List<int> BudgetSnapshotTurns { get; } = [];
+    public List<BudgetSnapshot> BudgetSnapshots { get; } = [];
+    public List<TimeSpan> RateLimitDelays { get; } = [];
 
     public void StartTrace(string taskId, string taskText) { }
     public Tracing.IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools) => new ModelScope(this);
     public Tracing.IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call) => new ToolScope(this);
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) { }
     public void Complete(string taskId, AgentStatus status, string? failureReason) { }
+    public void LogCheckpoint(string taskId, int turn, string checkpointId, TimeSpan elapsed) => CheckpointTurns.Add(turn);
+    public void LogBudgetSnapshot(string taskId, int turn, BudgetSnapshot snapshot) { BudgetSnapshotTurns.Add(turn); BudgetSnapshots.Add(snapshot); }
+    public void LogRateLimit(string taskId, int turn, TimeSpan delay) => RateLimitDelays.Add(delay);
 
     private sealed class ModelScope(RecordingTracer owner) : Tracing.IModelCallScope
     {
@@ -651,6 +695,18 @@ file sealed class RecordingTracer : Tracing.ITracer
     {
         public void Complete(ToolResult result) => owner.ToolCompletions.Add(result);
         public void Dispose() { }
+    }
+}
+
+// Limits exactly once (then passes) so the loop takes its rate-limit backoff path a single time.
+file sealed class OnceLimitingRateLimiter(TimeSpan delay) : IRateLimiter
+{
+    private bool _limited;
+    public Task<RateLimitCheck> CheckAsync(AgentState state, CancellationToken ct)
+    {
+        if (_limited) return Task.FromResult(RateLimitCheck.Pass);
+        _limited = true;
+        return Task.FromResult(RateLimitCheck.Limited(delay, "test throttle"));
     }
 }
 

@@ -342,8 +342,8 @@ builder
 Implement `ITracer` and register via `WithTracer<T>()` or `WithTracer(factory)` for a
 custom backend.
 
-A tracer is notified at each loop milestone. Task start/completion and sensor interventions are
-one-shot events (`StartTrace`, `Complete`, `LogSensorResult`). **Model and tool calls are
+A tracer is notified at each loop milestone. Task start/completion and every sensor evaluation —
+pass, intervention, or error alike — are one-shot events (`StartTrace`, `Complete`, `LogSensorResult`). **Model and tool calls are
 scopes, not events**: the loop calls `BeginModelCall`/`BeginToolCall` *before* the operation and
 gets back an `IModelCallScope`/`IToolCallScope`; when the call returns it calls `Complete(response)`
 /`Complete(result)` on the scope, then disposes it. A scope disposed *without* `Complete` means
@@ -363,11 +363,15 @@ whether memory retrieval returned anything at all — which is often where an un
 traces back to.
 
 Every per-turn hook — `BeginModelCall`, `BeginToolCall`, `LogSensorResult`, `LogGuideContribution`,
-`LogCompaction` — takes a zero-based `turn` index so a backend can group everything that happened on
+`LogCompaction`, `LogRateLimit`, `LogCheckpoint`, `LogBudgetSnapshot` — takes a zero-based `turn` index so a backend can group everything that happened on
 one turn. The loop threads its own turn counter into the model/tool/sensor hooks; the guide runner
 derives the same index from the trajectory (count of prior model calls) and fires `LogCompaction`
 with a `CompactionTrace` (steps evicted, tokens reclaimed, folded, spend) whenever the trajectory
-guide compacts — the telemetry for watching eviction on a long run. `LogGuideContribution` and
+guide compacts — the telemetry for watching eviction on a long run. Three further per-turn hooks give
+the loop full trace coverage: `LogRateLimit` (a rate-limit backoff wait), `LogCheckpoint` (each
+checkpoint save and its duration), and `LogBudgetSnapshot` (cumulative turns/tokens/cost/wall-clock
+against the run's `Budget`, so you can chart burn-down before the terminal `PartialResult`) — all
+default-interface no-ops. `LogGuideContribution` and
 `LogCompaction` remain default-interface no-ops, so a custom `ITracer` that never overrode them still compiles; but replacing the post-hoc
 `LogModelCall`/`LogToolCall` with the `BeginModelCall`/`BeginToolCall` scope methods is a **breaking
 change** — update your implementation when you upgrade. `ModelResponse` now also carries optional
