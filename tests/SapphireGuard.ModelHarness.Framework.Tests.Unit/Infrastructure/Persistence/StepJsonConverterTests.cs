@@ -130,4 +130,114 @@ public sealed class StepJsonConverterTests
         Assert.Equal("Skill: verify", pin.Label);
         Assert.Equal("the pinned procedure body", pin.Content);
     }
+
+    [Fact]
+    public void Checkpoint_with_every_AgentState_field_populated_round_trips()
+    {
+        // Full-fidelity checkpoint contract: a resumed run must rehydrate the whole AgentState, not a
+        // subset. Every field is set to a non-default value and a mixed trajectory carries one of each
+        // Step type, so this fails the moment any field or step type stops surviving serialization.
+        var budget = new StateBudget
+        {
+            MaxTurns = 12, MaxTotalTokens = 200_000, MaxCost = 5m,
+            MaxWallClock = TimeSpan.FromMinutes(15), MaxToolCallDuration = TimeSpan.FromSeconds(30)
+        };
+        var t0 = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
+        var args = JsonDocument.Parse("""{"order":"A1001"}""").RootElement;
+
+        var trajectory = new Step[]
+        {
+            new UserMessageStep(Guid.NewGuid(), t0, "where is my order?"),
+            new ModelCallStep(
+                Guid.NewGuid(), t0.AddSeconds(1),
+                [new Message(MessageRole.System, "sys"), new Message(MessageRole.User, "where is my order?")],
+                new ModelResponse
+                {
+                    Text = "let me check",
+                    ToolCalls = [new ToolCall("call-1", "get_order_status", args)],
+                    StopReason = StopReason.ToolUse,
+                    Usage = new Usage(120, 45), Cost = 0.02m,
+                    Model = "claude-haiku-4-5", Provider = "anthropic",
+                    CachedInputTokens = 80, CacheWriteTokens = 40
+                },
+                new Usage(120, 45), Cost: 0.02m),
+            new ToolCallStep(
+                Guid.NewGuid(), t0.AddSeconds(2),
+                new ToolCall("call-1", "get_order_status", args),
+                new ToolResult("call-1", "shipped", Pins: [new PinnedNote("Skill: order", "body")])),
+            new SensorInterventionStep(
+                Guid.NewGuid(), t0.AddSeconds(3),
+                HookPoint.PostModelCall, "pii-redaction", "email leaked",
+                TriggeringStep: new UserMessageStep(Guid.NewGuid(), t0, "trigger"))
+        };
+
+        var state = new AgentState
+        {
+            TaskId = "job-42", TaskText = "where is my order?", Budget = budget,
+            Status = AgentStatus.AwaitingHuman,
+            Plan = "1. look up  2. reply", Scratchpad = "customer seems anxious",
+            Trajectory = trajectory,
+            Metadata = new Dictionary<string, string> { ["channel"] = "email", ["priority"] = "high" },
+            Pins = [new PinnedNote("Skill: order", "the pinned body")],
+            SensorUsage = new Usage(200, 60), SensorCost = 0.11m,
+            RollingSummary = new RollingSummary("folded", 3),
+            CompactionUsage = new Usage(300, 90), CompactionCost = 0.22m,
+            PendingHumanInput = new PendingHumanInput("call-9", "need a refund approval?")
+        };
+        var checkpoint = new Checkpoint
+        {
+            CheckpointId = "c1", RunId = "r1", CreatedAt = t0, TurnNumber = 4, State = state
+        };
+
+        var json = CheckpointSerializer.Serialize(checkpoint);
+        var restored = CheckpointSerializer.Deserialize(json)!;
+        var s = restored.State;
+
+        Assert.Equal("job-42", s.TaskId);
+        Assert.Equal("where is my order?", s.TaskText);
+        Assert.Equal(AgentStatus.AwaitingHuman, s.Status);
+        Assert.Equal("1. look up  2. reply", s.Plan);
+        Assert.Equal("customer seems anxious", s.Scratchpad);
+        Assert.Equal(budget, s.Budget); // record equality also covers the optional MaxToolCallDuration
+
+        Assert.Equal("email", s.Metadata["channel"]);
+        Assert.Equal("high", s.Metadata["priority"]);
+
+        var pin = Assert.Single(s.Pins);
+        Assert.Equal("Skill: order", pin.Label);
+        Assert.Equal("the pinned body", pin.Content);
+
+        Assert.Equal(new Usage(200, 60), s.SensorUsage);
+        Assert.Equal(0.11m, s.SensorCost);
+        Assert.Equal(new Usage(300, 90), s.CompactionUsage);
+        Assert.Equal(0.22m, s.CompactionCost);
+        Assert.Equal("folded", s.RollingSummary!.Text);
+        Assert.Equal(3, s.RollingSummary.FoldedStepCount);
+
+        Assert.Equal("call-9", s.PendingHumanInput!.CallId);
+        Assert.Equal("need a refund approval?", s.PendingHumanInput.Question);
+
+        Assert.Equal(4, s.Trajectory.Count);
+        Assert.IsType<UserMessageStep>(s.Trajectory[0]);
+        var model = Assert.IsType<ModelCallStep>(s.Trajectory[1]);
+        Assert.Equal(2, model.Prompt.Count);
+        Assert.Equal(StopReason.ToolUse, model.Response.StopReason);
+        Assert.Equal("claude-haiku-4-5", model.Response.Model);
+        Assert.Equal("anthropic", model.Response.Provider);
+        Assert.Equal(80, model.Response.CachedInputTokens);
+        Assert.Equal(40, model.Response.CacheWriteTokens);
+        var tool = Assert.IsType<ToolCallStep>(s.Trajectory[2]);
+        Assert.Equal("get_order_status", tool.Call.ToolName);
+        Assert.Equal("A1001", tool.Call.Arguments.GetProperty("order").GetString());
+        Assert.Equal("shipped", tool.Result.Content);
+        var intervention = Assert.IsType<SensorInterventionStep>(s.Trajectory[3]);
+        Assert.Equal(HookPoint.PostModelCall, intervention.HookPoint);
+        Assert.Equal("pii-redaction", intervention.SensorName);
+        Assert.IsType<UserMessageStep>(intervention.TriggeringStep);
+
+        // Forgot-a-field canary: full fidelity means re-serialising the restored checkpoint reproduces
+        // the original JSON. Trips automatically if a newly added field doesn't survive the round-trip,
+        // even when no one adds an explicit assertion for it above.
+        Assert.Equal(json, CheckpointSerializer.Serialize(restored));
+    }
 }
