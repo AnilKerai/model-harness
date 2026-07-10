@@ -2,6 +2,8 @@
 
 Thanks for your interest in the Model Harness. This is a small, focused .NET library — contributions that keep it that way are very welcome.
 
+This started as a project to learn agentic AI development and to teach my team, so feedback counts as a contribution: a question, a correction, or a "this design is wrong because…" issue is as useful here as a PR.
+
 ## Build and test
 
 ```bash

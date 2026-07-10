@@ -471,6 +471,20 @@ to a sub-agent specialist).
 
 ---
 
+## Where this came from
+
+I built this to learn how agentic systems actually work — not by reading about the loop, but by
+implementing it — and then to have something concrete to teach my team with. That's why every
+control point is a named port, and why [PRIMER.md](docs/PRIMER.md) explains the ideas rather than
+just the API: the framework and the explanation were written together.
+
+It's public because the learning goes further with other people in it. If something here is wrong,
+missing, or a decision you'd have made differently, please
+[open an issue](https://github.com/AnilKerai/model-harness/issues) — I'd rather hear it than not,
+and the blunt kind is the most useful. [CONTRIBUTING.md](CONTRIBUTING.md) covers sending a change.
+
+---
+
 ## Links
 
 - [getting-started/](getting-started/) — minimal runnable project using the published NuGet packages
