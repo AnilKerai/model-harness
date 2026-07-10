@@ -7,6 +7,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-512BD4)
 
+*I wrote this to learn how agentic systems work by building one, and to teach my team with it.
+Corrections and criticism are genuinely welcome — [more below](#where-this-came-from).*
+
 ## Why model-harness
 
 **Do more with less.** The prevailing assumption is that a better agent needs a bigger frontier model. This framework tests the opposite: a well-structured harness closes much of that gap — enough that a smaller, cheaper, or locally-hosted model can run the same task at *acceptable* quality. The practical ambition is to swap `ClaudeModelClient` for `OllamaModelClient` on a 7B local model and still get a usable result, at a fraction of the cost. Where that bar sits is a product decision, not a model decision.
