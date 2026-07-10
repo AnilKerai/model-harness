@@ -26,9 +26,11 @@ The harness controls the model: it shapes what the model perceives (guides), obs
 
 HITL is about what happens *outside* the model loop: how a question is surfaced to a human, over what channel, how long you wait, and how the response is routed back. A CLI tool, a Slack bot, a web app, and an async queue-based pipeline all have fundamentally different answers. The harness cannot make that decision without becoming an application framework.
 
-The boundary: the harness provides `AskHumanTool` backed by `IHumanChannel`. When the model decides it needs human input, it calls the tool. What `IHumanChannel.AskAsync` does — block on stdin, post to Slack, write to a queue and suspend — is entirely the user's implementation. The harness ships `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
+The boundary: the harness provides `AskHumanTool` backed by `IHumanNotifier`. When the model decides it needs human input, it calls the tool. What `IHumanNotifier.NotifyAsync` does — block on stdin, post to Slack, write to a queue and suspend — is entirely the user's implementation. The harness ships `ConsoleHumanChannel` for development, the same way it ships `FakeModelClient`: useful locally, not a production prescription.
 
 ## Why not make `ask_human` and `give_up` mutually exclusive to prevent the model picking the wrong one?
+
+(`ask_human` ships; `give_up` here is a hypothetical companion — a tool an operator might register so the model can abandon a task cleanly. The harness ships no such tool, but the design question generalises to any pair like it.)
 
 The tempting solution is to make them exclusive by registration — agents with a human channel get `ask_human`, agents without one get `give_up`, so the model can never confuse them. This works for the scenario that motivates it, but it over-constrains the design.
 
@@ -40,7 +42,7 @@ The actual problem is a **system prompt concern, not a structural one**. The har
 
 The distinction the operator is drawing is: *do you have something useful to return, or do you need input to continue?* That is domain-specific; the harness should not decide it.
 
-The structural contribution the harness can make is limited but real: tool signatures that force the model to articulate its reasoning (`reason` on `give_up`, `question` on `ask_human`) help the model self-select correctly by making it form the argument before committing to the call. Beyond that, reliable selection is an empirical question validated per deployment through testing, not a constraint the framework can enforce.
+The structural contribution the harness can make is limited but real: tool signatures that force the model to articulate its reasoning (the `question` on `ask_human`, or a `reason` argument on a hypothetical `give_up`) help the model self-select correctly by making it form the argument before committing to the call. Beyond that, reliable selection is an empirical question validated per deployment through testing, not a constraint the framework can enforce.
 
 ## Should a harness even have a skills system — isn't "learning" out of scope?
 

@@ -66,7 +66,7 @@ Every choice below keeps that logic out of the framework.
 | **Free until used** | The catalogue guide is always wired in, but the default store is empty — so it shows nothing and costs nothing until you opt in. |
 | **Show a short list, load on demand** | Every prompt carries only the skill names and when-to-use lines (cheap). The full write-up loads only when the model asks for it, so cost stays low even with lots of skills. |
 | **Its own store, separate from memory** | Skills (named, with a body) are a different shape from memory snippets, so they get their own `ISkillStore` and the two can evolve independently. |
-| **Version history is an operator concern** | Every overwrite archives the previous `SKILL.md` to a `.history/` subfolder. The model always sees the current version — history is a safety net for the operator (inspect, restore, audit), not something the model reasons about. `ISkillStore` exposes `ListVersionsAsync` / `GetVersionAsync` for programmatic access; `NullSkillStore` and `CompositeSkillStore` get no-op defaults automatically. |
+| **Version history is an operator concern** | Every overwrite archives the previous `SKILL.md` to a `.history/` subfolder. The model always sees the current version — history is a safety net for the operator (inspect, restore, audit), not something the model reasons about. `ISkillStore` exposes `ListVersionsAsync` / `GetVersionAsync` for programmatic access; `NullSkillStore` relies on the interface's no-op defaults, while `CompositeSkillStore` delegates versioning to its agent store. |
 
 In short: **the harness stores, lists, and hands skills to the model. It never decides
 when to save one, or whether the agent is "improving"** — the model makes that call.
@@ -118,7 +118,7 @@ No single defence fully solves this. The right approach is layered:
 
 | Layer | What it does | Where it lives |
 |---|---|---|
-| **Reactive scanning** | Detects injection patterns *after* hostile content enters the trajectory and warns the model | `PromptInjectionSensor` (included by default) |
+| **Reactive scanning** | Detects injection patterns *after* hostile content enters the trajectory and warns the model | `PromptInjectionSensor` (included by default in `AddStandardModelHarness` / `AddStandardChatHarness`) |
 | **Taint tracking** | Prevents the model from using tainted content to *trigger privileged actions* | `TaintTrackingSensor` (opt-in) |
 | **Content quarantine** | Prevents raw hostile content from reaching the privileged model at all | Dual-LLM isolation (planned — see ROADMAP) |
 
@@ -131,6 +131,6 @@ Full CaMeL-style taint tracking is an active research problem — LLMs are opaqu
 - When a result arrives from an operator-declared **untrusted source** (e.g. a web fetch), a `PostToolCall` annotation warns the model not to follow any instructions it contains.
 - When the model then attempts an operator-declared **privileged action** (e.g. send email, execute code), `PreToolCall` scans the trajectory and **blocks** the call if any untrusted-source result is present — the model gets an error and replans, and the action never runs.
 
-It **fails closed**: an agent that legitimately fetches a page and then needs to email is blocked, and clearing taint is an operator concern the sensor never does itself. The intended escape hatch is `ask_human` — gate the privileged action behind human approval so an operator judges it safe in context (see [ROADMAP](ROADMAP.md) for the known limitation that taint does not auto-clear after `ask_human`).
+It **fails closed**: an agent that legitimately fetches a page and then needs to email is blocked, and clearing taint is an operator concern the sensor never does itself. One caveat on *fails closed*: it holds because the built-in `TrustPolicy` cannot throw — a **custom `ITrustPolicy` must not throw** (or must catch internally), because `DefaultSensorRunner` turns a throwing sensor into a non-blocking error and the privileged action would then proceed. The intended escape hatch is `ask_human` — gate the privileged action behind human approval so an operator judges it safe in context (see [ROADMAP](ROADMAP.md) for the known limitation that taint does not auto-clear after `ask_human`).
 
 Both lists are declared by the operator at the composition root — only they know the deployment context, and MCP or unverifiable remote tools belong in `untrustedSources`. The sensor is opt-in. See the **[taint-tracking theory in PRIMER.md](PRIMER.md#prompt-injection-and-taint-tracking)** for the CaMeL background, and **[EXTENDING.md](EXTENDING.md#taint-tracking-experimental)** for wiring (`WithTaintTracking`, a custom `ITrustPolicy`, and system-prompt guidance).

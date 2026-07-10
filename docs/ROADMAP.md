@@ -65,13 +65,13 @@ Explicitly evaluated and **deliberately not built** (the audit's highest-value o
 - [x] `PromptInjectionSensor` — scans for injection patterns (instruction overrides, persona hijacks, role overrides, etc.) at two points: inbound tool results (PostToolCall) and the latest user message (PreModelCall, before the model first responds to it — so every chat turn is checked, not just the opener); flags with an untrusted-content warning; included in `AddStandardModelHarness` and `AddStandardChatHarness` by default. **Note: this is reactive filtering — it scans content after it has already entered the trajectory. The architectural Dual-LLM isolation pattern (see Security section below) is the complementary structural defence.**
 - [x] `CriticSensor` — PreReturn; AI self-review that scores the proposed final answer against the task and challenges it back below a configurable threshold (default 0.6); shares whatever `IModelClient` is supplied; fails open so a flaky critic never blocks a return; opt-in via `builder.WithCriticSensor(modelClient)`. The loop's existing consecutive-intervention cap bounds revision rounds, so no extra state is needed
 - [x] Opt-in loop detectors complementing the default `StuckDetector` — none registered by default, add via `WithSensor<T>()`: `MonologueLoopSensor` (PostModelCall; same no-tool response repeated), `AlternatingToolLoopSensor` (PreToolCall; A-B-A-B tool ping-pong), `ToolErrorLoopSensor` (PostToolCall; same tool erroring repeatedly even when arguments vary)
-- [ ] ~~Irreversible action gate~~ — removed from backlog; the gate only makes sense when a human is available to answer, which an ambient agent cannot guarantee. The ports already exist (`PreToolCall` blocks dispatch; `IHumanChannel` routes questions; checkpoint/resume enables suspension). What counts as irreversible, who gets notified, and how long to wait are system design decisions the harness cannot make — documented in user concerns ADR instead.
+- [ ] ~~Irreversible action gate~~ — removed from backlog; the gate only makes sense when a human is available to answer, which an ambient agent cannot guarantee. The ports already exist (`PreToolCall` blocks dispatch; `IHumanNotifier` routes questions; checkpoint/resume enables suspension). What counts as irreversible, who gets notified, and how long to wait are system design decisions the harness cannot make — documented in user concerns ADR instead.
 
 ### Tools
 - [x] `ITool` / `IToolRegistry` / `ToolDefinition` — tool abstraction decoupled from `IModelClient`
 - [x] `InMemoryToolRegistry`
 - [x] `EchoTool`, `CalculatorTool` — sample tools
-- [x] `AskHumanTool` + `IHumanChannel` — signals HITL to the surrounding system; `ConsoleHumanChannel` for development; replace with a channel suited to the deployment environment
+- [x] `AskHumanTool` + `IHumanNotifier` — signals HITL to the surrounding system; `ConsoleHumanChannel` for development; replace with a channel suited to the deployment environment
 
 ### Infrastructure
 - [x] `FakeModelClient` — scripted responses for local development without an API key
@@ -233,7 +233,7 @@ the mechanical `AgentStatus`.
   judge). Deciding correctness is a domain judgment the harness cannot make. Decisive
   test: a verdict, by design, *cannot influence the run* (record, never react), so it
   has **no causal role in the loop** — unlike every port the loop does invoke
-  (`IMemoryStore`, `ISkillStore`, `IHumanChannel`, `IModelClient`), each of which feeds
+  (`IMemoryStore`, `ISkillStore`, `IHumanNotifier`, `IModelClient`), each of which feeds
   the next turn. Judging belongs to whatever consumes `AgentOutcome`. (Runtime quality
   checks that *do* affect the run are already a `PreReturn` sensor.)
 - **Skill auto-harvest** — saving a skill automatically after a successful run depends

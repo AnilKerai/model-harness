@@ -63,7 +63,7 @@ Sensors may block actions but must never take turns away from the model — the 
 - **PostToolCall**: **flags** — advisory only; the tool has already run and its result is in the trajectory; intervention annotates it but cannot prevent the model from reasoning on it
 
 ### State
-`AgentState` is an immutable record. Every turn produces a new state via `with`-expressions. The trajectory (`IReadOnlyList<Step>`) is the append-only log of `ModelCallStep`, `ToolCallStep`, and `SensorInterventionStep`.
+`AgentState` is an immutable record. Every turn produces a new state via `with`-expressions. The trajectory (`IReadOnlyList<Step>`) is the append-only log of `UserMessageStep`, `ModelCallStep`, `ToolCallStep`, and `SensorInterventionStep`.
 
 ## Key ports
 
