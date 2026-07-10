@@ -494,7 +494,7 @@ and the blunt kind is the most useful. [CONTRIBUTING.md](CONTRIBUTING.md) covers
 - [RUNNING.md](docs/RUNNING.md) — setup and run instructions for each sample
 - [EXTENDING.md](docs/EXTENDING.md) — code recipes for every extension point
 - [FEATURES.md](docs/FEATURES.md) — deep write-ups for the experimental features (learning, AI sensors, taint tracking)
-- [PRIMER.md](docs/PRIMER.md) — a primer on the agentic-AI ideas behind the framework: loop / context engineering and the agentic primitives
+- [PRIMER.md](docs/PRIMER.md) — a primer on the agentic-AI ideas behind the framework: the agentic primitives, context engineering, and loop engineering
 - [GLOSSARY.md](docs/GLOSSARY.md) — definitions of all framework terms
 - [ROADMAP.md](docs/ROADMAP.md) — what's done and what's still to implement
 - [FAQ.md](docs/FAQ.md) — design decision FAQs
