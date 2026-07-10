@@ -12,7 +12,7 @@ Corrections and criticism are genuinely welcome — [more below](#where-this-cam
 
 ## Why model-harness
 
-**Do more with less.** The prevailing assumption is that a better agent needs a bigger frontier model. This framework tests the opposite: a well-structured harness closes much of that gap — enough that a smaller, cheaper, or locally-hosted model can run the same task at *acceptable* quality. The practical ambition is to swap `ClaudeModelClient` for `OllamaModelClient` on a 7B local model and still get a usable result, at a fraction of the cost. Where that bar sits is a product decision, not a model decision.
+**Do more with less.** The prevailing assumption is that a better agent needs a bigger frontier model. This framework is a bet on the opposite: that a well-structured harness closes much of that gap — enough that a smaller, cheaper, or locally-hosted model can run the same task at *acceptable* quality. That's a claim to be measured, not one this repo has benchmarked yet. The practical ambition is to swap `ClaudeModelClient` for `OllamaModelClient` on a 7B local model and still get a usable result, at a fraction of the cost. Where that bar sits is a product decision, not a model decision.
 
 The harness gets there by making every control point a swappable port with a sensible default:
 

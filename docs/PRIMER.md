@@ -68,11 +68,11 @@ Loop engineering stacks feedback loops from the single run outward; each layer w
 | Loop | What it does | In this harness |
 |---|---|---|
 | **1. Agent loop** | Model calls tools in a loop until the task is done | ✅ `HarnessLoop` — the turn-by-turn state machine |
-| **2. Verification loop** | Check each result; feed failures back so the agent self-corrects | ◐ inline as **sensors** (`PreReturn` challenge, `PostToolCall` flag); offline as **evals** in a sibling eval project |
+| **2. Verification loop** | Check each result; feed failures back so the agent self-corrects | ◐ inline as **sensors** (`PreReturn` challenge, `PostToolCall` flag); offline as **evals**, which live above the harness |
 | **3. Event-driven loop** | Start runs from cron / webhooks / events, not by hand | ⛔ above the harness — the host composes a scheduler around `Agent` |
 | **4. Hill-climbing loop** | Read traces + outcomes, then update the agent's own config to do better next time | ⛔ above the harness — the harness only *emits* the traces (`ITracer`) it would consume; see [ROADMAP](ROADMAP.md) |
 
-The kit a loop assembles from — skills, sub-agents, connectors, persistence, a human gate — is the [agentic primitives](#agentic-primitives) above, all provided by the framework as in-run features. The two a loop adds on top are robust **termination** and **verification**. The harness even ships the *mutation primitive* a hill-climbing loop would use — `skill_manage` lets the agent persist reusable skills ([Agent Learning](FEATURES.md#agent-learning-experimental)) — but in-episode and model-driven; the outcome-scored controller that decides *when* to write is the part left above.
+The kit a loop assembles from — skills, sub-agents, connectors, persistence, a human gate — is built from the [agentic primitives](#agentic-primitives) above, all provided by the framework as in-run features. The two a loop adds on top are robust **termination** and **verification**. The harness even ships the *mutation primitive* a hill-climbing loop would use — `skill_manage` lets the agent persist reusable skills ([Agent Learning](FEATURES.md#agent-learning-experimental)) — but in-episode and model-driven; the outcome-scored controller that decides *when* to write is the part left above.
 
 ### Termination is the part naive loops get wrong
 
@@ -91,7 +91,7 @@ Three disciplines, three tiers, one stack — loop engineering *wraps* the other
 | Discipline | Owns | Period | Here |
 |---|---|---|---|
 | **Harness engineering** | one reliable run — loop, guides, sensors, budget | a single episode | this repo |
-| **Eval engineering** | measuring runs against criteria | offline, per release | a sibling eval project |
+| **Eval engineering** | measuring runs against criteria | offline, per release | above this repo (out of scope) |
 | **Loop engineering** | driving the harness across runs; at the top, improving it | many episodes | composed above |
 
 The division of labour is clean: the harness **runs** an episode, the eval **measures** it, the loop **acts on the measurement**. The verification loop *consumes* eval engineering; the hill-climbing loop consumes both the harness's traces and the eval's verdicts to decide what to change. Only that outermost act — changing the agent based on measured outcomes — is out of scope here, by design.
