@@ -126,7 +126,7 @@ These layers address different failure modes. The sensor catches recognisable pa
 
 ### How this harness defends
 
-Full CaMeL-style taint tracking is an active research problem — LLMs are opaque, so you cannot instrument the model's reasoning to see which output derived from which input. This harness uses a practical approximation: **the trajectory itself is the taint ledger**. `TaintTrackingSensor` treats the whole trajectory as potentially influenced once any tainted step is present:
+Tracking taint through an opaque model's reasoning — which is what full data-flow tracking would need here — is an open problem; you cannot instrument an LLM to see which output derived from which input (CaMeL avoids this with a custom interpreter *around* the model, which a general-purpose harness has no equivalent of). This harness uses a practical approximation: **the trajectory itself is the taint ledger**. `TaintTrackingSensor` treats the whole trajectory as potentially influenced once any tainted step is present:
 
 - When a result arrives from an operator-declared **untrusted source** (e.g. a web fetch), a `PostToolCall` annotation warns the model not to follow any instructions it contains.
 - When the model then attempts an operator-declared **privileged action** (e.g. send email, execute code), `PreToolCall` scans the trajectory and **blocks** the call if any untrusted-source result is present — the model gets an error and replans, and the action never runs.
