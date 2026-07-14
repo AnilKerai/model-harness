@@ -19,6 +19,7 @@
     <Project Path="samples/AiToneSensor/SapphireGuard.ModelHarness.Samples.AiToneSensor.csproj" />
     <Project Path="samples/BudgetEnforcer/SapphireGuard.ModelHarness.Samples.BudgetEnforcer.csproj" />
     <Project Path="samples/SkillLearning/SapphireGuard.ModelHarness.Samples.SkillLearning.csproj" />
+    <Project Path="samples/StructuredOutput/SapphireGuard.ModelHarness.Samples.StructuredOutput.csproj" />
     <Project Path="samples/SupportTriage/SapphireGuard.ModelHarness.Samples.SupportTriage.csproj" />
     <Project Path="samples/ToolCallReasonableness/SapphireGuard.ModelHarness.Samples.ToolCallReasonableness.csproj" />
     <Project Path="samples/ToolResultSanity/SapphireGuard.ModelHarness.Samples.ToolResultSanity.csproj" />

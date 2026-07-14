@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SapphireGuard.ModelHarness.Framework.Budget;
@@ -6,6 +7,7 @@ using SapphireGuard.ModelHarness.Framework.Context;
 using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Memory;
 using SapphireGuard.ModelHarness.Framework.Model;
+using SapphireGuard.ModelHarness.Framework.Output;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.RateLimiting;
 using SapphireGuard.ModelHarness.Framework.Sensors;
@@ -228,6 +230,29 @@ public sealed class ModelHarnessBuilder(IServiceCollection services)
     public ModelHarnessBuilder WithGuide(Func<IServiceProvider, IGuide> factory)
     {
         _customGuides.Add(factory);
+        return this;
+    }
+
+    /// <summary>
+    /// Constrains the run's final answer to <typeparamref name="T"/>. Registers a
+    /// <see cref="StructuredOutputContract{T}"/> plus the two collaborators that use it: a guide that
+    /// states the JSON Schema in the system prompt every turn, and a <see cref="HookPoint.PreReturn"/>
+    /// sensor that binds the final answer against it. An answer that does not bind is challenged with the
+    /// binder's own error and the model gets a fresh turn to correct itself — bounded by the loop's
+    /// intervention cap, never thrown. Read the result by resolving the contract and calling
+    /// <see cref="StructuredOutputContract{T}.TryBind"/> on <c>AgentOutcome.FinalAnswer</c>.
+    /// </summary>
+    /// <param name="options">
+    /// Overrides the serializer options used both to derive the schema and to bind the answer. The
+    /// default enables <c>RespectRequiredConstructorParameters</c> and <c>RespectNullableAnnotations</c>;
+    /// without them System.Text.Json treats every constructor parameter as optional and an empty object
+    /// would bind successfully, making the validation a no-op.
+    /// </param>
+    public ModelHarnessBuilder WithStructuredOutput<T>(JsonSerializerOptions? options = null)
+    {
+        Services.TryAddSingleton(new StructuredOutputContract<T>(options));
+        WithGuide<StructuredOutputGuide<T>>();
+        WithSensor<StructuredOutputSensor<T>>();
         return this;
     }
 

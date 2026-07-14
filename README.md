@@ -358,6 +358,9 @@ Most of these are built from the two patterns above — a guide, a sensor, or a 
 - **[AI-powered sensors](docs/FEATURES.md#ai-powered-sensors-experimental)** — delegate a nuanced check (tone, policy) to a small model, budgeted against the run
 - **[Taint tracking](docs/FEATURES.md#prompt-injection-and-taint-tracking-experimental)** — block privileged actions once untrusted content is in the trajectory
 
+**Typed output**
+- `WithStructuredOutput<T>()` — constrain the final answer to a type. A guide states `T`'s JSON Schema in the system prompt; a `PreReturn` sensor binds the answer against it and, on a miss, hands the model the binder's own error for a fresh turn. A schema violation is a bounded retry, not an exception — and `PreReturn` fires only on a turn with no tool calls, so the contract binds the *final* answer without constraining the reasoning turns
+
 **Memory & learning**
 - **[Agent learning / skills](docs/FEATURES.md#agent-learning-experimental)** — the agent writes and reloads its own `SKILL.md` procedures across runs
 - `IMemoryStore` — retrieval-augmented context, queried by the latest user turn

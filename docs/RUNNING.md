@@ -67,7 +67,10 @@ Several samples use a scripted model client and need no external dependencies:
 dotnet run --project samples/SubAgent
 dotnet run --project samples/SkillLearning
 dotnet run --project samples/Compaction
+dotnet run --project samples/StructuredOutput
 ```
+
+`samples/StructuredOutput` scripts the three turns that matter: the model calls a tool (the output contract binds the *final* answer, so the ReAct turns are unconstrained), then answers with a field missing — the `PreReturn` sensor challenges it and hands back the binder's own error naming the missing members — then answers correctly but wrapped in prose and a code fence, which binds anyway. The run ends `Done` with a `TriageResult`, not a string.
 
 `samples/Compaction` runs the same investigation twice — once with a stateless *view* strategy and once with an incremental *fold* — with a tiny context window so eviction fires most turns. Each strategy prints what it does, so you can watch the view re-summarise the whole growing head every turn while the fold only ever touches the newly evicted slice (and persists a rolling summary at a flat cost).
 

@@ -302,6 +302,47 @@ builder.WithGuide<MyGuide>() // runs after the built-in guides, before the traje
 
 See the [guide pattern](../README.md#the-guide-pattern--shaping-perception) for how to implement `IGuide`.
 
+## Structured output — a typed final answer
+
+`WithStructuredOutput<T>()` constrains the run's **final answer** to `T`. It is a guide plus a sensor over one shared contract — no new port, no loop change:
+
+```csharp
+[Description("A triaged support ticket.")]
+public sealed record TriageResult(
+    [property: Description("The queue: billing, technical, or account.")] string Category,
+    [property: Description("Urgency from 1 (lowest) to 5 (highest).")] int Priority,
+    [property: Description("One sentence a human operator can act on.")] string Summary);
+
+services.AddStandardModelHarness(builder => builder
+    .WithClaudeModel(apiKey)
+    .WithTool<LookupCustomerTool>()
+    .WithStructuredOutput<TriageResult>());
+```
+
+Read the result through the same contract the sensor validated against, so the two cannot drift:
+
+```csharp
+var contract = serviceProvider.GetRequiredService<StructuredOutputContract<TriageResult>>();
+var outcome = await agent.RunAsync(ticket);
+
+if (contract.TryBind(outcome.FinalAnswer, out var triage, out var error))
+    Console.WriteLine($"{triage!.Category} / P{triage.Priority}");
+else
+    Console.WriteLine($"No structured result: {error}");   // PartialResult — budget or intervention cap hit
+```
+
+`[Description]` flows into the JSON Schema the model is shown, so the fields document themselves. Non-object roots (`List<int>`, an enum) work as-is.
+
+**What it does at runtime.** `StructuredOutputGuide<T>` states the schema as a *system section* every turn, and `StructuredOutputSensor<T>` runs at `PreReturn` — the only hookpoint the loop reaches on a turn with no tool calls, so the contract binds the final answer and leaves the tool-using turns alone. An answer that doesn't bind is challenged, not thrown: the binder's own error (naming the missing or malformed member) goes back to the model, which gets a fresh turn with tools suppressed so it can only reformat. The loop's intervention cap bounds the retries, ending in `PartialResult` rather than an exception. `TryBind` tolerates markdown code fences and prose around the payload, because weaker models emit both regardless of instruction.
+
+**Two things to know.**
+
+The schema lives in a system section, not the trajectory, so eviction can never reach it — that placement is deliberate, and it's why this needs no `Pins`. (Pins bridge *trajectory-borne* content, like a `skill_view` result, into the persistent region; a guide's contribution is already there.) It does count toward the eviction window, so a very large schema shrinks the room for episodic history.
+
+If you supply your own `JsonSerializerOptions`, **keep `RespectRequiredConstructorParameters = true`**. Without it System.Text.Json treats every constructor parameter as optional — `Deserialize<TriageResult>("{}")` returns `TriageResult { Category = null, Priority = 0, Summary = null }` and does not throw — so the validation silently rubber-stamps an empty answer.
+
+Runnable demo: `samples/StructuredOutput` (no API key needed).
+
 ## Replace the trajectory guide
 
 The default `HeadEvictionTrajectoryGuide` evicts the oldest steps when the trajectory exceeds the context budget, replacing them with a placeholder via `ICompactionStrategy`. Swap it for a different eviction or rendering strategy via `builder.WithTrajectoryGuide<T>()`:
