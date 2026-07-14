@@ -589,7 +589,7 @@ mutable state is needed in the limiter itself.
 // Calls-per-minute cap — counts model calls in the last 60 s
 builder.WithRateLimiter(_ => new CallsPerMinuteRateLimiter(callsPerMinute: 50))
 
-// Tokens-per-minute cap — sums input + output tokens in the last 60 s
+// Tokens-per-minute cap — set this from your provider's input-tokens-per-minute (ITPM) limit
 builder.WithRateLimiter(_ => new TokensPerMinuteRateLimiter(tokensPerMinute: 100_000))
 
 // Both together — the harness automatically composes them and respects the most restrictive limit
@@ -597,6 +597,22 @@ builder
     .WithRateLimiter(_ => new CallsPerMinuteRateLimiter(callsPerMinute: 50))
     .WithRateLimiter(_ => new TokensPerMinuteRateLimiter(tokensPerMinute: 100_000))
 ```
+
+### What counts toward the token limit
+
+Billed tokens and rate-limited tokens are **not the same number** under prompt caching, and
+`TokensPerMinuteRateLimiter` counts the latter. Anthropic excludes `cache_read_input_tokens`
+from ITPM, so a cached prefix costs money and occupies context while consuming almost no
+rate-limit budget — caching *raises* effective throughput rather than spending it. Counting
+the billed prompt instead would throttle a well-cached agent several times too early, and get
+worse the better the cache performed.
+
+Each adapter declares its provider's accounting on `ModelResponse.InputTokensTowardRateLimit`
+(`ClaudeModelClient` reports uncached input + cache writes). An adapter that leaves it null —
+because its provider's rules aren't established — has the full prompt counted instead, which
+throttles early rather than late. Set the ceiling from your **input** limit: input and output
+are summed against it, and providers meter them separately, so the sum only ever errs toward
+throttling sooner.
 
 When a limit is hit the harness waits for the retry window, then continues. If the wait
 would exceed `MaxWallClock` it triggers the budget-exhaustion path instead (one final

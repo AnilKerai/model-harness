@@ -29,4 +29,12 @@ public sealed record ModelResponse
     /// providers that do not bill a separate cache write report 0. A subset of the total input in <see cref="Usage"/>.
     /// </summary>
     public int CacheWriteTokens { get; init; }
+
+    /// <summary>
+    /// The share of this call's input that counts against the provider's input-tokens-per-minute limit, which is not
+    /// always the whole prompt: Anthropic excludes cache reads from ITPM, so a well-cached call can bill a large prompt
+    /// while consuming almost no rate-limit budget. Null when the client has not declared its provider's accounting —
+    /// consumers must then fall back to the full <see cref="Usage"/> input, which throttles early rather than late.
+    /// </summary>
+    public int? InputTokensTowardRateLimit { get; init; }
 }

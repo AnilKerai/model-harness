@@ -26,6 +26,20 @@ public sealed class TokensPerMinuteRateLimiterTests
             Response: new ModelResponse { Text = "ok", ToolCalls = [], StopReason = StopReason.EndTurn, Usage = new Usage(inputTokens, outputTokens), Cost = 0m },
             Usage: new Usage(inputTokens, outputTokens), Cost: 0m);
 
+    // A call whose client declared its provider's rate-limit accounting: the prompt was billed in full, but only
+    // some of it counts toward the input limit (Anthropic excludes cache reads).
+    private static ModelCallStep CachedStep(int inputTokens, int outputTokens, int cacheReadTokens) =>
+        new(Guid.NewGuid(), DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10),
+            Prompt: [],
+            Response: new ModelResponse
+            {
+                Text = "ok", ToolCalls = [], StopReason = StopReason.EndTurn,
+                Usage = new Usage(inputTokens, outputTokens), Cost = 0m,
+                CachedInputTokens = cacheReadTokens,
+                InputTokensTowardRateLimit = inputTokens - cacheReadTokens
+            },
+            Usage: new Usage(inputTokens, outputTokens), Cost: 0m);
+
     private static AgentState WithSteps(params ModelCallStep[] steps)
     {
         var state = EmptyState();
@@ -90,6 +104,36 @@ public sealed class TokensPerMinuteRateLimiterTests
         var state = WithSteps(OldStep(500, 300), RecentStep(200, 200));
         var result = await Sut.CheckAsync(state, CancellationToken.None);
         Assert.False(result.IsLimited);
+    }
+
+    [Fact]
+    public async Task Check_CacheReadsExcludedFromLimit_Passes()
+    {
+        // 5,000-token prompt, 4,800 of it served from cache. Billed and carried in context in full, but only the
+        // 200 uncached tokens count toward ITPM — 300 with output, comfortably under the limit. Counting the whole
+        // prompt (the old behaviour) reads 5,100 and throttles a healthy agent 5x too early.
+        var state = WithSteps(CachedStep(inputTokens: 5_000, outputTokens: 100, cacheReadTokens: 4_800));
+        var result = await Sut.CheckAsync(state, CancellationToken.None);
+        Assert.False(result.IsLimited);
+    }
+
+    [Fact]
+    public async Task Check_UncachedPortionStillCounts_IsLimited()
+    {
+        // The exclusion is for cache reads only — a genuinely large uncached prompt still throttles.
+        var state = WithSteps(CachedStep(inputTokens: 5_000, outputTokens: 100, cacheReadTokens: 1_000));
+        var result = await Sut.CheckAsync(state, CancellationToken.None);
+        Assert.True(result.IsLimited);
+    }
+
+    [Fact]
+    public async Task Check_ProviderDidNotDeclareAccounting_CountsFullPromptAndIsLimited()
+    {
+        // InputTokensTowardRateLimit is null here (ModelStep leaves it unset), so the limiter counts the whole
+        // prompt. Being wrong in this direction throttles early, never late.
+        var state = WithSteps(RecentStep(5_000, 100));
+        var result = await Sut.CheckAsync(state, CancellationToken.None);
+        Assert.True(result.IsLimited);
     }
 
     [Fact]

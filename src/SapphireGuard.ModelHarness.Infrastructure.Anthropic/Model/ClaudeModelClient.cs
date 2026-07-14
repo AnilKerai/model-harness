@@ -227,8 +227,8 @@ public sealed class ClaudeModelClient : IModelClient
 
         // With prompt caching on, Anthropic reports input_tokens as the uncached remainder only;
         // the cached prefix is billed separately (read ~0.1x, 5-min write 1.25x). Fold all three
-        // buckets into the reported input count so token budgets and the TPM limiter still see the
-        // true prompt size, and price each bucket at its own rate below.
+        // buckets into the reported input count so token budgets see the true prompt size, and
+        // price each bucket at its own rate below.
         var uncachedInput = response.Usage.InputTokens;
         var cacheReadTokens = response.Usage.CacheReadInputTokens ?? 0;
         var cacheWriteTokens = response.Usage.CacheCreationInputTokens ?? 0;
@@ -237,6 +237,15 @@ public sealed class ClaudeModelClient : IModelClient
         var usage = new FrameworkUsage(
             InputTokens: (int)(uncachedInput + cacheReadTokens + cacheWriteTokens),
             OutputTokens: (int)outputTokens);
+
+        // Rate limiting counts a different number than billing does: Anthropic excludes cache reads from
+        // ITPM, so caching raises effective throughput rather than consuming it (their worked example: a
+        // 2M ITPM limit with an 80% hit rate carries 10M total input tokens/min). Counting the folded
+        // input here would throttle a well-cached agent several times too early, and get worse the better
+        // the cache performed. Cache *writes* do count, so they stay in.
+        // The one exception is Haiku 3.5, which counts cache reads too — it is retired on this API, so it
+        // cannot arrive through this client; revisit if a Bedrock/Vertex backend is ever added.
+        var rateLimitedInput = (int)(uncachedInput + cacheWriteTokens);
 
         var stopReason = MapStopReason(response.StopReason?.Raw());
         var cost = CalculateCost(
@@ -252,7 +261,8 @@ public sealed class ClaudeModelClient : IModelClient
             Model = response.Model,
             Provider = "anthropic",
             CachedInputTokens = (int)cacheReadTokens,
-            CacheWriteTokens = (int)cacheWriteTokens
+            CacheWriteTokens = (int)cacheWriteTokens,
+            InputTokensTowardRateLimit = rateLimitedInput
         };
     }
 
