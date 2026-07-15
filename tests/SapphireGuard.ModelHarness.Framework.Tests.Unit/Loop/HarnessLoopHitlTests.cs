@@ -12,7 +12,7 @@ namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Loop;
 
 public sealed class HarnessLoopHitlTests
 {
-    private static HarnessLoop BuildHarness(ScriptedModelClient modelClient, StubToolRegistry? toolRegistry = null) =>
+    private static HarnessLoop BuildHarness(ScriptedModelClient modelClient, StubToolRegistry? toolRegistry = null, ICheckpointStore? checkpointStore = null) =>
         new(
             modelClient: modelClient,
             toolRegistry: toolRegistry ?? new StubToolRegistry(),
@@ -21,7 +21,24 @@ public sealed class HarnessLoopHitlTests
             budgetEnforcer: new AlwaysOkBudgetEnforcer(),
             rateLimiter: new NullRateLimiter(),
             tracer: new NullTracer(),
-            checkpointStore: new NullCheckpointStore());
+            checkpointStore: checkpointStore ?? new NullCheckpointStore());
+
+    // Records the turn index of every checkpoint the loop saves, so a test can assert that
+    // turn numbering survives a suspend/resume rather than restarting at zero.
+    private sealed class RecordingCheckpointStore : ICheckpointStore
+    {
+        public List<int> TurnNumbers { get; } = [];
+
+        public Task SaveAsync(Checkpoint checkpoint, CancellationToken ct = default)
+        {
+            TurnNumbers.Add(checkpoint.TurnNumber);
+            return Task.CompletedTask;
+        }
+
+        public Task<Checkpoint?> LoadAsync(string checkpointId, CancellationToken ct = default) => Task.FromResult<Checkpoint?>(null);
+        public Task<Checkpoint?> LoadLatestAsync(string taskId, CancellationToken ct = default) => Task.FromResult<Checkpoint?>(null);
+        public Task DeleteAsync(string taskId, CancellationToken ct = default) => Task.CompletedTask;
+    }
 
     private static AgentState NewState() =>
         AgentState.NewTask("test task", new SapphireGuard.ModelHarness.Framework.State.Budget
@@ -125,6 +142,37 @@ public sealed class HarnessLoopHitlTests
 
         Assert.Equal(AgentStatus.Done, final.Status);
         Assert.Equal("Hello, Alice!", final.FinalAnswer);
+    }
+
+    [Fact]
+    public async Task RunAsync_ResumedAfterHumanAnswer_TurnNumberingContinues()
+    {
+        var askCallId = Guid.NewGuid().ToString("n");
+        var askCall = new ToolCall(askCallId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var calcCall = new ToolCall(Guid.NewGuid().ToString("n"), "calc", JsonDocument.Parse("{}").RootElement);
+        var registry = new StubToolRegistry(call => call.ToolName == "ask_human"
+            ? new ToolResult(askCallId, "What is your name?", IsPending: true)
+            : new ToolResult(call.CallId, "42"));
+
+        // Turn 0 runs a normal tool; turn 1 asks the human and suspends — so two model calls
+        // (turns 0 and 1) are in the trajectory before resume.
+        var firstClient = new ScriptedModelClient(ToolUseResponse(calcCall), ToolUseResponse(askCall));
+        var firstStore = new RecordingCheckpointStore();
+        var firstHarness = BuildHarness(firstClient, registry, firstStore);
+        var suspended = await firstHarness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.AwaitingHuman, suspended.Status);
+        Assert.Equal([0, 1, 1], firstStore.TurnNumbers); // top-of-turn 0, top-of-turn 1, suspension
+
+        var resumed = suspended.FinalState.ResumeWithHumanAnswer(askCallId, "Alice");
+        var secondClient = new ScriptedModelClient(EndTurnResponse("Hello, Alice!"));
+        var secondStore = new RecordingCheckpointStore();
+        var secondHarness = BuildHarness(secondClient, toolRegistry: null, checkpointStore: secondStore);
+        var final = await secondHarness.RunAsync(resumed, CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, final.Status);
+        // The resumed run must continue at turn 2, not restart at 0.
+        Assert.Equal(2, secondStore.TurnNumbers[0]);
     }
 
     // ── AgentState.ResumeWithHumanAnswer ─────────────────────────────────────

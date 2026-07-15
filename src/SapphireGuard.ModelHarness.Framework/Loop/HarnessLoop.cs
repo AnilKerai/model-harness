@@ -35,7 +35,11 @@ public sealed class HarnessLoop(
         var state = initial;
         var startedAt = _time.GetUtcNow();
         var runId = Guid.NewGuid().ToString("n");
-        var turn = 0;
+        // Seed from the restored trajectory, not 0, so a resumed run (HITL suspend/resume, checkpoint
+        // reload, or a new chat turn) continues its turn numbering instead of restarting from zero.
+        // Mirrors DefaultGuideRunner's derivation, keeping loop-emitted telemetry (model/tool/sensor
+        // spans, checkpoint + budget events, Checkpoint.TurnNumber) aligned with guide-emitted events.
+        var turn = state.Trajectory.OfType<ModelCallStep>().Count();
         var consecutiveInterventions = 0;
         var suppressTools = false;
         const int maxConsecutiveInterventions = 3;

@@ -405,8 +405,13 @@ traces back to.
 
 Every per-turn hook — `BeginModelCall`, `BeginToolCall`, `LogSensorResult`, `LogGuideContribution`,
 `LogCompaction`, `LogRateLimit`, `LogCheckpoint`, `LogBudgetSnapshot` — takes a zero-based `turn` index so a backend can group everything that happened on
-one turn. The loop threads its own turn counter into the model/tool/sensor hooks; the guide runner
-derives the same index from the trajectory (count of prior model calls) and fires `LogCompaction`
+one turn. The loop **seeds** its turn counter from the trajectory (count of prior model calls) at
+entry rather than from zero, then threads it into the model/tool/sensor hooks; the guide runner
+derives the same index the same way. Seeding from the trajectory — not a run-local zero — is what
+keeps turn numbering continuous across a resume: a HITL suspend/resume, checkpoint reload, or new
+chat turn re-enters `RunAsync`, and a from-zero counter would restart the loop-emitted numbering
+while the guide-derived index (read from the restored trajectory) kept counting. The guide runner
+also fires `LogCompaction`
 with a `CompactionTrace` (steps evicted, tokens reclaimed, folded, spend) whenever the trajectory
 guide compacts — the telemetry for watching eviction on a long run. Three further per-turn hooks give
 the loop full trace coverage: `LogRateLimit` (a rate-limit backoff wait), `LogCheckpoint` (each
