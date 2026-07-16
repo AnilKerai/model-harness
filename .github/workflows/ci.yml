@@ -33,6 +33,35 @@ jobs:
 
       - run: dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/ -c Release --no-build
 
+  # PR preview packages → GitHub Packages, versioned X.Y.Z-pr.<PR>.<run>.<height> so every
+  # push to a PR yields a distinct, pinnable version. Same-repo PRs only: fork PRs get a
+  # read-only GITHUB_TOKEN and cannot push packages.
+  preview:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - run: dotnet pack SapphireGuard.ModelHarness.slnx -c Release --output ./nupkg -p:MinVerDefaultPreReleaseIdentifiers=pr.${{ github.event.pull_request.number }}.${{ github.run_number }}
+
+      # GitHub Packages has no snupkg support, so only .nupkg is pushed. --skip-duplicate
+      # keeps job re-runs (same commit, same run number → same version) green.
+      - run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json --skip-duplicate
+
+      - run: |
+          echo "### PR preview packages" >> "$GITHUB_STEP_SUMMARY"
+          for f in ./nupkg/*.nupkg; do echo "- \`$(basename "$f" .nupkg)\`" >> "$GITHUB_STEP_SUMMARY"; done
+
   publish:
     needs: build-and-test
     runs-on: ubuntu-latest
