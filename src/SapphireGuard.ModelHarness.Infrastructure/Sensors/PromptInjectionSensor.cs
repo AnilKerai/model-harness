@@ -28,6 +28,15 @@ public sealed class PromptInjectionSensor : ISensor
         ("role-override",        new Regex(@"\byour\s+(new|updated)\s+(instructions?|role|purpose|task|objective)\b",    RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("act-as",               new Regex(@"\bact\s+as\s+(if|though|a\b)",                                              RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("pretend",              new Regex(@"\bpretend\s+(you\s+are|to\s+be)\b",                                         RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+
+        // Object-anchored override: catches "ignore your instructions", "override your skill", "bypass the
+        // rules" — any possessive/article the instruction-override pattern above (which only fires on
+        // previous|prior|all|above) misses. Anchored on the object so "ignore my previous email" stays clean.
+        ("override-directive",   new Regex(@"\b(ignore|disregard|override|bypass)\b.{0,25}\b(instructions?|prompts?|rules?|guidelines?|skills?|directions?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        // Fake system / chat-template markers used to smuggle a new authority into untrusted content.
+        ("system-marker",        new Regex(@"\bsystem\s+(override|prompt|message|instruction)\b|(^|[\r\n])\s*(system|assistant|developer)\s*:|\[\s*(system|assistant|instruction)\s*\]|<\s*/?\s*(system|im_start|im_end)\s*>|<\|[^|>]{1,24}\|>", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        // Telling the agent to stop calling its tools — a common way to defeat lookup/verification steps.
+        ("tool-suppression",     new Regex(@"\b(do\s+not|don'?t|never|no\s+need\s+to)\b.{0,25}\b(call|use|invoke|run|execute)\b.{0,25}\b(tools?|functions?|lookups?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
     ];
 
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
