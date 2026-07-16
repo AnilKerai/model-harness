@@ -110,7 +110,7 @@ Explicitly evaluated and **deliberately not built** (the audit's highest-value o
 ### Packaging and release
 - [x] NuGet packages — one package per `src/` project; `IsPackable=true`, `PackageId`, `Description`, `MIT` licence, SourceLink, `.snupkg` symbols, multi-target `net8.0` + `net10.0`
 - [x] MinVer — version derived from `v*` git tags; pre-release builds produce `{next-patch}-alpha.0.{height}` automatically
-- [x] GitHub Actions CI/CD — build + test on every `src/`/`tests/` push; publish to NuGet on every commit to `main` (pre-release) and on `v*` tags (stable release)
+- [x] GitHub Actions CI/CD — build + test on every `src/`/`tests/` push; publish to NuGet on every commit to `main` (pre-release) and on `v*` tags (stable release); same-repo PRs publish preview packages (`{next-patch}-pr.{PR}.{run}.{height}`) to GitHub Packages for pre-merge consumption
 - [x] `getting-started/` — standalone project + `.slnx` referencing published NuGet packages; excluded from CI path triggers
 
 ### Persistence
