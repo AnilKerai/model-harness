@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using SapphireGuard.ModelHarness.Framework.Sensors;
@@ -16,10 +17,11 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Sensors;
 /// first task) means every turn of a multi-turn chat is checked, not just the opener.
 /// Tool results are scanned in full, including any <see cref="ToolResult.Pins"/> — pinned
 /// content persists in the non-evictable context region, so an injection there is worse
-/// than one in the result body. Content is normalised before matching (invisible format
-/// characters stripped, NFKC-folded) so zero-width splits, soft hyphens, and fullwidth
-/// character substitution do not evade the patterns; invisible-character smuggling itself
-/// (Unicode Tags block, zero-width runs) is flagged as its own signal.
+/// than one in the result body. Content is normalised before matching (HTML entities
+/// decoded, invisible format characters stripped, NFKC-folded) so entity-encoded keywords,
+/// zero-width splits, soft hyphens, and fullwidth character substitution do not evade the
+/// patterns; invisible-character smuggling itself (Unicode Tags block, zero-width runs) is
+/// flagged as its own signal.
 /// </summary>
 public sealed class PromptInjectionSensor : ISensor
 {
@@ -140,6 +142,11 @@ public sealed class PromptInjectionSensor : ISensor
 
     private static bool TryDetect(string content, out string label)
     {
+        // One HTML-decode layer before anything else: entities are the most common content encoding
+        // in fetched web results and can hide both keywords (&#x69;gnore) and invisible characters
+        // (&#8203;). Deeper or other encodings are the quarantine layer's job, not a regex sensor's.
+        content = WebUtility.HtmlDecode(content);
+
         if (ContainsInvisibleText(content))
         {
             label = "invisible-text";
