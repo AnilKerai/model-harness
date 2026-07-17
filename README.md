@@ -211,7 +211,10 @@ annotate (`PreModelCall`), reject (`PostModelCall`), block (`PreToolCall`), flag
 (`PostToolCall`), challenge (`PreReturn`). An intervention wraps the sensor's reason
 in a `SensorInterventionStep` and appends it to the trajectory. On the next turn
 (or the same turn for `PreModelCall`), `HeadEvictionTrajectoryGuide` renders it as an assistant-role message
-prefixed `[HARNESS OBSERVATION — ...]`. `HarnessInstructionsGuide` tells the model upfront
+prefixed `[HARNESS OBSERVATION — ...]` (the model "owns" the correction — self-consistency). When such a
+note is the final turn before a model call, a trailing user turn is appended restating the directive:
+newer Claude models reject a request ending on an assistant turn (the retired prefill behaviour), so the
+note keeps its framing while a user turn carries the required final role. `HarnessInstructionsGuide` tells the model upfront
 (in the system prompt) what these notes mean and that they must be treated as directives —
 this is the feedforward complement to the sensor's feedback. Intervention records are
 separate from tool-call history so tool history stays clean.
@@ -235,7 +238,7 @@ TrajectoryGuide renders it as an assistant-role message in ContextDraft
         │
         ▼
 Model sees: "[HARNESS OBSERVATION — my-sensor at PreToolCall] My previous response was blocked: dangerous-tool is not permitted. I will comply fully and not repeat this behaviour."
-        │
+        │        (+ a trailing user turn "Proceed, fully complying..." if the note is the final turn)
         ▼
 Model re-plans without that tool
 ```

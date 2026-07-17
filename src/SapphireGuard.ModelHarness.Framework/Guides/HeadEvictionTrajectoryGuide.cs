@@ -10,6 +10,10 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// Each step type has a distinct rendering: model turns as assistant messages,
 /// tool calls and results as paired messages, sensor interventions as assistant
 /// acknowledgements so the model continues from a committed correction posture.
+/// When an intervention is the final turn, a trailing user turn is appended restating the
+/// directive: newer Claude models reject a request that ends on an assistant turn (the retired
+/// prefill behaviour), so the note keeps its self-consistency framing while a user turn carries
+/// the required final role.
 /// When steps are evicted, the injected <see cref="ICompactionStrategy"/> decides what
 /// to put in their place — a bare omission note (<see cref="NullCompactionStrategy"/>)
 /// or an AI-generated prose summary (<c>AiCompactionStrategy</c> in Infrastructure).
@@ -88,6 +92,15 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
 
         foreach (var (_, messages) in liveGroups)
             draft.TrajectoryMessages.AddRange(messages);
+
+        // When an intervention note is the final turn, the request would end on an assistant turn.
+        // Newer Claude models reject that (the retired prefill behaviour) with a 400. Keep the note
+        // assistant-role — the model still "owns" the correction (self-consistency) — and append a
+        // trailing user turn that both satisfies the required final role and restates the directive,
+        // so the external command and the self-commitment reinforce each other.
+        if (liveGroups.Count > 0 && liveGroups[^1].Step is SensorInterventionStep)
+            draft.TrajectoryMessages.Add(new Message(MessageRole.User,
+                "Proceed, fully complying with the harness observation above."));
     }
 
     private static List<(Step Step, List<Message> Messages)> RenderSteps(IReadOnlyList<Step> trajectory)
