@@ -1,3 +1,4 @@
+using System.Linq;
 using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.Framework.Budget;
@@ -13,7 +14,7 @@ public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) 
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
-    public BudgetCheckResult Check(AgentState state, DateTimeOffset startedAt)
+    public BudgetCheckResult Check(AgentState state, TimeSpan lookahead = default)
     {
         var budget = state.Budget;
 
@@ -56,7 +57,11 @@ public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) 
         if (totalTokens >= budget.MaxTotalTokens)
             return BudgetCheckResult.Exhausted($"Reached MaxTotalTokens ({budget.MaxTotalTokens}) this turn.");
 
-        var elapsed = _time.GetUtcNow() - startedAt;
+        // Per-turn wall-clock: measured from the latest user message, so each turn gets a fresh
+        // allowance — consistent with the turn/cost/token reset above and resume-safe (both are
+        // derived from the trajectory, not a per-invocation capture).
+        var turnStart = state.Trajectory.OfType<UserMessageStep>().LastOrDefault()?.Timestamp ?? _time.GetUtcNow();
+        var elapsed = _time.GetUtcNow() - turnStart + lookahead;
         if (elapsed >= budget.MaxWallClock)
             return BudgetCheckResult.Exhausted($"Reached MaxWallClock ({budget.MaxWallClock}).");
 

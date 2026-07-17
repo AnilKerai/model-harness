@@ -168,7 +168,7 @@ See [EXTENDING.md](docs/EXTENDING.md) for the `IGuide` interface and registratio
 
 Custom guides registered via `builder.WithGuide<T>()` slot in after the built-ins and before `HeadEvictionTrajectoryGuide`.
 
-The standing system prompt that guides like `HarnessInstructionsGuide` and `ReActGuide` append to is itself set by a `SystemPromptGuide`, added when you call `builder.WithSystemPrompt(...)`. It is registered by that builder call rather than by the default pipeline, so it is not one of the always-on built-in guides. Because every guide contributes to one shared `SystemPrompt`, the order among the prompt-appending guides does not matter.
+The standing system prompt that guides like `HarnessInstructionsGuide` and `ReActGuide` append to is itself set by a `SystemPromptGuide`, added when you call `builder.WithSystemPrompt(...)`. It is registered by that builder call rather than by the default pipeline, so it runs *after* those appending guides — which is why it **prepends** the caller's base prompt rather than assigning it (assigning would clobber their `+=` contributions). The result is order-independent: the caller's prompt ends up first, with the harness and ReAct sections after it.
 
 `ReActGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it primes the model to interleave reasoning (a one-line *Thought*) with actions (tool calls) and *Observations* on each result. The act/observe half is already the loop — the model emits tool calls, the harness dispatches them and feeds results back — so this guide is the system-prompt nudge that makes the reasoning explicit and inspectable.
 
@@ -263,7 +263,7 @@ sequenceDiagram
 
     loop Each turn
         L->>CP: SaveAsync(Checkpoint{turn, state})
-        L->>B: Check(state, startedAt)
+        L->>B: Check(state)
         alt Budget exhausted
             B-->>L: Exhausted(reason)
             L->>CB: BuildAsync — force-finalise prompt
@@ -323,7 +323,7 @@ before any sensor or model call:
 | `MaxTurns` | Maximum number of loop iterations |
 | `MaxTotalTokens` | Cumulative token ceiling across the whole run (all model, tool, sensor, and compaction calls). Not the per-turn context window — that's `CompactionOptions.WindowTokens`. |
 | `MaxCost` | Maximum spend (based on the model client's cost tracking) |
-| `MaxWallClock` | Maximum elapsed time from the first turn |
+| `MaxWallClock` | Maximum elapsed wall-clock from the run's start (its first user message). Derived from the trajectory, so it keeps accumulating across a resume rather than restarting. |
 
 Budget exhaustion is **not an exception** — it is control flow. When a limit is hit,
 the loop makes one final model call with tools disabled so the model can produce a

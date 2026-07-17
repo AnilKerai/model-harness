@@ -45,7 +45,11 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
         if (priorSummary is not null)
             budget -= EstimateTokens(priorSummary.Text);
 
-        var trimCount = ComputeTrimCount(liveGroups, budget);
+        // Never evict the most recent group: a fully-evicted turn renders zero conversational
+        // messages, which the provider rejects as an empty `messages` array. Keeping one live group
+        // may exceed the window when that single group is oversized, but an over-budget message
+        // beats a hard 400.
+        var trimCount = Math.Min(ComputeTrimCount(liveGroups, budget), Math.Max(0, liveGroups.Count - 1));
 
         // Default: carry the prior summary forward unchanged (nothing new evicted this turn).
         var summaryToRender = priorSummary?.Text;
@@ -82,6 +86,12 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
                 Cost: result.Cost);
             liveGroups = liveGroups[trimCount..];
         }
+
+        // Defensive: if the fold watermark already covers every group (e.g. resuming a checkpoint
+        // written before the keep-last-group rule), render the most recent group anyway so the
+        // conversation is never empty. It is also represented in the summary — harmless overlap.
+        if (liveGroups.Count == 0 && allGroups.Count > 0)
+            liveGroups = [allGroups[^1]];
 
         if (!string.IsNullOrEmpty(summaryToRender))
             draft.TrajectoryMessages.Add(new Message(MessageRole.System, summaryToRender));

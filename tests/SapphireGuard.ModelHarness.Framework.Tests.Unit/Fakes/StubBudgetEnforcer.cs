@@ -5,12 +5,12 @@ namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 
 public sealed class AlwaysOkBudgetEnforcer : BudgetNs.IBudgetEnforcer
 {
-    public BudgetNs.BudgetCheckResult Check(AgentState state, DateTimeOffset startedAt) =>
+    public BudgetNs.BudgetCheckResult Check(AgentState state, TimeSpan lookahead = default) =>
         BudgetNs.BudgetCheckResult.Ok;
 }
 
 public sealed class AlwaysExhaustedBudgetEnforcer : BudgetNs.IBudgetEnforcer
 {
-    public BudgetNs.BudgetCheckResult Check(AgentState state, DateTimeOffset startedAt) =>
+    public BudgetNs.BudgetCheckResult Check(AgentState state, TimeSpan lookahead = default) =>
         BudgetNs.BudgetCheckResult.Exhausted("test budget exhausted");
 }
