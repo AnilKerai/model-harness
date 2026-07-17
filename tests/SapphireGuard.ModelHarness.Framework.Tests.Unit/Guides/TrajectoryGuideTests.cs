@@ -106,6 +106,30 @@ public sealed class HeadEvictionTrajectoryGuideTests
         Assert.Contains("quality check failed", intervention.Content);
     }
 
+    [Fact]
+    public async Task Contribute_InterventionAsFinalStep_AppendsTrailingUserTurn()
+    {
+        // Newer Claude models 400 on a request ending on an assistant turn (prefill). The note stays
+        // assistant-role for self-consistency; a trailing user turn carries the required final role.
+        var state = EmptyState().AppendStep(InterventionStep(HookPoint.PreModelCall, "goal drift"));
+        var draft = await ContributeAsync(state);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Role == MessageRole.Assistant && m.Content.Contains("goal drift"));
+        Assert.Equal(MessageRole.User, draft.TrajectoryMessages[^1].Role);
+    }
+
+    [Fact]
+    public async Task Contribute_ModelAnswerAsFinalStep_DoesNotAppendTrailingUserTurn()
+    {
+        // Only a trailing intervention gets re-sent to the model; a plain final answer ends the run,
+        // so it must not accrue a spurious nudge.
+        var state = EmptyState().AppendStep(ModelStep("final answer"));
+        var draft = await ContributeAsync(state);
+
+        Assert.Equal(MessageRole.Assistant, draft.TrajectoryMessages[^1].Role);
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("Proceed, fully complying"));
+    }
+
     // ── PostModelCall blocking — the core correctness case ────────────────────
 
     [Fact]
