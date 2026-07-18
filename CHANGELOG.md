@@ -12,6 +12,31 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Added
+
+- `AgentState.RunId` — a stable run identifier derived from the first user message's step id, so it
+  survives resume the same way `RunStartedAt` does.
+
+### Fixed
+
+- **`Checkpoint.RunId` changed across a resume.** The loop minted a fresh GUID on every `RunAsync`, so a
+  HITL suspend/resume, checkpoint reload, or new chat turn stamped the same task's checkpoints with
+  different run ids — contradicting the documented contract that "all checkpoints for the same task share
+  this value". It is now derived from the trajectory. (#3)
+- **A sensor's own timeout could kill the run.** `DefaultSensorRunner` re-threw *every*
+  `OperationCanceledException`, but an AI-powered sensor whose HTTP call times out raises
+  `TaskCanceledException` — an OCE — with the harness token untouched. That faulted the parallel batch and
+  ended the run as "cancelled", breaking the fail-open guarantee. Only genuine harness cancellation
+  propagates now; a sensor's own OCE fails open like any other fault. (#11)
+- **Loop-detection sensors counted across user turns.** `StuckDetector`, `AlternatingToolLoopSensor`,
+  `MonologueLoopSensor`, and `ToolErrorLoopSensor` scanned the trajectory backwards treating every
+  non-matching step as transparent, so a `UserMessageStep` never reset the streak. In the shipped chat
+  harness — which wires `StuckDetector` alongside `GetDateTimeTool`, whose empty-args schema gives every
+  call an identical signature — a user asking the time in three separate turns had the third call
+  **blocked** as a loop. All four now stop at the current user turn. (#12)
+
 ## [2.0.1] — 2026-07-18
 
 ### Fixed

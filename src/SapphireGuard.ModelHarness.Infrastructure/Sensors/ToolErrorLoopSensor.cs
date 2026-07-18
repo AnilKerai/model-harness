@@ -26,8 +26,10 @@ public sealed class ToolErrorLoopSensor(int errorThreshold = 3) : ISensor
         var consecutive = 0;
         for (var i = state.Trajectory.Count - 1; i >= 0; i--)
         {
+            if (state.Trajectory[i] is UserMessageStep)
+                break;                         // a new user turn is a fresh intent — don't scan past it
             if (state.Trajectory[i] is not ToolCallStep prior)
-                continue;                      // non-tool steps are transparent
+                continue;                      // other non-tool steps are transparent
             if (prior.Call.ToolName != toolName)
                 break;                         // a different tool breaks the streak
             if (!prior.Result.IsError)

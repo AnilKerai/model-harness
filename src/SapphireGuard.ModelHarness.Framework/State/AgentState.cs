@@ -35,6 +35,17 @@ public sealed record AgentState
     public DateTimeOffset? RunStartedAt =>
         Trajectory.OfType<UserMessageStep>().FirstOrDefault()?.Timestamp;
 
+    /// <summary>
+    /// Stable identifier for the run, derived from the first user message's step id. Like
+    /// <see cref="RunStartedAt"/> it comes from the trajectory rather than a per-<c>RunAsync</c>
+    /// capture, so every checkpoint written for a task shares one value even across a resume —
+    /// the contract <see cref="Persistence.Checkpoint.RunId"/> documents.
+    /// <see langword="null"/> only for a trajectory with no user message (never produced by
+    /// <see cref="NewTask"/>).
+    /// </summary>
+    public string? RunId =>
+        Trajectory.OfType<UserMessageStep>().FirstOrDefault()?.Id.ToString("n");
+
     /// <summary>Arbitrary key-value metadata forwarded to tools via <see cref="SapphireGuard.ModelHarness.Framework.Tools.ToolContext"/>.</summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
 

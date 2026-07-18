@@ -31,6 +31,23 @@ public sealed class MonologueLoopSensorTests
     private static readonly MonologueLoopSensor Sut = new(repeatThreshold: 3);
 
     [Fact]
+    public async Task IdenticalResponsesSplitAcrossUserTurns_Passes()
+    {
+        // Repeating an answer because the user asked again is not a monologue loop — the streak
+        // resets at the latest user turn.
+        var current = ModelStep("the answer is 42");
+        var state = EmptyState()
+            .AppendStep(ModelStep("the answer is 42"))
+            .AppendStep(ModelStep("the answer is 42"))
+            .WithUserMessage("sorry, what was the answer again?", DateTimeOffset.UtcNow)
+            .AppendStep(current);
+
+        var result = await Sut.CheckAsync(HookPoint.PostModelCall, state, current, CancellationToken.None);
+
+        Assert.False(result.IsIntervene);
+    }
+
+    [Fact]
     public async Task ThreeIdenticalNoToolResponses_Intervenes()
     {
         var current = ModelStep("the answer is 42");

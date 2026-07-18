@@ -29,6 +29,8 @@ public sealed class MonologueLoopSensor(int repeatThreshold = 3) : ISensor
         var consecutive = 1;
         for (var i = state.Trajectory.Count - 1; i >= 0; i--)
         {
+            if (state.Trajectory[i] is UserMessageStep)
+                break;                         // a new user turn is a fresh intent — don't scan past it
             if (state.Trajectory[i] is not ModelCallStep prior || ReferenceEquals(prior, current))
                 continue;
             if (prior.Response.ToolCalls.Count > 0 || Normalise(prior.Response.Text) != key)

@@ -23,6 +23,23 @@ public sealed class AlternatingToolLoopSensorTests
     private static readonly AlternatingToolLoopSensor Sut = new(minCycles: 2);
 
     [Fact]
+    public async Task AbabPatternSplitAcrossUserTurns_Passes()
+    {
+        // The backward scan stops at the latest user turn, so an A-B-A-B shape spanning separate
+        // user intents is not a loop — the user asked for the second one.
+        var current = ToolStep("write", """{"v":1}""");
+        var state = EmptyState()
+            .AppendStep(ToolStep("read"))
+            .AppendStep(ToolStep("write", """{"v":1}"""))
+            .WithUserMessage("now do it again for the other file", DateTimeOffset.UtcNow)
+            .AppendStep(ToolStep("read"));
+
+        var result = await Sut.CheckAsync(HookPoint.PreToolCall, state, current, CancellationToken.None);
+
+        Assert.False(result.IsIntervene);
+    }
+
+    [Fact]
     public async Task AbabPattern_Intervenes()
     {
         var current = ToolStep("write", """{"v":1}""");
