@@ -46,7 +46,7 @@ var outcome = await provider.GetRequiredService<Agent>()
 Console.WriteLine(outcome.FinalAnswer);
 ```
 
-No API key? Samples fall back to a `FakeModelClient`, so the harness runs without one. A minimal runnable project is in [`getting-started/`](getting-started/) — open `GettingStarted.slnx`, drop an `appsettings.local.json` with your key, and run. Then: **[RUNNING.md](docs/RUNNING.md)** to run the samples, **[EXTENDING.md](docs/EXTENDING.md)** for how-to recipes, **[PRIMER.md](docs/PRIMER.md)** for the ideas behind it.
+No API key? Samples fall back to a `FakeModelClient`, so the harness runs without one. A minimal runnable project is in [`getting-started/`](getting-started/) — open `GettingStarted.slnx`, drop an `appsettings.local.json` with your key, and run. Then: **[RUNNING.md](docs/RUNNING.md)** to run the samples, **[EXTENDING.md](docs/EXTENDING.md)** for how-to recipes, **[PRIMER.md](docs/PRIMER.md)** for the ideas behind it, **[CHANGELOG.md](CHANGELOG.md)** for release history — every breaking change there carries a migration guide.
 
 ---
 
