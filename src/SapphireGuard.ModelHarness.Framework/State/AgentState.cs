@@ -1,3 +1,4 @@
+using System.Linq;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Framework.State;
@@ -23,6 +24,16 @@ public sealed record AgentState
 
     /// <summary>Ordered log of every <see cref="Step"/> taken during this run.</summary>
     public IReadOnlyList<Step> Trajectory { get; init; } = [];
+
+    /// <summary>
+    /// Wall-clock start of the whole run: the timestamp of the first user message. Derived from the
+    /// trajectory rather than captured per <c>RunAsync</c> invocation, so it survives resume — a
+    /// checkpoint reload, HITL suspend/resume, or a new chat turn re-enters the loop but keeps
+    /// measuring wall-clock from the true task start. <see langword="null"/> only for a trajectory
+    /// with no user message (never produced by <see cref="NewTask"/>).
+    /// </summary>
+    public DateTimeOffset? RunStartedAt =>
+        Trajectory.OfType<UserMessageStep>().FirstOrDefault()?.Timestamp;
 
     /// <summary>Arbitrary key-value metadata forwarded to tools via <see cref="SapphireGuard.ModelHarness.Framework.Tools.ToolContext"/>.</summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();

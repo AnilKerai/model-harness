@@ -33,7 +33,6 @@ public sealed class HarnessLoop(
     public async Task<AgentOutcome> RunAsync(AgentState initial, CancellationToken ct)
     {
         var state = initial;
-        var startedAt = _time.GetUtcNow();
         var runId = Guid.NewGuid().ToString("n");
         // Seed from the restored trajectory, not 0, so a resumed run (HITL suspend/resume, checkpoint
         // reload, or a new chat turn) continues its turn numbering instead of restarting from zero.
@@ -67,8 +66,9 @@ public sealed class HarnessLoop(
                 }, ct);
                 tracer.LogCheckpoint(state.TaskId, turnIndex, checkpointId, _time.GetElapsedTime(checkpointStart));
 
-                var budgetCheck = budgetEnforcer.Check(state, startedAt);
-                tracer.LogBudgetSnapshot(state.TaskId, turnIndex, BudgetSnapshot.From(state, _time.GetUtcNow() - startedAt));
+                var budgetCheck = budgetEnforcer.Check(state);
+                var runElapsed = _time.GetUtcNow() - (state.RunStartedAt ?? _time.GetUtcNow());
+                tracer.LogBudgetSnapshot(state.TaskId, turnIndex, BudgetSnapshot.From(state, runElapsed));
                 if (budgetCheck.IsExhausted)
                     return await FinaliseOnBudgetAsync(state, turnIndex, budgetCheck.Reason!, ct);
 
@@ -76,9 +76,12 @@ public sealed class HarnessLoop(
                 if (rateLimitCheck.IsLimited)
                 {
                     var delay = rateLimitCheck.RetryAfter ?? TimeSpan.FromSeconds(10);
-                    if (_time.GetUtcNow() + delay > startedAt + state.Budget.MaxWallClock)
+                    // Would sleeping for the backoff blow the wall-clock budget? Ask the enforcer with a
+                    // lookahead so the check honours whichever anchor (task-total vs per-turn) is wired.
+                    var afterWait = budgetEnforcer.Check(state, delay);
+                    if (afterWait.IsExhausted)
                         return await FinaliseOnBudgetAsync(state, turnIndex,
-                            $"Rate limit wait ({delay.TotalSeconds:0}s) would exceed MaxWallClock.", ct);
+                            $"Rate limit wait ({delay.TotalSeconds:0}s) would exceed budget: {afterWait.Reason}", ct);
                     tracer.LogRateLimit(state.TaskId, turnIndex, delay);
                     await Task.Delay(delay, ct);
                     continue;

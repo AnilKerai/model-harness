@@ -37,7 +37,7 @@ public sealed class TurnScopedBudgetEnforcerTests
             .WithUserMessage("turn 2", DateTimeOffset.UtcNow).AppendStep(ModelStep()).AppendStep(ModelStep())
             .WithUserMessage("turn 3", DateTimeOffset.UtcNow).AppendStep(ModelStep()).AppendStep(ModelStep());
 
-        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+        var result = Sut.Check(state);
 
         Assert.False(result.IsExhausted);
     }
@@ -50,7 +50,7 @@ public sealed class TurnScopedBudgetEnforcerTests
             .AppendStep(ModelStep())
             .AppendStep(ModelStep());
 
-        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+        var result = Sut.Check(state);
 
         Assert.True(result.IsExhausted);
         Assert.Contains("MaxTurns", result.Reason);
@@ -66,7 +66,7 @@ public sealed class TurnScopedBudgetEnforcerTests
             .WithUserMessage("turn 2", DateTimeOffset.UtcNow)
             .AppendStep(ModelStep(cost: 0.4m));
 
-        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+        var result = Sut.Check(state);
 
         Assert.False(result.IsExhausted);
     }
@@ -79,7 +79,7 @@ public sealed class TurnScopedBudgetEnforcerTests
             .AppendStep(ModelStep(cost: 0.5m))
             .AppendStep(ModelStep(cost: 0.5m));
 
-        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+        var result = Sut.Check(state);
 
         Assert.True(result.IsExhausted);
         Assert.Contains("MaxCost", result.Reason);
@@ -94,7 +94,7 @@ public sealed class TurnScopedBudgetEnforcerTests
             .WithUserMessage("turn 2", DateTimeOffset.UtcNow)
             .AppendStep(ModelStep(inputTokens: 10, outputTokens: 10));
 
-        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+        var result = Sut.Check(state);
 
         Assert.False(result.IsExhausted);
     }
@@ -108,7 +108,7 @@ public sealed class TurnScopedBudgetEnforcerTests
                 new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
                 new Tools.ToolResult("id", "ok", Cost: 1.0m)));
 
-        var result = Sut.Check(state, DateTimeOffset.UtcNow);
+        var result = Sut.Check(state);
 
         Assert.True(result.IsExhausted);
         Assert.Contains("MaxCost", result.Reason);
@@ -118,11 +118,38 @@ public sealed class TurnScopedBudgetEnforcerTests
     public void Check_WallClockExceeded_ReturnsExhausted()
     {
         var budget = Generous with { MaxWallClock = TimeSpan.FromMilliseconds(1) };
-        var startedAt = DateTimeOffset.UtcNow.AddSeconds(-10);
+        // The latest user message is the per-turn wall-clock anchor — ten seconds ago.
+        var state = AgentState.NewTask("test", budget, DateTimeOffset.UtcNow.AddSeconds(-10));
 
-        var result = Sut.Check(EmptyState(budget), startedAt);
+        var result = Sut.Check(state);
 
         Assert.True(result.IsExhausted);
         Assert.Contains("MaxWallClock", result.Reason);
+    }
+
+    [Fact]
+    public void Check_WallClock_ResetsAtLatestUserTurn()
+    {
+        // The defining per-turn property: the first turn is 10s old (would blow a 1s cumulative
+        // budget), but the latest user turn is fresh, so wall-clock resets and is NOT exhausted.
+        // DefaultBudgetEnforcer, anchored to the first message, would exhaust here.
+        var budget = Generous with { MaxWallClock = TimeSpan.FromSeconds(1) };
+        var state = AgentState.NewTask("test", budget, DateTimeOffset.UtcNow.AddSeconds(-10))
+            .AppendStep(ModelStep())
+            .WithUserMessage("fresh turn", DateTimeOffset.UtcNow);
+
+        var result = Sut.Check(state);
+
+        Assert.False(result.IsExhausted);
+    }
+
+    [Fact]
+    public void Check_Lookahead_CountsTowardPerTurnWallClock()
+    {
+        var budget = Generous with { MaxWallClock = TimeSpan.FromSeconds(2) };
+        var state = AgentState.NewTask("test", budget, DateTimeOffset.UtcNow.AddSeconds(-1)); // ~1s into the turn
+
+        Assert.False(Sut.Check(state).IsExhausted);                                     // 1s < 2s
+        Assert.True(Sut.Check(state, lookahead: TimeSpan.FromSeconds(2)).IsExhausted);  // 1s + 2s >= 2s
     }
 }

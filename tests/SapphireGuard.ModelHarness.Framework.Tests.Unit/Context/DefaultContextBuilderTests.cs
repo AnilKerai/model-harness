@@ -107,6 +107,33 @@ public sealed class DefaultContextBuilderTests
     }
 
     [Fact]
+    public async Task BuildAsync_SystemRoleTrajectoryMessages_FoldedIntoSingleSystemMessage()
+    {
+        // The compaction summary and [ORIGINAL GOAL] anchor are emitted as System-role trajectory
+        // messages. Every model adapter forwards only the first System message, so the builder must
+        // fold all System messages into one — leaving the conversation with only non-System turns.
+        var builder = BuilderWith(
+            systemPrompt: "BASE PROMPT",
+            trajectoryMessages:
+            [
+                new Message(MessageRole.System, "[Summary of earlier steps] did X"),
+                new Message(MessageRole.System, "[ORIGINAL GOAL] achieve Y"),
+                new Message(MessageRole.User, "current question"),
+            ]);
+
+        var result = await builder.BuildAsync(State(), [], CancellationToken.None);
+
+        // Exactly one System message, carrying the base prompt plus both folded sections.
+        Assert.Single(result.Messages, m => m.Role == MessageRole.System);
+        var system = result.Messages[0].Content;
+        Assert.Contains("BASE PROMPT", system);
+        Assert.Contains("[Summary of earlier steps] did X", system);
+        Assert.Contains("[ORIGINAL GOAL] achieve Y", system);
+        // The non-System turn is preserved in the conversation.
+        Assert.Contains(result.Messages, m => m.Role == MessageRole.User && m.Content == "current question");
+    }
+
+    [Fact]
     public async Task BuildAsync_SelectedToolsReturnedInResult()
     {
         var tool = new StubTool("echo", "Echoes");

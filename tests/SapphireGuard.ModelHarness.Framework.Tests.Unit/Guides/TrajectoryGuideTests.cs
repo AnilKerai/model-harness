@@ -202,11 +202,13 @@ public sealed class HeadEvictionTrajectoryGuideTests
     {
         // The "fold, not view" guarantee: with a prior summary covering the first 2 groups, only the
         // newly evicted tail is handed to the strategy — never the whole head again — and the
-        // watermark advances by exactly that slice.
+        // watermark advances by exactly that slice. Two live tail groups so one can be evicted while
+        // the most-recent group is kept (eviction never empties the conversation).
         var strategy = new RecordingCompactionStrategy();
         var built = EmptyState()
             .AppendStep(ModelStep("FOLDED_M1"))
-            .AppendStep(ModelStep("LIVE_TAIL"));
+            .AppendStep(ModelStep("LIVE_TAIL_1"))
+            .AppendStep(ModelStep("LIVE_TAIL_2"));
         var state = built with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 2) };
 
         var draft = new ContextDraft();
@@ -218,6 +220,8 @@ public sealed class HeadEvictionTrajectoryGuideTests
         Assert.All(call.EvictedSteps, s => Assert.IsType<ModelCallStep>(s));       // only live-tail steps
         Assert.Equal(2 + call.EvictedSteps.Count, draft.Compaction!.UpdatedSummary!.FoldedStepCount);
         Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("FOLDED_M1"));
+        // The most-recent group is never evicted, so it is still rendered.
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content.Contains("LIVE_TAIL_2"));
     }
 
     [Fact]
@@ -266,6 +270,37 @@ public sealed class HeadEvictionTrajectoryGuideTests
         var draft = await ContributeAsync(state);
 
         Assert.Null(draft.CompactionTrace);
+    }
+
+    // ── Never-empty conversation (empty messages array is a provider 400) ──────
+
+    [Fact]
+    public async Task Contribute_TinyWindow_KeepsAtLeastOneLiveGroup()
+    {
+        // A window too small to fit anything must still leave the most-recent group, so the rendered
+        // conversation has at least one non-System message.
+        var state = EmptyState()
+            .AppendStep(ModelStep("m1"))
+            .AppendStep(ModelStep("m2"))
+            .AppendStep(ModelStep("m3"));
+
+        var draft = await ContributeAsync(state, windowTokens: 1);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Role != MessageRole.System);
+    }
+
+    [Fact]
+    public async Task Contribute_FoldWatermarkCoversAllGroups_StillRendersAConversation()
+    {
+        // Resuming a checkpoint whose fold watermark already covers every rendered group: the live
+        // set starts empty, but the guide must still render the most-recent group rather than emit an
+        // empty conversation.
+        var built = EmptyState().AppendStep(ModelStep("recent answer")); // 2 groups (user + model)
+        var state = built with { RollingSummary = new RollingSummary("covers everything", 2) };
+
+        var draft = await ContributeAsync(state); // default large window
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Role != MessageRole.System);
     }
 
     private sealed class RecordingCompactionStrategy : ICompactionStrategy
