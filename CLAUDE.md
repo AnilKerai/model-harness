@@ -129,6 +129,8 @@ The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContext
 - Before designing a non-trivial solution, ask clarifying questions to improve the spec.
 - When using external SDKs or APIs, fetch up-to-date docs rather than relying on training data.
 - **After any change, re-check the docs for staleness and fix them in the same changeset** — `README.md`, `CLAUDE.md`, and `docs/*.md` (PRIMER, EXTENDING, ROADMAP). If a change renames a symbol, removes a project, alters a default, or adds/removes a feature, update every doc that referenced it so the docs never drift from the code.
+- **Record every breaking change in `CHANGELOG.md`, with a migration guide** (before/after code for anyone who has to change theirs). A breaking change is anything that can stop a consumer compiling *or* silently change runtime behaviour they depend on — this explicitly includes the extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are public API even though most consumers implement only a few. Note behavioural changes even when the signature is unchanged.
+- **Releases are annotated `vX.Y.Z` tags** (MinVer — the tag *is* the version). Pushing one makes CI publish the seven packages to nuget.org **and** create the GitHub Release from the tag's annotation message, so write that message as the release notes. A published NuGet version can never be deleted or reused — confirm the number before tagging, and bump **major** for anything in the breaking list above.
 
 ## Testing
 
