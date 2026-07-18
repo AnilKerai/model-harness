@@ -71,6 +71,20 @@ public sealed class PromptInjectionSensor : ISensor
         ("authority-claim",      new Regex(@"\b(admin|administrator|developer|root|sudo)\s+override\b|\b(message|instructions?)\s+from\s+your\s+(developer|creator|administrator|operator)s?\b|\bthis\s+is\s+your\s+(developer|creator|administrator|operator)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
     ];
 
+    // Tools whose results are authored context rather than untrusted inbound content. Scanning them
+    // produces false positives that are worse than noise: a PostToolCall intervention is advisory and
+    // fires *after* the result is already committed, so it cannot block anything — it only tells the
+    // model to distrust content it legitimately obtained.
+    //   ask_human  — the pending result echoes the model's own question, which quotes injection text
+    //                whenever the agent is asking about suspicious content (e.g. triaging a ticket).
+    //   skill_view — pins a stored procedure. A skill body is instruction by nature ("never call X
+    //                before Y"), so the injection patterns match legitimate guidance routinely.
+    // Both assume the corresponding source is operator-authored. A deployment that lets untrusted
+    // parties write skills (agent learning) or answer ask_human (a relayed channel) needs a different
+    // control at the write/ingress boundary — a regex over instruction-shaped text is the wrong one.
+    private static readonly IReadOnlySet<string> TrustedTools =
+        new HashSet<string>(StringComparer.Ordinal) { "ask_human", "skill_view" };
+
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
     {
         if (hookPoint == HookPoint.PreModelCall)
@@ -79,7 +93,7 @@ public sealed class PromptInjectionSensor : ISensor
         if (triggeringStep is not ToolCallStep toolStep)
             return Task.FromResult(SensorResult.Pass);
 
-        if (toolStep.Call.ToolName == "ask_human")
+        if (TrustedTools.Contains(toolStep.Call.ToolName))
             return Task.FromResult(SensorResult.Pass);
 
         var content = BuildScanText(toolStep.Result);
