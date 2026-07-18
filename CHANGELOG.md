@@ -12,6 +12,25 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [2.0.1] — 2026-07-18
+
+### Fixed
+
+- **`PromptInjectionSensor` no longer scans `skill_view` results.** A skill body is a stored procedure and
+  therefore instruction-shaped by nature ("never call X before Y"), so the override patterns matched
+  legitimate guidance routinely. `skill_view` joins `ask_human` in the sensor's trusted-tool allowlist.
+
+  The exemption matters because `PostToolCall` is advisory and fires *after* the result is already
+  committed — it cannot block anything, so a false positive only told the model to distrust content it had
+  legitimately loaded.
+
+  **Trust assumption worth knowing:** both allowlist entries assume that source is operator-authored. If
+  your deployment lets untrusted parties write skills (agent learning) or answer `ask_human` (a relayed
+  channel), that content is now unscanned — put a control at the write/ingress boundary instead, since a
+  regex over instruction-shaped text is the wrong instrument there.
+
+No public API change.
+
 ## [2.0.0] — 2026-07-18
 
 Four HIGH-severity bugs found in a systematic audit, one of which required a breaking signature change.
@@ -150,6 +169,7 @@ OpenTelemetry `gen_ai.*` tracing. Published as seven NuGet packages.
 Initial packaging release: multi-targeted `net8.0` + `net10.0`, MIT licence, SourceLink, and shared package
 metadata across the seven publishable projects.
 
+[2.0.1]: https://github.com/AnilKerai/model-harness/releases/tag/v2.0.1
 [2.0.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.0.0
 [1.2.1]: https://github.com/AnilKerai/model-harness/releases/tag/v1.2.1
 [1.2.0]: https://github.com/AnilKerai/model-harness/releases/tag/v1.2.0
