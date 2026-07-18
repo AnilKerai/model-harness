@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Infrastructure.Persistence.Serialization;
@@ -18,7 +19,12 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
         var dir = TaskDirectory(checkpoint.State.TaskId);
         Directory.CreateDirectory(dir);
 
-        var name = $"{checkpoint.CreatedAt:yyyyMMddHHmmssfff}_{checkpoint.CheckpointId}";
+        // Invariant culture, not the interpolation default (CurrentCulture): under a non-Gregorian
+        // calendar locale (th-TH, ar-SA, fa-IR) the rendered year differs, which breaks the
+        // lexicographic-order == chronological-order invariant LoadLatestAsync sorts on and lets a
+        // stale checkpoint win the resume.
+        var timestamp = checkpoint.CreatedAt.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
+        var name = $"{timestamp}_{checkpoint.CheckpointId}";
         var path = Path.Combine(dir, name + ".json");
         var tmp = Path.Combine(dir, name + ".tmp");
         var json = CheckpointSerializer.Serialize(checkpoint);

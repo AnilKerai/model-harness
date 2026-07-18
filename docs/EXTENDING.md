@@ -588,7 +588,10 @@ by account tier. The harness checks `IRateLimiter` before each model call and wa
 limit is hit. By default no rate limiting is applied (`NullRateLimiter`).
 
 Both built-in implementations inspect the trajectory's `ModelCallStep` timestamps — no
-mutable state is needed in the limiter itself.
+mutable state is needed in the limiter itself. Both reject a non-positive limit at construction,
+and both treat the 60-second window's lower bound as **exclusive**, so a call turning exactly 60 s
+old has aged out — which is what makes the reported `RetryAfter` land on the moment the limit
+actually clears rather than one tick short of it.
 
 ```csharp
 // Calls-per-minute cap — counts model calls in the last 60 s

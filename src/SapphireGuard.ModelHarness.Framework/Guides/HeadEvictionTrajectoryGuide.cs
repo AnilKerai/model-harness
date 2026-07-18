@@ -41,9 +41,18 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
         var liveGroups = allGroups[foldedCount..];
         var priorSummary = state.RollingSummary;
 
+        // Everything rendered into the window must be charged to the budget before trimming against it.
+        // The summary and the [ORIGINAL GOAL] anchor are appended *after* the trim but ride in the same
+        // window, so omitting them overshoots WindowTokens by their size on every compacted turn. This
+        // was inert while the adapters dropped all but the first System message; folding those into the
+        // system message — so they actually reach the model — made the overshoot real. The prior
+        // summary's size stands in for the new one: the strategy is handed the remaining budget below
+        // and is expected to fit it.
         var budget = options.WindowTokens - EstimateDraftTokens(draft);
         if (priorSummary is not null)
             budget -= EstimateTokens(priorSummary.Text);
+        if (pinOriginalGoal)
+            budget -= EstimateTokens(OriginalGoal(state.TaskText));
 
         // Never evict the most recent group: a fully-evicted turn renders zero conversational
         // messages, which the provider rejects as an empty `messages` array. Keeping one live group
@@ -97,8 +106,7 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
             draft.TrajectoryMessages.Add(new Message(MessageRole.System, summaryToRender));
 
         if (pinOriginalGoal)
-            draft.TrajectoryMessages.Add(new Message(MessageRole.System,
-                $"[ORIGINAL GOAL] {state.TaskText}"));
+            draft.TrajectoryMessages.Add(new Message(MessageRole.System, OriginalGoal(state.TaskText)));
 
         foreach (var (_, messages) in liveGroups)
             draft.TrajectoryMessages.AddRange(messages);
@@ -112,6 +120,10 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
             draft.TrajectoryMessages.Add(new Message(MessageRole.User,
                 "Proceed, fully complying with the harness observation above."));
     }
+
+    // One definition so the text charged to the eviction budget and the text rendered are the same
+    // string — counting one thing and emitting another is exactly how the window overshoot arose.
+    private static string OriginalGoal(string taskText) => $"[ORIGINAL GOAL] {taskText}";
 
     private static List<(Step Step, List<Message> Messages)> RenderSteps(IReadOnlyList<Step> trajectory)
     {

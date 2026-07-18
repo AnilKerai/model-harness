@@ -34,24 +34,16 @@ public sealed class AgentTool(string agentName, AgentFactory factory, Budget? bu
 
         var outcome = await factory.GetAgent(agentName).RunAsync(task, budget, ct: ct);
 
-        var delegatedCost = 0m;
-        var totalInput = 0;
-        var totalOutput = 0;
-        foreach (var step in outcome.FinalState.Trajectory)
-        {
-            if (step is ModelCallStep modelStep)
-            {
-                delegatedCost += modelStep.Cost;
-                totalInput += modelStep.Usage.InputTokens;
-                totalOutput += modelStep.Usage.OutputTokens;
-            }
-        }
+        // The framework's own accounting, not a model-call walk: a sub-agent that runs AI sensors,
+        // compacts, or delegates onward spends where model-call steps can't see it, and reporting
+        // low here silently under-charges the parent's budget — compounding with delegation depth.
+        var (_, usage, cost) = outcome.FinalState.TotalSpend();
 
         return new ToolResult(
             call.CallId,
             outcome.FinalAnswer ?? outcome.FailureReason ?? "(no result)",
             IsError: outcome.Status == AgentStatus.Failed,
-            Cost: delegatedCost > 0 ? delegatedCost : null,
-            Usage: (totalInput + totalOutput) > 0 ? new Usage(totalInput, totalOutput) : null);
+            Cost: cost > 0 ? cost : null,
+            Usage: usage.TotalTokens > 0 ? usage : null);
     }
 }

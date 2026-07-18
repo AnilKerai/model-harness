@@ -49,13 +49,43 @@ public sealed class HeadEvictionTrajectoryGuideTests
 
     // Eviction is driven by the compaction window, not the run budget. Basic-rendering tests use a
     // large window (no eviction); compaction tests pass windowTokens: 1 to force it.
-    private static async Task<ContextDraft> ContributeAsync(AgentState state, int windowTokens = 100_000)
+    private static async Task<ContextDraft> ContributeAsync(AgentState state, int windowTokens = 100_000, bool pinOriginalGoal = true)
     {
         var draft = new ContextDraft();
-        await new HeadEvictionTrajectoryGuide(new NullCompactionStrategy(), new CompactionOptions { WindowTokens = windowTokens })
+        await new HeadEvictionTrajectoryGuide(new NullCompactionStrategy(), new CompactionOptions { WindowTokens = windowTokens }, pinOriginalGoal)
             .ContributeAsync(draft, state, CancellationToken.None);
         return draft;
     }
+
+    [Fact]
+    public async Task Contribute_GoalAnchorIsChargedToTheEvictionBudget()
+    {
+        // The [ORIGINAL GOAL] line is appended *after* the trim but rides in the same window, so it has
+        // to be charged to the eviction budget. Uncharged, the rendered context overshot WindowTokens by
+        // the task text's size on every compacted turn — inert while the adapters dropped all but the
+        // first System message, real once DefaultContextBuilder began folding them into it.
+        const int window = 1_400;
+        var state = AgentState.NewTask(new string('g', 4_000), new StateBudget
+        {
+            MaxTurns = 100, MaxTotalTokens = 100_000, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(1)
+        }, DateTimeOffset.UtcNow);
+        for (var i = 0; i < 40; i++)
+            state = state.AppendStep(ModelStep($"turn {i} did some work"));
+
+        var pinned = await ContributeAsync(state, windowTokens: window, pinOriginalGoal: true);
+
+        var rendered = RenderedTokens(pinned);
+        Assert.True(rendered <= window,
+            $"rendered {rendered} tokens into a {window}-token window — the goal anchor is not being charged for");
+
+        // Control: without the anchor the same state fits the window untrimmed (1 user + 40 assistant),
+        // so the trimming above is the anchor making room for itself rather than the history being too big.
+        var unpinned = await ContributeAsync(state, windowTokens: window, pinOriginalGoal: false);
+        Assert.Equal(41, unpinned.TrajectoryMessages.Count);
+    }
+
+    private static int RenderedTokens(ContextDraft draft) =>
+        draft.TrajectoryMessages.Sum(m => (m.Content.Length + 3) / 4);
 
     // ── Basic rendering ───────────────────────────────────────────────────────
 

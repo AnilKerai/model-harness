@@ -16,14 +16,20 @@ public sealed class TokensPerMinuteRateLimiter(int tokensPerMinute, TimeProvider
 {
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
+    private readonly int _tokensPerMinute = tokensPerMinute > 0
+        ? tokensPerMinute
+        : throw new ArgumentOutOfRangeException(nameof(tokensPerMinute), tokensPerMinute, "Must be greater than zero.");
+
     public Task<RateLimitCheck> CheckAsync(AgentState state, CancellationToken ct)
     {
         var now = _time.GetUtcNow();
         var windowStart = now - TimeSpan.FromMinutes(1);
 
+        // Exclusive lower bound: RetryAfter targets exactly the moment a call ages out, and an inclusive
+        // bound would still count that call at that instant, so the wait always landed one tick short.
         var recent = state.Trajectory
             .OfType<ModelCallStep>()
-            .Where(s => s.Timestamp >= windowStart)
+            .Where(s => s.Timestamp > windowStart)
             .OrderBy(s => s.Timestamp)
             .ToList();
 
@@ -31,13 +37,33 @@ public sealed class TokensPerMinuteRateLimiter(int tokensPerMinute, TimeProvider
         // and OTPM as distinct limits). Summing them against a single ceiling only ever throttles early, so set the
         // ceiling from the input limit. Split into two windows if output volume ever needs headroom of its own.
         var totalTokens = recent.Sum(RateLimitedTokens);
-        if (totalTokens < tokensPerMinute)
+        if (totalTokens < _tokensPerMinute)
             return Task.FromResult(RateLimitCheck.Pass);
 
-        var retryAfter = recent[0].Timestamp + TimeSpan.FromMinutes(1) - now;
         return Task.FromResult(RateLimitCheck.Limited(
-            retryAfter > TimeSpan.Zero ? retryAfter : TimeSpan.FromSeconds(1),
-            $"Rate limit: {totalTokens:N0} tokens in the last 60s exceeds the {tokensPerMinute:N0} tokens/min limit."));
+            TimeUntilUnderLimit(recent, totalTokens, now),
+            $"Rate limit: {totalTokens:N0} tokens in the last 60s exceeds the {_tokensPerMinute:N0} tokens/min limit."));
+    }
+
+    // The window is a token SUM, so ageing out the single oldest call need not clear it — unlike the
+    // sibling calls-per-minute limiter, where evicting one entry always drops the count by exactly one.
+    // Age entries out oldest-first until the remainder is under the ceiling and wait for that one, or
+    // the reported wait is far too short and the loop's re-check tail degenerates into 1s busy-polls,
+    // each carrying a checkpoint save.
+    private TimeSpan TimeUntilUnderLimit(List<ModelCallStep> recent, int totalTokens, DateTimeOffset now)
+    {
+        var remaining = totalTokens;
+        var last = 0;
+        for (var i = 0; i < recent.Count; i++)
+        {
+            remaining -= RateLimitedTokens(recent[i]);
+            last = i;
+            if (remaining < _tokensPerMinute)
+                break;
+        }
+
+        var retryAfter = recent[last].Timestamp + TimeSpan.FromMinutes(1) - now;
+        return retryAfter > TimeSpan.Zero ? retryAfter : TimeSpan.FromSeconds(1);
     }
 
     private static int RateLimitedTokens(ModelCallStep step) =>
