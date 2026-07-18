@@ -33,7 +33,10 @@ public sealed class HarnessLoop(
     public async Task<AgentOutcome> RunAsync(AgentState initial, CancellationToken ct)
     {
         var state = initial;
-        var runId = Guid.NewGuid().ToString("n");
+        // Derived from the trajectory, not minted per invocation: a resumed run (HITL, checkpoint
+        // reload, new chat turn) re-enters RunAsync, and a fresh GUID would stamp the same task's
+        // checkpoints with different RunIds — breaking Checkpoint.RunId's documented contract.
+        var runId = state.RunId ?? Guid.NewGuid().ToString("n");
         // Seed from the restored trajectory, not 0, so a resumed run (HITL suspend/resume, checkpoint
         // reload, or a new chat turn) continues its turn numbering instead of restarting from zero.
         // Mirrors DefaultGuideRunner's derivation, keeping loop-emitted telemetry (model/tool/sensor

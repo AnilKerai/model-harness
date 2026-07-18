@@ -25,6 +25,14 @@ public sealed class StuckDetector(int repeatThreshold = 3) : ISensor
         var consecutive = 1;
         for (var i = state.Trajectory.Count - 1; i >= 0; i--)
         {
+            // Stop at the current user turn: a new user message is a fresh intent, so "in a row"
+            // means within this turn, not across the conversation. The trajectory is append-only
+            // (eviction is render-only), so without this a legitimate repeat of the same call in
+            // three separate chat turns trips the detector and blocks the third.
+            if (state.Trajectory[i] is UserMessageStep)
+            {
+                break;
+            }
             if (state.Trajectory[i] is not ToolCallStep prior)
             {
                 continue;

@@ -23,6 +23,23 @@ public sealed class ToolErrorLoopSensorTests
     private static readonly ToolErrorLoopSensor Sut = new(errorThreshold: 3);
 
     [Fact]
+    public async Task ErrorsSplitAcrossUserTurns_Passes()
+    {
+        // Failures from a previous user turn shouldn't count toward this turn's streak — the user
+        // may have supplied new information that makes the retry reasonable.
+        var current = ToolStep("search", isError: true, argsJson: """{"q":"c"}""");
+        var state = EmptyState()
+            .AppendStep(ToolStep("search", isError: true, argsJson: """{"q":"a"}"""))
+            .AppendStep(ToolStep("search", isError: true, argsJson: """{"q":"b"}"""))
+            .WithUserMessage("try searching for something else", DateTimeOffset.UtcNow)
+            .AppendStep(current);
+
+        var result = await Sut.CheckAsync(HookPoint.PostToolCall, state, current, CancellationToken.None);
+
+        Assert.False(result.IsIntervene);
+    }
+
+    [Fact]
     public async Task ThreeErrorsSameTool_VaryingArgs_Intervenes()
     {
         var current = ToolStep("search", isError: true, argsJson: """{"q":"c"}""");

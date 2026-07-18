@@ -104,6 +104,40 @@ public sealed class StuckDetectorTests
     }
 
     [Fact]
+    public async Task Check_IdenticalCallsSplitAcrossUserTurns_Passes()
+    {
+        // A new user turn is a fresh intent, so the streak must reset. AddStandardChatHarness ships
+        // StuckDetector alongside GetDateTimeTool, whose empty-args schema makes every call's
+        // signature identical — so without the reset, a user asking the time in three separate
+        // turns would have the third call blocked as a "loop".
+        var step = ToolStep("get_date_time");
+        var state = EmptyState()
+            .AppendStep(ToolStep("get_date_time"))
+            .WithUserMessage("what time is it now?", DateTimeOffset.UtcNow)
+            .AppendStep(ToolStep("get_date_time"))
+            .WithUserMessage("and now?", DateTimeOffset.UtcNow);
+
+        var result = await Sut.CheckAsync(HookPoint.PreToolCall, state, step, CancellationToken.None);
+
+        Assert.False(result.IsIntervene);
+    }
+
+    [Fact]
+    public async Task Check_RepeatsWithinTheCurrentUserTurn_StillIntervenes()
+    {
+        // The reset must not disable detection: repeats *after* the latest user turn still trip it.
+        var step = ToolStep("search", """{"q":"hello"}""");
+        var state = EmptyState()
+            .WithUserMessage("find it", DateTimeOffset.UtcNow)
+            .AppendStep(ToolStep("search", """{"q":"hello"}"""))
+            .AppendStep(ToolStep("search", """{"q":"hello"}"""));
+
+        var result = await Sut.CheckAsync(HookPoint.PreToolCall, state, step, CancellationToken.None);
+
+        Assert.True(result.IsIntervene);
+    }
+
+    [Fact]
     public async Task Check_CustomThreshold_RespectsIt()
     {
         var sut = new StuckDetector(repeatThreshold: 2);

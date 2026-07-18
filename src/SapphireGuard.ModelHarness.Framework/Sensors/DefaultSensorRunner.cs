@@ -36,7 +36,11 @@ public sealed class DefaultSensorRunner(IEnumerable<ISensor> sensors) : ISensorR
             var result = await sensor.CheckAsync(hookPoint, state, triggeringStep, ct);
             return (sensor, result);
         }
-        catch (OperationCanceledException)
+        // Only genuine harness cancellation propagates. A sensor's *own* OperationCanceledException —
+        // an HttpClient timeout surfaces as TaskCanceledException even though our token is untouched —
+        // must fall through to the fail-open catch below, or one slow AI sensor faults the whole
+        // Task.WhenAll batch and ends the run as "cancelled".
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }

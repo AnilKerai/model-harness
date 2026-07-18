@@ -28,6 +28,8 @@ public sealed class AlternatingToolLoopSensor(int minCycles = 2) : ISensor
         var signatures = new List<string> { SignatureOf(current) };
         for (var i = state.Trajectory.Count - 1; i >= 0 && signatures.Count < window; i--)
         {
+            if (state.Trajectory[i] is UserMessageStep)
+                break;                         // a new user turn is a fresh intent — don't scan past it
             if (state.Trajectory[i] is ToolCallStep prior)
                 signatures.Add(SignatureOf(prior));
         }

@@ -94,6 +94,37 @@ public sealed class DefaultSensorRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_SensorThrowsOwnOperationCanceled_FailsOpenLikeAnyOtherFault()
+    {
+        // An AI-powered sensor whose HTTP call times out throws TaskCanceledException — an
+        // OperationCanceledException — even though the harness token was never cancelled. It must
+        // fail open, not propagate out of Task.WhenAll and end the run as "cancelled".
+        var timingOut = new TimeoutSensor(HookPoint.PreModelCall, name: "timeout");
+        var healthy = new CountdownSensor(HookPoint.PreModelCall, blockCount: 0, name: "ok");
+        var runner = new DefaultSensorRunner([timingOut, healthy]);
+
+        var results = await runner.RunAsync(HookPoint.PreModelCall, State(), null, CancellationToken.None);
+
+        Assert.Equal(2, results.Count);
+        var failed = results.Single(r => r.Sensor.Name == "timeout").Result;
+        Assert.True(failed.IsError);
+        Assert.False(failed.IsIntervene);   // a fault is not an intervention — the model keeps its turn
+        Assert.False(results.Single(r => r.Sensor.Name == "ok").Result.IsError);
+    }
+
+    [Fact]
+    public async Task RunAsync_HarnessCancellationRequested_StillPropagates()
+    {
+        // The fail-open filter must not swallow genuine cancellation — that is real control flow.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var runner = new DefaultSensorRunner([new TimeoutSensor(HookPoint.PreModelCall)]);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => runner.RunAsync(HookPoint.PreModelCall, State(), null, cts.Token));
+    }
+
+    [Fact]
     public async Task RunAsync_SensorAtDifferentHookpoint_NotInResults()
     {
         var preModel = new CountdownSensor(HookPoint.PreModelCall, blockCount: 0);
@@ -105,4 +136,17 @@ public sealed class DefaultSensorRunnerTests
         Assert.Single(results);
         Assert.Equal(preModel, results[0].Sensor);
     }
+}
+
+// Simulates an AI-powered sensor whose model/HTTP call times out. HttpClient surfaces its own
+// timeout as a TaskCanceledException — an OperationCanceledException that has nothing to do with
+// the harness's cancellation token.
+file sealed class TimeoutSensor(HookPoint hookPoint, string name = "timeout") : ISensor
+{
+    public string Name => name;
+    public IReadOnlySet<HookPoint> HookPoints { get; } = new HashSet<HookPoint> { hookPoint };
+
+    public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
+        => throw new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.");
 }

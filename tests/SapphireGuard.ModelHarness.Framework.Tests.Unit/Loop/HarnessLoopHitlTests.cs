@@ -23,15 +23,17 @@ public sealed class HarnessLoopHitlTests
             tracer: new NullTracer(),
             checkpointStore: checkpointStore ?? new NullCheckpointStore());
 
-    // Records the turn index of every checkpoint the loop saves, so a test can assert that
-    // turn numbering survives a suspend/resume rather than restarting at zero.
+    // Records the turn index and run id of every checkpoint the loop saves, so a test can assert
+    // that both survive a suspend/resume rather than restarting.
     private sealed class RecordingCheckpointStore : ICheckpointStore
     {
         public List<int> TurnNumbers { get; } = [];
+        public List<string> RunIds { get; } = [];
 
         public Task SaveAsync(Checkpoint checkpoint, CancellationToken ct = default)
         {
             TurnNumbers.Add(checkpoint.TurnNumber);
+            RunIds.Add(checkpoint.RunId);
             return Task.CompletedTask;
         }
 
@@ -173,6 +175,35 @@ public sealed class HarnessLoopHitlTests
         Assert.Equal(AgentStatus.Done, final.Status);
         // The resumed run must continue at turn 2, not restart at 0.
         Assert.Equal(2, secondStore.TurnNumbers[0]);
+    }
+
+    [Fact]
+    public async Task RunAsync_ResumedAfterHumanAnswer_RunIdIsStableAcrossTheResume()
+    {
+        // Checkpoint.RunId documents "all checkpoints for the same task share this value", but the
+        // loop used to mint a fresh GUID per RunAsync — so a suspend/resume split one logical run
+        // across two RunIds and broke correlation. It is now derived from the trajectory.
+        var askCallId = Guid.NewGuid().ToString("n");
+        var askCall = new ToolCall(askCallId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var registry = new StubToolRegistry(_ => new ToolResult(askCallId, "What is your name?", IsPending: true));
+
+        var firstStore = new RecordingCheckpointStore();
+        var firstHarness = BuildHarness(new ScriptedModelClient(ToolUseResponse(askCall)), registry, firstStore);
+        var suspended = await firstHarness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.AwaitingHuman, suspended.Status);
+
+        var resumed = suspended.FinalState.ResumeWithHumanAnswer(askCallId, "Alice");
+        var secondStore = new RecordingCheckpointStore();
+        var secondHarness = BuildHarness(
+            new ScriptedModelClient(EndTurnResponse("Hello, Alice!")), toolRegistry: null, checkpointStore: secondStore);
+        var final = await secondHarness.RunAsync(resumed, CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, final.Status);
+        Assert.NotEmpty(firstStore.RunIds);
+        Assert.NotEmpty(secondStore.RunIds);
+        // Every checkpoint on both sides of the suspend carries one and the same run id.
+        Assert.Single(firstStore.RunIds.Concat(secondStore.RunIds).Distinct());
     }
 
     // ── AgentState.ResumeWithHumanAnswer ─────────────────────────────────────
