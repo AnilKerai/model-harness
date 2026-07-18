@@ -12,7 +12,9 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
-## [Unreleased]
+## [2.1.0] — 2026-07-18
+
+Minor rather than patch: `AgentState.RunId` is a new public member. No breaking changes.
 
 ### Added
 
@@ -194,6 +196,7 @@ OpenTelemetry `gen_ai.*` tracing. Published as seven NuGet packages.
 Initial packaging release: multi-targeted `net8.0` + `net10.0`, MIT licence, SourceLink, and shared package
 metadata across the seven publishable projects.
 
+[2.1.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.1.0
 [2.0.1]: https://github.com/AnilKerai/model-harness/releases/tag/v2.0.1
 [2.0.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.0.0
 [1.2.1]: https://github.com/AnilKerai/model-harness/releases/tag/v1.2.1
