@@ -12,6 +12,53 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [2.2.1] — 2026-07-18
+
+Closes the low-severity tail of the systematic audit — every finding from it is now fixed. Patch:
+all fixes, no API added or removed. Most were latent, reachable only through a custom
+implementation or an external caller; two change behaviour you can observe.
+
+### Fixed
+
+- **`TaintTrackingSensor` did not honour its own fail-closed contract.** At `PreToolCall` it called
+  the `ITrustPolicy` unguarded, and sensors fail *open* by design — `DefaultSensorRunner` turns a
+  throw into a non-intervention. A throwing custom policy therefore let the privileged action
+  proceed while tainted content sat in the trajectory, the exact outcome the sensor exists to
+  prevent. It now catches for itself and blocks when taint cannot be determined. The built-in
+  list-based `TrustPolicy` does not throw, so only a custom `ITrustPolicy` was affected. (#16)
+
+  **Behavioural change:** a privileged action that previously slipped through on a policy error is
+  now blocked. This is the intended direction, but it can surface as a new intervention.
+
+- **`CompositeRateLimiter` discarded a real `RetryAfter` behind a null one.** `check.RetryAfter >
+  mostRestrictive.RetryAfter` is a lifted nullable compare, false whenever either side is null — so
+  a limiter reporting "limited, duration unknown" won over one reporting a real 30s wait, and the
+  loop fell back to its 10s default and under-waited. A non-null wait now always beats a null.
+  Built-in limiters always report non-null, so only a custom `IRateLimiter` triggered it. (#16)
+
+- **The turn index drifted +1 after a rate-limit backoff.** The loop incremented a counter every
+  iteration, but the rate-limit `continue` appends no `ModelCallStep` — so the throttled iteration
+  burned an index no model call used, and every subsequent loop-emitted span sat one bucket ahead of
+  the guide-emitted events for the same turn (`DefaultGuideRunner` derives its index from the
+  `ModelCallStep` count). The loop now derives the index the same way instead of counting, which
+  also subsumes the resume seeding added in 1.1.1. Observability only. (#16)
+
+- **`FileCheckpointStore.LoadAsync` was the unhardened sibling of `LoadLatestAsync`.** Three things,
+  all on the by-ID path: it read its match directly, so a torn file threw where `ICheckpointStore`
+  documents `null`; it took an arbitrary match (`Directory.GetFiles` guarantees no ordering) where
+  the filename's embedded `CreatedAt` means one ID can have several files, so a superseded
+  checkpoint could be resurrected — silently resuming from state the caller believed replaced; and
+  it interpolated the caller's ID into a search glob unvalidated. It now skips torn files, returns
+  the newest match, and rejects an ID containing wildcards or separators. (#16)
+
+  **Behavioural change:** `LoadAsync` throws `ArgumentException` for an ID containing `* ? / \ :` or
+  a null character. Framework-minted IDs are GUIDs and unaffected.
+
+- **`StructuredOutputContract.TryBind` could pick a prose brace-group over the payload.** The
+  fallback extractor took the *first* balanced value, so `Result {see below}: {"category":"billing"}`
+  bound against `{see below}`, failed, and cost a repair turn. It now tries each balanced value in
+  order until one deserializes. (#16)
+
 ## [2.2.0] — 2026-07-18
 
 Closes the medium-severity batch from the systematic audit. Minor rather than patch:
@@ -270,6 +317,7 @@ OpenTelemetry `gen_ai.*` tracing. Published as seven NuGet packages.
 Initial packaging release: multi-targeted `net8.0` + `net10.0`, MIT licence, SourceLink, and shared package
 metadata across the seven publishable projects.
 
+[2.2.1]: https://github.com/AnilKerai/model-harness/releases/tag/v2.2.1
 [2.2.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.2.0
 [2.1.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.1.0
 [2.0.1]: https://github.com/AnilKerai/model-harness/releases/tag/v2.0.1

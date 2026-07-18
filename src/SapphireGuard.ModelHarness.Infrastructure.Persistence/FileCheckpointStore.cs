@@ -37,16 +37,31 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
 
     public async Task<Checkpoint?> LoadAsync(string checkpointId, CancellationToken ct = default)
     {
+        ValidateCheckpointId(checkpointId);
+
         if (!Directory.Exists(baseDirectory))
             return null;
 
         foreach (var dir in Directory.GetDirectories(baseDirectory))
         {
-            var matches = Directory.GetFiles(dir, $"*_{checkpointId}.json");
-            if (matches.Length > 0)
+            // Newest match first, skipping torn/corrupt files — the same hardening LoadLatestAsync
+            // has, which this by-ID sibling was missing (it threw where the contract promises null).
+            // Newest is also what makes SaveAsync's documented overwrite contract observable: the
+            // filename carries CreatedAt, so re-saving one ID at a different time leaves two files,
+            // and picking an arbitrary match could resurrect the superseded one.
+            foreach (var file in Directory.GetFiles(dir, $"*_{checkpointId}.json").OrderDescending())
             {
-                var json = await File.ReadAllTextAsync(matches[0], ct);
-                return CheckpointSerializer.Deserialize(json);
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    var json = await File.ReadAllTextAsync(file, ct);
+                    if (CheckpointSerializer.Deserialize(json) is { } checkpoint)
+                        return checkpoint;
+                }
+                catch (Exception ex) when (ex is JsonException or IOException)
+                {
+                    // corrupt or unreadable — try the next-newest match
+                }
             }
         }
 
@@ -86,6 +101,19 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
         if (Directory.Exists(dir))
             Directory.Delete(dir, recursive: true);
         return Task.CompletedTask;
+    }
+
+    // The checkpoint ID is interpolated into a search glob, so a wildcard would widen the match to
+    // other checkpoints and a separator would reach outside the task directory. Framework-minted IDs
+    // are GUIDs, but a caller may supply one, and it must not be able to change the query's shape.
+    private static readonly char[] UnsafeIdChars = ['*', '?', '/', '\\', ':', '\0'];
+
+    private static void ValidateCheckpointId(string checkpointId)
+    {
+        if (string.IsNullOrWhiteSpace(checkpointId) || checkpointId.IndexOfAny(UnsafeIdChars) >= 0)
+            throw new ArgumentException(
+                $"Checkpoint ID '{checkpointId}' must be non-empty and contain no wildcards or directory separators.",
+                nameof(checkpointId));
     }
 
     // Task IDs may be caller-supplied (AgentState.NewTask), so a hostile or careless value could

@@ -30,6 +30,29 @@ public sealed class StructuredOutputContractTests
     // without RespectRequiredConstructorParameters this binds to Triage { Category = null, Priority = 0 }
     // and the sensor rubber-stamps an empty answer.
     [Fact]
+    public void TryBind_BraceGroupInThePreamble_StillFindsTheRealPayload()
+    {
+        // "First balanced value" is not good enough: a brace group in the prose *before* the payload
+        // wins the scan, fails to bind, and costs a needless repair turn. Each balanced value is tried
+        // in order until one deserializes.
+        var ok = Sut.TryBind("""Result {see below}: {"category":"billing","priority":2}""", out var value, out _);
+
+        Assert.True(ok);
+        Assert.Equal(new Triage("billing", 2), value);
+    }
+
+    [Fact]
+    public void TryBind_NestedPayloadAfterProse_PrefersTheOutermostMatch()
+    {
+        // The scan still yields outermost-first, so a legitimately nested object binds whole rather
+        // than the inner fragment being picked off.
+        var ok = Sut.TryBind("""Here you go: {"category":"billing","priority":2}""", out var value, out _);
+
+        Assert.True(ok);
+        Assert.Equal("billing", value!.Category);
+    }
+
+    [Fact]
     public void TryBind_EmptyObject_Fails()
     {
         var ok = Sut.TryBind("{}", out _, out var error);

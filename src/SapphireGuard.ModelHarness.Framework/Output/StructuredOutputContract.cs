@@ -100,10 +100,15 @@ public sealed class StructuredOutputContract<T>
         if (TryDeserialize(candidate, out value, out error))
             return true;
 
-        // Prose around the payload ("Here is the result: { ... }"). Retry on the first balanced value,
-        // but keep the primary error — it describes what the model actually produced.
-        if (ExtractFirstJsonValue(candidate) is { } embedded && TryDeserialize(embedded, out value, out _))
+        // Prose around the payload ("Here is the result: { ... }"). Try each balanced value in order
+        // rather than committing to the first: a brace group in the preamble ("Result {see below}:
+        // {...}") is not the payload, and betting the whole bind on it cost a needless repair turn.
+        // Keep the primary error — it describes what the model actually produced.
+        foreach (var embedded in ExtractJsonValues(candidate))
         {
+            if (!TryDeserialize(embedded, out value, out _))
+                continue;
+
             error = null;
             return true;
         }
@@ -147,13 +152,20 @@ public sealed class StructuredOutputContract<T>
             : text;
     }
 
-    // First balanced JSON object or array, ignoring brackets inside string literals. Null when none.
-    private static string? ExtractFirstJsonValue(string text)
+    // Every balanced JSON object/array in the text, in order. Lazy, so the common case — the payload
+    // is the first one — still scans only once; the caller stops at the first that deserializes.
+    private static IEnumerable<string> ExtractJsonValues(string text)
     {
-        var start = text.AsSpan().IndexOfAny('{', '[');
-        if (start < 0)
-            return null;
+        for (var start = 0; start < text.Length; start++)
+        {
+            if (text[start] is '{' or '[' && ScanBalanced(text, start) is { } value)
+                yield return value;
+        }
+    }
 
+    // The balanced value opening at `start`, ignoring brackets inside string literals. Null when unclosed.
+    private static string? ScanBalanced(string text, int start)
+    {
         var open = text[start];
         var close = open == '{' ? '}' : ']';
         var depth = 0;

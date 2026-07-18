@@ -32,6 +32,32 @@ public sealed class TaintTrackingSensorTests
             new ToolCall(Guid.NewGuid().ToString("n"), toolName, JsonDocument.Parse("{}").RootElement),
             new ToolResult("id", "(pending)"));
 
+    [Fact]
+    public async Task PreToolCall_TrustPolicyThrows_FailsClosedAndBlocksTheAction()
+    {
+        // Sensors fail OPEN by design — DefaultSensorRunner turns a throw into a non-intervention so
+        // one bad sensor can't take down a run. At this hookpoint that default is wrong: it would let
+        // the privileged action through while tainted content sits in context, the exact outcome this
+        // sensor exists to prevent. A caller-supplied ITrustPolicy is arbitrary code, so the sensor
+        // catches for itself rather than trusting it not to throw.
+        var sut = new TaintTrackingSensor(new ThrowingTrustPolicy());
+
+        var result = await sut.CheckAsync(
+            HookPoint.PreToolCall, EmptyState(), CompletedStep("send_email"), CancellationToken.None);
+
+        Assert.True(result.IsIntervene);
+        Assert.Contains("send_email", result.Reason);
+    }
+
+    private sealed class ThrowingTrustPolicy : ITrustPolicy
+    {
+        public bool IsUntrustedSource(string toolName) =>
+            throw new InvalidOperationException("trust policy exploded");
+
+        public bool IsPrivilegedAction(string toolName) =>
+            throw new InvalidOperationException("trust policy exploded");
+    }
+
     // ── PostToolCall ─────────────────────────────────────────────────────────
 
     [Fact]
