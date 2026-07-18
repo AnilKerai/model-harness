@@ -17,26 +17,10 @@ public sealed record BudgetSnapshot(
     public static BudgetSnapshot From(AgentState state, TimeSpan elapsed)
     {
         var budget = state.Budget;
-        var turns = 0;
-        var cost = state.SensorCost + state.CompactionCost;
-        var tokens = state.SensorUsage.TotalTokens + state.CompactionUsage.TotalTokens;
-        foreach (var step in state.Trajectory)
-        {
-            if (step is ModelCallStep call)
-            {
-                turns++;
-                cost += call.Cost;
-                tokens += call.Usage.TotalTokens;
-            }
-            else if (step is ToolCallStep tool)
-            {
-                if (tool.Result.Cost is { } delegatedCost) cost += delegatedCost;
-                if (tool.Result.Usage is { } delegatedUsage) tokens += delegatedUsage.TotalTokens;
-            }
-        }
+        var (turns, usage, cost) = state.TotalSpend();
         return new BudgetSnapshot(
             turns, budget.MaxTurns,
-            tokens, budget.MaxTotalTokens,
+            usage.TotalTokens, budget.MaxTotalTokens,
             cost, budget.MaxCost,
             elapsed, budget.MaxWallClock);
     }

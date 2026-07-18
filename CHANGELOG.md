@@ -12,6 +12,80 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [2.2.0] — 2026-07-18
+
+Closes the medium-severity batch from the systematic audit. Minor rather than patch:
+`AgentState.TotalSpend()` is a new public member. No breaking changes.
+
+### Added
+
+- `AgentState.TotalSpend()` — the run's cumulative `(Turns, Usage, Cost)` across model calls,
+  delegated tool results, AI sensors, and compaction. `BudgetSnapshot.From` (and through it
+  `DefaultBudgetEnforcer`) and `AgentTool` now both read it, so budget enforcement, per-turn
+  telemetry, and delegated cost cannot drift apart.
+
+### Fixed
+
+- **Compaction overshot the context window by the size of the goal anchor.** The rolling summary and
+  the `[ORIGINAL GOAL]` line are appended *after* the trim but ride in the same window, and neither
+  was charged to the eviction budget — so every compacted turn rendered roughly `|TaskText|/4` tokens
+  more than `CompactionOptions.WindowTokens` allowed. This was inert while the adapters dropped all
+  but the first System message and became real in 2.0.0, which folded them into the system message so
+  they actually reach the model. The anchor is now charged by its rendered length (from a single
+  shared definition, so the charged text and the emitted text cannot diverge) and the prior summary's
+  size stands in for the new one. (#16)
+
+  **Behavioural change:** a compacted turn now keeps less history than before, by the size of the
+  goal anchor — which is the point, but a run with a very long task text and a tight `WindowTokens`
+  will notice. Raise `WindowTokens` if you were relying on the overshoot.
+
+- **`AgentTool` under-charged the parent for a delegated sub-agent.** It aggregated the sub-agent's
+  spend by walking `ModelCallStep` only, so a sub-agent that ran AI sensors, compacted, or delegated
+  onward reported low — and the shortfall compounded with delegation depth. It now uses
+  `AgentState.TotalSpend()`, the same accounting the budget enforcers and telemetry use. (#10)
+
+  **Behavioural change:** parents are now charged the sub-agent's real spend, so a multi-agent run
+  reaches `MaxCost`/`MaxTotalTokens` earlier than it used to. The old figure was wrong, not generous.
+
+- **A single newline evaded `PromptInjectionSensor`'s override patterns.** The `.{0,N}` gaps between
+  a trigger word and its object were matched without `RegexOptions.Singleline`, and `.` excludes `\n`
+  by default — so `"Ignore all previous\ninstructions"` matched nothing, in a sensor whose stated
+  premise is evasion resistance (`Normalize` strips Format characters, but newlines are Control).
+  Singleline is now set once for every pattern rather than per-pattern, so a newly added gap cannot
+  reinherit the hole. (#13)
+
+  **Behavioural change:** detection is broader — gaps now span line breaks, so some multi-line content
+  that previously slipped through will be flagged. The sensor is advisory at both hookpoints, so the
+  cost of a false positive is a scepticism warning, not a blocked action.
+
+- **`FileCheckpointStore` built filenames with the ambient culture.** The timestamp prefix is the sort
+  key `LoadLatestAsync` relies on, and interpolated custom date formatting uses `CurrentCulture`: under
+  a non-Gregorian calendar locale (th-TH, ar-SA, fa-IR) the rendered year differs — th-TH writes 2026
+  as 2569 — which outsorts every Gregorian name and resumes from a stale checkpoint. Now formatted
+  with `CultureInfo.InvariantCulture`. (#14)
+
+  Existing checkpoints written under such a locale keep their old names and will still sort ahead;
+  delete them (`ICheckpointStore.DeleteAsync`) if a task's directory has mixed-calendar names.
+
+- **`TokensPerMinuteRateLimiter` reported a `RetryAfter` that was too short.** It timed the wait from
+  the single oldest in-window call ageing out, but the window is a token *sum*: when evicting one
+  entry doesn't bring the total under the ceiling, the wait ends early and the loop's re-check tail
+  degenerates into ~1 s busy-polls, each carrying a checkpoint write. It now ages entries out
+  oldest-first until the remainder clears the ceiling. Throttling was always safe — the gate is
+  re-evaluated each pass, so no call ever slipped through — the harm was a wrong wait surfaced to
+  telemetry and to the `MaxWallClock` projection, plus the wasted iterations. The sibling
+  `CallsPerMinuteRateLimiter` was never affected: its count drops by exactly one per eviction. (#15)
+
+- **Both rate limiters counted a call that had aged out of the window.** The 60-second window's lower
+  bound was inclusive while `RetryAfter` targeted exactly that instant, so a correctly-sized wait
+  never cleared the limit — it always cost one extra iteration before the 1 s fallback broke the tie.
+  The bound is now exclusive. (#16)
+
+- **Both rate limiters accepted a non-positive limit.** With a limit of `0` or less the pass-guard is
+  false even for an empty window, and the `RetryAfter` path then indexed an empty list — a
+  misconfiguration surfacing mid-run as an `IndexOutOfRangeException`. The constructors now throw
+  `ArgumentOutOfRangeException` instead. (#16)
+
 ## [2.1.0] — 2026-07-18
 
 Minor rather than patch: `AgentState.RunId` is a new public member. No breaking changes.
@@ -196,6 +270,7 @@ OpenTelemetry `gen_ai.*` tracing. Published as seven NuGet packages.
 Initial packaging release: multi-targeted `net8.0` + `net10.0`, MIT licence, SourceLink, and shared package
 metadata across the seven publishable projects.
 
+[2.2.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.2.0
 [2.1.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.1.0
 [2.0.1]: https://github.com/AnilKerai/model-harness/releases/tag/v2.0.1
 [2.0.0]: https://github.com/AnilKerai/model-harness/releases/tag/v2.0.0

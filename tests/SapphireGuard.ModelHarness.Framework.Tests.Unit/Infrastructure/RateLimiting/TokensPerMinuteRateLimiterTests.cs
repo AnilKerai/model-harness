@@ -151,4 +151,70 @@ public sealed class TokensPerMinuteRateLimiterTests
         var result = await Sut.CheckAsync(state, CancellationToken.None);
         Assert.Contains("1,000", result.Reason);
     }
+
+    // ── RetryAfter accuracy (controlled clock) ────────────────────────────────
+
+    [Fact]
+    public async Task Check_OneEvictionIsNotEnough_RetryAfterCoversEveryEntryItMustOutlast()
+    {
+        // The window is a token SUM, so ageing out the single oldest call need not clear it — the
+        // sibling calls-per-minute limiter is shielded only because its count drops by exactly one.
+        // Here dropping A still leaves 1,489 against a 1,000 ceiling, so reporting A's age-out time
+        // sends the loop back a second early and the tail degenerates into 1s busy-polls, each
+        // carrying a checkpoint write.
+        var sut = new TokensPerMinuteRateLimiter(1_000, new FixedClock(T0.AddSeconds(30)));
+        var state = WithSteps(
+            At(T0, 10),                  // ages out at T0+60 → 1,489 left, still over the limit
+            At(T0.AddSeconds(1), 989),   // ages out at T0+61 → 500 left, under
+            At(T0.AddSeconds(2), 500));
+
+        var result = await sut.CheckAsync(state, CancellationToken.None);
+
+        Assert.True(result.IsLimited);
+        Assert.Equal(TimeSpan.FromSeconds(31), result.RetryAfter); // (T0+1s)+60s − (T0+30s)
+    }
+
+    [Fact]
+    public async Task Check_OneEvictionClearsIt_RetryAfterDoesNotOverWait()
+    {
+        // The mirror of the above: when the oldest entry alone brings the sum under the ceiling, the
+        // wait must stay at its age-out time rather than reaching for later entries.
+        var sut = new TokensPerMinuteRateLimiter(1_000, new FixedClock(T0.AddSeconds(30)));
+        var state = WithSteps(At(T0, 800), At(T0.AddSeconds(5), 300));
+
+        var result = await sut.CheckAsync(state, CancellationToken.None);
+
+        Assert.True(result.IsLimited);
+        Assert.Equal(TimeSpan.FromSeconds(30), result.RetryAfter); // T0+60s − (T0+30s)
+    }
+
+    [Fact]
+    public async Task Check_CallExactlySixtySecondsOld_HasAgedOutOfTheWindow()
+    {
+        // Exclusive lower bound: RetryAfter targets exactly this instant, so counting the call at it
+        // would mean a correctly-sized wait never clears the limit.
+        var sut = new TokensPerMinuteRateLimiter(1_000, new FixedClock(T0.AddSeconds(60)));
+
+        var result = await sut.CheckAsync(WithSteps(At(T0, 5_000)), CancellationToken.None);
+
+        Assert.False(result.IsLimited);
+    }
+
+    [Fact]
+    public void Ctor_NonPositiveLimit_Throws()
+    {
+        // Without this the pass-guard is false for an empty window and the RetryAfter path indexes an
+        // empty list — a misconfiguration surfacing as an IndexOutOfRangeException mid-run.
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TokensPerMinuteRateLimiter(0));
+    }
+
+    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private static ModelCallStep At(DateTimeOffset timestamp, int inputTokens) =>
+        ModelStep(timestamp, inputTokens, outputTokens: 0);
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 }

@@ -112,4 +112,33 @@ public sealed class CallsPerMinuteRateLimiterTests
         var result = await sut.CheckAsync(state, CancellationToken.None);
         Assert.True(result.IsLimited);
     }
+
+    [Fact]
+    public async Task Check_CallExactlySixtySecondsOld_HasAgedOutOfTheWindow()
+    {
+        // RetryAfter targets exactly the instant a call turns 60s old, so the window's lower bound must
+        // be exclusive: counting the call at that instant means a correctly-sized wait never clears the
+        // limit, costing one wasted iteration (and a checkpoint write) every time.
+        var now = T0.AddSeconds(60);
+        var sut = new CallsPerMinuteRateLimiter(callsPerMinute: 1, new FixedClock(now));
+
+        var result = await sut.CheckAsync(WithSteps(ModelStep(T0)), CancellationToken.None);
+
+        Assert.False(result.IsLimited);
+    }
+
+    [Fact]
+    public void Ctor_NonPositiveLimit_Throws()
+    {
+        // Without this the pass-guard is false for an empty window and the RetryAfter path indexes an
+        // empty list — a misconfiguration surfacing as an IndexOutOfRangeException mid-run.
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CallsPerMinuteRateLimiter(callsPerMinute: 0));
+    }
+
+    private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 }

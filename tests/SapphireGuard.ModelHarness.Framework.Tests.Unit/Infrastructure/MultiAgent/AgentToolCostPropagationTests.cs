@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using SapphireGuard.ModelHarness.Framework;
+using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -115,5 +116,27 @@ public sealed class AgentToolCostPropagationTests
         var result = await sut.ExecuteAsync(SubTaskCall(), Ctx, CancellationToken.None);
 
         Assert.Null(result.Usage);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SubAgentRanAnAiSensor_RollsItsSpendUpToTheParent()
+    {
+        // A sub-agent spends outside its model-call steps — AI sensors, compaction, and its own
+        // delegations. Walking only ModelCallStep reported low, so the parent's budget under-charged
+        // the delegation, and the error compounded with every level of nesting.
+        var factory = new AgentFactory();
+        factory.AddAgent("sub-agent", builder => builder
+            .WithSystemPrompt("You are a sub-agent.")
+            .WithModel(_ => new ScriptedModelClient(
+                EndTurnResponse("done", cost: 0.10m, inputTokens: 100, outputTokens: 50)))
+            .WithSensor(_ => new UsageReportingSensor(
+                HookPoint.PostModelCall, new Usage(30, 10), cost: 0.05m)));
+
+        var result = await new AgentTool("sub-agent", factory)
+            .ExecuteAsync(SubTaskCall(), Ctx, CancellationToken.None);
+
+        Assert.Equal(0.15m, result.Cost);              // 0.10 model + 0.05 sensor
+        Assert.Equal(130, result.Usage!.InputTokens);  // 100 + 30
+        Assert.Equal(60, result.Usage.OutputTokens);   // 50 + 10
     }
 }

@@ -172,7 +172,7 @@ The standing system prompt that guides like `HarnessInstructionsGuide` and `ReAc
 
 `ReActGuide` implements the [ReAct](https://arxiv.org/abs/2210.03629) pattern: it primes the model to interleave reasoning (a one-line *Thought*) with actions (tool calls) and *Observations* on each result. The act/observe half is already the loop — the model emits tool calls, the harness dispatches them and feeds results back — so this guide is the system-prompt nudge that makes the reasoning explicit and inspectable.
 
-Complementing it, `HeadEvictionTrajectoryGuide` re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history.
+Complementing it, `HeadEvictionTrajectoryGuide` re-injects the original task text as a `[ORIGINAL GOAL]` system note on every turn so the model cannot drift from its starting intent, even after trajectory compaction drops early history. The anchor is charged to the eviction budget before trimming, so a long task text correctly shrinks the room left for episodic history rather than pushing the rendered context over `CompactionOptions.WindowTokens`.
 
 ### The Sensor pattern — observing and intervening
 

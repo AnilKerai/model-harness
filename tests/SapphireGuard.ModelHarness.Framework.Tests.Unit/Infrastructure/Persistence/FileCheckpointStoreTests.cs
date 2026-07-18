@@ -1,3 +1,4 @@
+using System.Globalization;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Infrastructure.Persistence;
@@ -30,6 +31,38 @@ public sealed class FileCheckpointStoreTests : IDisposable
 
     private static Checkpoint At(AgentState state, string id, DateTimeOffset createdAt, int turn) =>
         new() { CheckpointId = id, RunId = "run-1", CreatedAt = createdAt, TurnNumber = turn, State = state };
+
+    [Fact]
+    public async Task LoadLatest_CheckpointsWrittenUnderDifferentCalendarCultures_StillReturnsTheNewest()
+    {
+        // The filename's timestamp prefix is the whole sort key, so it must not follow the ambient
+        // culture: a Buddhist-calendar locale renders 2026 as 2569, which sorts above every Gregorian
+        // name regardless of true recency. Write the OLDER checkpoint under th-TH and the newer under
+        // en-US — what a container rebuilt with LANG=th_TH.UTF-8 produces — and the stale one wins the
+        // resume, replaying or losing turns.
+        var thai = new CultureInfo("th-TH");
+        Assert.IsType<ThaiBuddhistCalendar>(thai.DateTimeFormat.Calendar); // the case is only live with ICU present
+
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = thai;
+            await store.SaveAsync(At(state, "older", T0, turn: 1));
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            await store.SaveAsync(At(state, "newer", T0.AddSeconds(1), turn: 2));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
+
+        var loaded = await store.LoadLatestAsync(state.TaskId);
+
+        Assert.Equal("newer", loaded!.CheckpointId);
+    }
 
     [Fact]
     public async Task Save_ThenLoadLatest_RoundTripsTheState()

@@ -86,6 +86,48 @@ public sealed record AgentState
     public PendingHumanInput? PendingHumanInput { get; init; }
 
     /// <summary>
+    /// Cumulative spend for the whole run: model calls, delegated tool results, AI sensors, and
+    /// compaction. Sub-agent delegation, AI sensors, and compaction all spend outside the model-call
+    /// steps, so a walk over <see cref="ModelCallStep"/> alone under-reports. This is the single
+    /// accounting behind <see cref="BudgetSnapshot.From"/> (and through it <c>DefaultBudgetEnforcer</c>)
+    /// and <c>AgentTool</c>'s roll-up of a sub-agent's spend to its parent, so enforcement, telemetry,
+    /// and delegated cost cannot drift apart.
+    /// </summary>
+    public (int Turns, Usage Usage, decimal Cost) TotalSpend()
+    {
+        var turns = 0;
+        var input = SensorUsage.InputTokens + CompactionUsage.InputTokens;
+        var output = SensorUsage.OutputTokens + CompactionUsage.OutputTokens;
+        var cost = SensorCost + CompactionCost;
+
+        foreach (var step in Trajectory)
+        {
+            switch (step)
+            {
+                case ModelCallStep call:
+                    turns++;
+                    input += call.Usage.InputTokens;
+                    output += call.Usage.OutputTokens;
+                    cost += call.Cost;
+                    break;
+                // A delegated result already carries the sub-agent's *total*, so nesting sums correctly:
+                // the grandchild's model calls live in the grandchild's trajectory, never double-counted here.
+                case ToolCallStep tool:
+                    if (tool.Result.Usage is { } delegatedUsage)
+                    {
+                        input += delegatedUsage.InputTokens;
+                        output += delegatedUsage.OutputTokens;
+                    }
+                    if (tool.Result.Cost is { } delegatedCost)
+                        cost += delegatedCost;
+                    break;
+            }
+        }
+
+        return (turns, new Usage(input, output), cost);
+    }
+
+    /// <summary>
     /// Creates an initial state for a new task with <see cref="AgentStatus.Running"/> status. Pass
     /// <paramref name="taskId"/> to correlate the run with an external system (job queue, ticket, trace);
     /// when omitted a unique ID is generated. The ID becomes the checkpoint and tracing key, so a caller

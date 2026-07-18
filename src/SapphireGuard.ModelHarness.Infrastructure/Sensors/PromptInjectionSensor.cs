@@ -30,45 +30,54 @@ public sealed class PromptInjectionSensor : ISensor
     public IReadOnlySet<HookPoint> HookPoints { get; } =
         new HashSet<HookPoint> { HookPoint.PreModelCall, HookPoint.PostToolCall };
 
+    // Singleline (dot-matches-newline) applies to every pattern, not just the ones with `.{0,N}` gaps
+    // today: `.` excludes \n by default, so "ignore all previous\ninstructions" evaded the gap patterns
+    // entirely — a one-keystroke bypass of an evasion-resistant sensor, and one a new pattern would
+    // silently reinherit. Normalize() strips Format characters but newlines are Control, so they reach
+    // the matcher intact. Nothing here relies on `.` stopping at a line break; the line-anchored
+    // alternatives use explicit [\r\n] classes, which Singleline does not affect.
+    private const RegexOptions PatternOptions =
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline;
+
     private static readonly (string Label, Regex Pattern)[] Patterns =
     [
-        ("instruction-override", new Regex(@"\bignore\b.{0,20}\b(previous|prior|all|above)\b.{0,20}\binstructions?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("system-disregard",     new Regex(@"\bdisregard\b.{0,30}\b(system|instructions?|prompt|rules?|guidelines?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("forget-instructions",  new Regex(@"\bforget\b.{0,30}\b(instructions?|prompt|rules?|guidelines?|everything)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("persona-hijack",       new Regex(@"\byou\s+are\s+now\b",                                                       RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("role-override",        new Regex(@"\byour\s+(new|updated)\s+(instructions?|role|purpose|task|objective)\b",    RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("act-as",               new Regex(@"\bact\s+as\s+(if|though|a\b)",                                              RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("pretend",              new Regex(@"\bpretend\s+(you\s+are|to\s+be)\b",                                         RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("instruction-override", new Regex(@"\bignore\b.{0,20}\b(previous|prior|all|above)\b.{0,20}\binstructions?\b", PatternOptions)),
+        ("system-disregard",     new Regex(@"\bdisregard\b.{0,30}\b(system|instructions?|prompt|rules?|guidelines?)\b", PatternOptions)),
+        ("forget-instructions",  new Regex(@"\bforget\b.{0,30}\b(instructions?|prompt|rules?|guidelines?|everything)\b", PatternOptions)),
+        ("persona-hijack",       new Regex(@"\byou\s+are\s+now\b",                                                       PatternOptions)),
+        ("role-override",        new Regex(@"\byour\s+(new|updated)\s+(instructions?|role|purpose|task|objective)\b",    PatternOptions)),
+        ("act-as",               new Regex(@"\bact\s+as\s+(if|though|a\b)",                                              PatternOptions)),
+        ("pretend",              new Regex(@"\bpretend\s+(you\s+are|to\s+be)\b",                                         PatternOptions)),
 
         // Object-anchored override: catches "ignore your instructions", "override your skill", "bypass the
         // rules" — any possessive/article the instruction-override pattern above (which only fires on
         // previous|prior|all|above) misses. Anchored on the object so "ignore my previous email" stays clean.
-        ("override-directive",   new Regex(@"\b(ignore|disregard|override|bypass)\b.{0,25}\b(instructions?|prompts?|rules?|guidelines?|skills?|directions?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("override-directive",   new Regex(@"\b(ignore|disregard|override|bypass)\b.{0,25}\b(instructions?|prompts?|rules?|guidelines?|skills?|directions?)\b", PatternOptions)),
         // Fake system / chat-template markers used to smuggle a new authority into untrusted content.
         // The phrase forms require authority-claiming context ("this is a", "new", or a trailing colon)
         // so prose that merely mentions a system prompt — LLM docs, device manuals — stays clean.
-        ("system-marker",        new Regex(@"\bsystem\s+override\b|\b(this\s+is\s+an?|new)\s+system\s+(prompt|message|instruction)\b|\bsystem\s+(prompt|message|instruction)s?\s*:|(^|[\r\n])\s*(system|assistant|developer)\s*:|\[\s*(system|assistant|instruction)\s*\]|<\s*/?\s*(system|im_start|im_end)\s*>|<\|[^|>]{1,24}\|>", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("system-marker",        new Regex(@"\bsystem\s+override\b|\b(this\s+is\s+an?|new)\s+system\s+(prompt|message|instruction)\b|\bsystem\s+(prompt|message|instruction)s?\s*:|(^|[\r\n])\s*(system|assistant|developer)\s*:|\[\s*(system|assistant|instruction)\s*\]|<\s*/?\s*(system|im_start|im_end)\s*>|<\|[^|>]{1,24}\|>", PatternOptions)),
         // Telling the agent to stop calling its tools — a common way to defeat lookup/verification steps.
-        ("tool-suppression",     new Regex(@"\b(do\s+not|don['’]?t|never|no\s+need\s+to)\b.{0,25}\b(call|use|invoke|run|execute)\b.{0,25}\b(tools?|functions?|lookups?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("tool-suppression",     new Regex(@"\b(do\s+not|don['’]?t|never|no\s+need\s+to)\b.{0,25}\b(call|use|invoke|run|execute)\b.{0,25}\b(tools?|functions?|lookups?)\b", PatternOptions)),
 
         // Content that speaks TO the model rather than to a human reader. Punctuation anchors after the
         // AI-noun keep classifying prose clean ("if you are an AI enthusiast", "instructions for the AI service").
-        ("direct-address",       new Regex(@"\bif\s+you(\s+are|['’]re)\s+(an?\s+)?(AI|LLM|language\s+model|chatbot|assistant)\s*[,:.!]|\b(dear|attention)[,\s]+(AI|LLM|chatbot|language\s+model)\b|\b(note|message|instructions?)\s+(to|for)\s+the\s+(AI|LLM|chatbot|language\s+model)\s*[:,]|\b(AI|LLM|assistant|agent|model)\s+(reading|processing)\s+this\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("direct-address",       new Regex(@"\bif\s+you(\s+are|['’]re)\s+(an?\s+)?(AI|LLM|language\s+model|chatbot|assistant)\s*[,:.!]|\b(dear|attention)[,\s]+(AI|LLM|chatbot|language\s+model)\b|\b(note|message|instructions?)\s+(to|for)\s+the\s+(AI|LLM|chatbot|language\s+model)\s*[:,]|\b(AI|LLM|assistant|agent|model)\s+(reading|processing)\s+this\b", PatternOptions)),
         // Concealment from the principal is the classic injection tell — benign content has no reason to ask for it.
-        ("secrecy-directive",    new Regex(@"\b(do\s+not|don['’]?t|never|without)\s+(tell(ing)?|inform(ing)?|mention(ing)?|alert(ing)?|notify(ing)?)\b.{0,20}\b(user|human|operator)\b|\b(hide|conceal)\s+(this|it|that)\s+from\s+the\s+(user|human)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("secrecy-directive",    new Regex(@"\b(do\s+not|don['’]?t|never|without)\s+(tell(ing)?|inform(ing)?|mention(ing)?|alert(ing)?|notify(ing)?)\b.{0,20}\b(user|human|operator)\b|\b(hide|conceal)\s+(this|it|that)\s+from\s+the\s+(user|human)\b", PatternOptions)),
         // Attempts to exfiltrate the system prompt / instructions. Objects are leak-specific ("your prompt"
         // alone would flag shell-prompt docs; "your rules" would flag firewall docs).
-        ("prompt-leak",          new Regex(@"\b(repeat|print|output|show|reveal|display|paste|write\s+out)\b.{0,30}\b(system\s+prompt|initial\s+prompt|original\s+instructions?|your\s+instructions?|everything\s+above|text\s+above|words\s+above|previous\s+messages?)\b|\bwhat\s+(is|are)\s+your\s+(system\s+prompt|instructions?|initial\s+prompt)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("prompt-leak",          new Regex(@"\b(repeat|print|output|show|reveal|display|paste|write\s+out)\b.{0,30}\b(system\s+prompt|initial\s+prompt|original\s+instructions?|your\s+instructions?|everything\s+above|text\s+above|words\s+above|previous\s+messages?)\b|\bwhat\s+(is|are)\s+your\s+(system\s+prompt|instructions?|initial\s+prompt)\b", PatternOptions)),
         // "You must comply." — the lookahead excludes legal/regulatory objects ("comply with these terms",
         // "obey the law") which are ubiquitous in terms-of-service and driving-rules prose.
-        ("compliance-demand",    new Regex(@"\byou\s+(must|will|shall)\s+(comply|obey)\b(?!\s+(with\s+)?(these|the|all|any|applicable)\b)", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("compliance-demand",    new Regex(@"\byou\s+(must|will|shall)\s+(comply|obey)\b(?!\s+(with\s+)?(these|the|all|any|applicable)\b)", PatternOptions)),
         // Redefining the agent's goal. "purpose|goal" deliberately excluded (self-help prose: "your true
         // purpose"); "new task:" excluded (todo-tool results legitimately emit it).
-        ("task-reframe",         new Regex(@"\byour\s+(real|actual|true)\s+(task|objective|mission|assignment)\b|(^|[\r\n])\s*#{0,6}\s*new\s+(instructions?|rules?|directives?)\s*:", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("task-reframe",         new Regex(@"\byour\s+(real|actual|true)\s+(task|objective|mission|assignment)\b|(^|[\r\n])\s*#{0,6}\s*new\s+(instructions?|rules?|directives?)\s*:", PatternOptions)),
         // Encoded-payload smuggling: the tell is the instruction to decode and then obey the result.
-        ("decode-and-execute",   new Regex(@"\b(decode|decrypt|unscramble|deobfuscate|rot13)\b.{0,40}\b((and|then)\s+(follow|obey)|instructions?|commands?)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("decode-and-execute",   new Regex(@"\b(decode|decrypt|unscramble|deobfuscate|rot13)\b.{0,40}\b((and|then)\s+(follow|obey)|instructions?|commands?)\b", PatternOptions)),
         // Claiming elevated authority. "developer mode enabled" deliberately excluded (Chrome-extension docs).
-        ("authority-claim",      new Regex(@"\b(admin|administrator|developer|root|sudo)\s+override\b|\b(message|instructions?)\s+from\s+your\s+(developer|creator|administrator|operator)s?\b|\bthis\s+is\s+your\s+(developer|creator|administrator|operator)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("authority-claim",      new Regex(@"\b(admin|administrator|developer|root|sudo)\s+override\b|\b(message|instructions?)\s+from\s+your\s+(developer|creator|administrator|operator)s?\b|\bthis\s+is\s+your\s+(developer|creator|administrator|operator)\b", PatternOptions)),
     ];
 
     // Tools whose results are authored context rather than untrusted inbound content. Scanning them
