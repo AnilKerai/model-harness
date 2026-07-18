@@ -37,11 +37,6 @@ public sealed class HarnessLoop(
         // reload, new chat turn) re-enters RunAsync, and a fresh GUID would stamp the same task's
         // checkpoints with different RunIds — breaking Checkpoint.RunId's documented contract.
         var runId = state.RunId ?? Guid.NewGuid().ToString("n");
-        // Seed from the restored trajectory, not 0, so a resumed run (HITL suspend/resume, checkpoint
-        // reload, or a new chat turn) continues its turn numbering instead of restarting from zero.
-        // Mirrors DefaultGuideRunner's derivation, keeping loop-emitted telemetry (model/tool/sensor
-        // spans, checkpoint + budget events, Checkpoint.TurnNumber) aligned with guide-emitted events.
-        var turn = state.Trajectory.OfType<ModelCallStep>().Count();
         var consecutiveInterventions = 0;
         var suppressTools = false;
         const int maxConsecutiveInterventions = 3;
@@ -53,9 +48,14 @@ public sealed class HarnessLoop(
             {
                 ct.ThrowIfCancellationRequested();
 
-                // Capture the turn index once; every event this iteration emits is tagged with it
-                // so a trace backend can group all the work of a single turn together.
-                var turnIndex = turn++;
+                // Captured once per iteration so every event this turn emits shares an index a trace
+                // backend can group on. Derived from the trajectory rather than an incrementing
+                // counter: an iteration that ends in the rate-limit `continue` below appends no
+                // ModelCallStep, so a counter would burn an index no model call ever used and drift
+                // +1 from DefaultGuideRunner, which derives the same index the same way. Deriving also
+                // subsumes resume seeding for free — a restored trajectory carries its own count, so a
+                // HITL suspend/resume or new chat turn continues the numbering instead of restarting.
+                var turnIndex = state.Trajectory.OfType<ModelCallStep>().Count();
 
                 var checkpointId = Guid.NewGuid().ToString("n");
                 var checkpointStart = _time.GetTimestamp();

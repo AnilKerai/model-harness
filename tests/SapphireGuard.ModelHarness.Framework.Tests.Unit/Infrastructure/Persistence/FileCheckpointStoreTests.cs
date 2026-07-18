@@ -33,6 +33,74 @@ public sealed class FileCheckpointStoreTests : IDisposable
         new() { CheckpointId = id, RunId = "run-1", CreatedAt = createdAt, TurnNumber = turn, State = state };
 
     [Fact]
+    public async Task Load_SameCheckpointIdSavedTwice_ReturnsTheNewer()
+    {
+        // SaveAsync documents "overwrites any existing checkpoint with the same CheckpointId", but the
+        // filename carries CreatedAt, so a re-save at a different time leaves two files. LoadAsync took
+        // an arbitrary match (GetFiles has no ordering guarantee), which could resurrect the superseded
+        // one — silently resuming from state the caller believed it had replaced.
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "same-id", T0, turn: 1));
+        await store.SaveAsync(At(state, "same-id", T0.AddSeconds(5), turn: 2));
+
+        var loaded = await store.LoadAsync("same-id");
+
+        Assert.Equal(2, loaded!.TurnNumber);
+    }
+
+    [Fact]
+    public async Task Load_CorruptNewestMatch_FallsBackToTheIntactOlderOne()
+    {
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "same-id", T0, turn: 1));
+        await store.SaveAsync(At(state, "same-id", T0.AddSeconds(5), turn: 2));
+
+        var taskDir = Path.Combine(_dir, state.TaskId);
+        var newest = Directory.GetFiles(taskDir, "*_same-id.json").OrderDescending().First();
+        await File.WriteAllTextAsync(newest, "{ this is not valid json");
+
+        var loaded = await store.LoadAsync("same-id");
+
+        Assert.Equal(1, loaded!.TurnNumber);
+    }
+
+    [Fact]
+    public async Task Load_EveryMatchCorrupt_ReturnsNullRatherThanThrowing()
+    {
+        // The by-ID sibling was the unhardened one: it read its match directly, so a torn file threw
+        // where the interface documents null. It now skips like LoadLatestAsync does. Corrupting *every*
+        // match is what makes this a real guard — with only the newest corrupted the old code passed for
+        // the wrong reason, because its arbitrary `matches[0]` happened to be the intact older file.
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "same-id", T0, turn: 1));
+
+        var taskDir = Path.Combine(_dir, state.TaskId);
+        foreach (var file in Directory.GetFiles(taskDir, "*_same-id.json"))
+            await File.WriteAllTextAsync(file, "{ this is not valid json");
+
+        Assert.Null(await store.LoadAsync("same-id"));
+    }
+
+    [Theory]
+    [InlineData("*")]
+    [InlineData("a?c")]
+    [InlineData("../escape")]
+    public async Task Load_CheckpointIdWithWildcardOrSeparator_Throws(string checkpointId)
+    {
+        // The ID is interpolated into a search glob, so a wildcard would widen the match to unrelated
+        // checkpoints and a separator would reach outside the task directory.
+        var store = new FileCheckpointStore(_dir);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.LoadAsync(checkpointId));
+    }
+
+    [Fact]
     public async Task LoadLatest_CheckpointsWrittenUnderDifferentCalendarCultures_StillReturnsTheNewest()
     {
         // The filename's timestamp prefix is the whole sort key, so it must not follow the ambient

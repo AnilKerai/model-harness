@@ -581,6 +581,31 @@ public sealed class HarnessLoopTests
         Assert.Equal(TimeSpan.FromMilliseconds(1), Assert.Single(tracer.RateLimitDelays));
     }
 
+    [Fact]
+    public async Task RunAsync_RateLimited_ThrottledIterationDoesNotBurnATurnIndex()
+    {
+        // The throttled iteration `continue`s without appending a ModelCallStep, so it must not consume
+        // a turn index. An incrementing counter did: the model call came out tagged turn 1 while
+        // DefaultGuideRunner — deriving its index from the ModelCallStep count — called the same turn 0,
+        // so a turn's loop-emitted spans and its guide-emitted events landed in different buckets.
+        var tracer = new RecordingTracer();
+        var harness = new HarnessLoop(
+            modelClient: new ScriptedModelClient(EndTurnResponse("done")),
+            toolRegistry: new StubToolRegistry(),
+            contextBuilder: new StubContextBuilder(),
+            sensorRunner: new DefaultSensorRunner([]),
+            budgetEnforcer: new AlwaysOkBudgetEnforcer(),
+            rateLimiter: new OnceLimitingRateLimiter(TimeSpan.FromMilliseconds(1)),
+            tracer: tracer,
+            checkpointStore: new NullCheckpointStore());
+
+        await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(0, Assert.Single(tracer.ModelCallTurns));
+        // Two iterations, both turn 0 — the first was throttled before that turn's model call happened.
+        Assert.Equal(new[] { 0, 0 }, tracer.CheckpointTurns);
+    }
+
     // ── Compaction persistence ────────────────────────────────────────────────
 
     [Fact]
@@ -688,13 +713,18 @@ file sealed class RecordingTracer : Tracing.ITracer
     public int ModelScopesDisposed { get; private set; }
     public List<Exception> ModelFailures { get; } = [];
     public List<ToolResult> ToolCompletions { get; } = [];
+    public List<int> ModelCallTurns { get; } = [];
     public List<int> CheckpointTurns { get; } = [];
     public List<int> BudgetSnapshotTurns { get; } = [];
     public List<BudgetSnapshot> BudgetSnapshots { get; } = [];
     public List<TimeSpan> RateLimitDelays { get; } = [];
 
     public void StartTrace(string taskId, string taskText) { }
-    public Tracing.IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools) => new ModelScope(this);
+    public Tracing.IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools)
+    {
+        ModelCallTurns.Add(turn);
+        return new ModelScope(this);
+    }
     public Tracing.IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call) => new ToolScope(this);
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) { }
     public void Complete(string taskId, AgentStatus status, string? failureReason) { }

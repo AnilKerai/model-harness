@@ -54,6 +54,34 @@ public sealed class CompositeRateLimiterTests
         Assert.False(result.IsLimited);
     }
 
+    [Fact]
+    public async Task Check_LimiterWithNoRetryAfter_DoesNotShadowOneThatReportsAWait()
+    {
+        // A null RetryAfter is "limited, duration unknown" — the weakest claim. The lifted `>` compare
+        // is false whenever either side is null, so the first null won and the real 30s wait was
+        // discarded; the loop then fell back to its own 10s default and under-waited.
+        var unknown = new StubRateLimiter(new RateLimitCheck(IsLimited: true, RetryAfter: null, Reason: "unknown"));
+        var known = LimitedLimiter(TimeSpan.FromSeconds(30), "known");
+
+        var result = await new CompositeRateLimiter([unknown, known]).CheckAsync(EmptyState(), CancellationToken.None);
+
+        Assert.Equal(TimeSpan.FromSeconds(30), result.RetryAfter);
+        Assert.Equal("known", result.Reason);
+    }
+
+    [Fact]
+    public async Task Check_EveryLimiterReportsNoRetryAfter_StillLimitedWithNoWait()
+    {
+        // Nothing to prefer, so the null survives and the loop applies its own default.
+        var a = new StubRateLimiter(new RateLimitCheck(IsLimited: true, RetryAfter: null, Reason: "a"));
+        var b = new StubRateLimiter(new RateLimitCheck(IsLimited: true, RetryAfter: null, Reason: "b"));
+
+        var result = await new CompositeRateLimiter([a, b]).CheckAsync(EmptyState(), CancellationToken.None);
+
+        Assert.True(result.IsLimited);
+        Assert.Null(result.RetryAfter);
+    }
+
     private sealed class StubRateLimiter(RateLimitCheck check) : IRateLimiter
     {
         public Task<RateLimitCheck> CheckAsync(AgentState state, CancellationToken ct) =>
