@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -13,12 +14,27 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 /// Emits a nested span tree aligned with the OpenTelemetry GenAI semantic conventions —
 /// an <c>invoke_agent</c> root with <c>chat</c> and <c>execute_tool</c> children — plus the
 /// <c>gen_ai.client.token.usage</c> and <c>gen_ai.client.operation.duration</c> metrics, via
-/// <see cref="ActivitySource"/> and <see cref="Meter"/>. Wire up your OTel exporters in the
-/// host; this class has no OTel SDK dependency. Cost has no GenAI attribute (backends compute
-/// it from tokens), so the computed cost is emitted under <c>harness.cost</c>.
+/// <see cref="ActivitySource"/> and <see cref="Meter"/>. This class has no OTel SDK dependency:
+/// the host must register <see cref="ActivitySourceName"/> with its tracer provider (<c>AddSource</c>)
+/// and <see cref="MeterName"/> with its meter provider (<c>AddMeter</c>), then wire an exporter —
+/// without the registration <c>StartActivity</c> returns null and nothing is emitted, exporter or not.
+/// Cost has no GenAI attribute (backends compute it from tokens), so the computed cost is emitted
+/// under <c>harness.cost</c>.
+/// <para><paramref name="enableSensitiveData"/> (default <see langword="false"/>) gates capture of
+/// <em>conversation content</em> — the task text, prompt/response message bodies, tool arguments and
+/// results, and sensor-reason free text. Off by default so a run never leaks user or model content to
+/// a telemetry backend; turn it on in development to see the actual messages. Error-path diagnostics
+/// (span status, the <c>exception</c> event, <c>harness.failure.reason</c>) are always emitted — they
+/// only appear when something already failed, and hiding them would defeat the point of tracing.</para>
+/// <para><paramref name="agentName"/> (optional) is stamped on the root span as
+/// <c>gen_ai.agent.name</c> and into its display name, so multiple agents in one process are
+/// distinguishable in a backend. Leave null for a single-agent host (use <c>service.name</c> to
+/// identify the deployment).</para>
 /// </summary>
+/// <param name="enableSensitiveData">Capture conversation content (see remarks). Default <see langword="false"/>.</param>
+/// <param name="agentName">Optional agent name for <c>gen_ai.agent.name</c> on the root span.</param>
 [ExcludeFromCodeCoverage]
-public sealed class OpenTelemetryTracer : ITracer, IDisposable
+public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string? agentName = null) : ITracer, IDisposable
 {
     public const string ActivitySourceName = "SapphireGuard.ModelHarness";
     public const string MeterName = "SapphireGuard.ModelHarness";
@@ -49,8 +65,14 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
     {
         var activity = Source.StartActivity("invoke_agent", ActivityKind.Internal);
         activity?.SetTag("gen_ai.operation.name", "invoke_agent");
+        if (agentName is not null && activity is not null)
+        {
+            activity.SetTag("gen_ai.agent.name", agentName);
+            activity.DisplayName = $"invoke_agent {agentName}";
+        }
         activity?.SetTag("harness.task.id", taskId);
-        activity?.SetTag("harness.task.text", taskText);
+        if (enableSensitiveData)
+            activity?.SetTag("harness.task.text", taskText);
         _activities[taskId] = activity;
     }
 
@@ -63,8 +85,10 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             activity.SetTag("harness.turn", turn);
             activity.SetTag("harness.prompt.messages", prompt.Count);
             activity.SetTag("harness.request.tools", tools.Count);
+            if (enableSensitiveData)
+                activity.SetTag("gen_ai.input.messages", SerializeMessages(prompt));
         }
-        return new ModelCallScope(activity);
+        return new ModelCallScope(activity, enableSensitiveData);
     }
 
     public IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call)
@@ -76,8 +100,10 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
             activity.SetTag("gen_ai.tool.name", call.ToolName);
             activity.SetTag("gen_ai.tool.call.id", call.CallId);
             activity.SetTag("harness.turn", turn);
+            if (enableSensitiveData)
+                activity.SetTag("gen_ai.tool.call.arguments", call.Arguments.GetRawText());
         }
-        return new ToolCallScope(activity, call.ToolName);
+        return new ToolCallScope(activity, call.ToolName, enableSensitiveData);
     }
 
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result)
@@ -100,8 +126,11 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
                 ["harness.turn"] = turn,
                 ["harness.sensor.name"] = sensorName,
                 ["harness.sensor.hook_point"] = hookPoint.ToString(),
-                ["gen_ai.evaluation.explanation"] = result.Reason ?? string.Empty,
             };
+            // The reason can quote the very content the sensor flagged (a PII detector names the PII),
+            // so it is conversation content — gated. The sensor name/hook_point/verdict stay always-on.
+            if (enableSensitiveData)
+                tags["gen_ai.evaluation.explanation"] = result.Reason ?? string.Empty;
             if (result.IsError) tags["error.type"] = "sensor_error";
             activity?.AddEvent(new ActivityEvent("gen_ai.evaluation.result", tags: tags));
         }
@@ -237,7 +266,21 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         _ => stop.ToString().ToLowerInvariant()
     };
 
-    private sealed class ModelCallScope(Activity? activity) : IModelCallScope
+    // ponytail: a readable {role, content} projection, not the full GenAI `parts` schema
+    // (typed text/tool_call/tool_call_response parts). Enough to read the exchange in a backend;
+    // upgrade to parts if a strict semconv consumer needs to parse it structurally.
+    private static string SerializeMessages(IReadOnlyList<Message> messages) =>
+        JsonSerializer.Serialize(messages.Select(m => new { role = m.Role.ToString().ToLowerInvariant(), content = m.Content }));
+
+    private static string SerializeResponse(ModelResponse response) =>
+        JsonSerializer.Serialize(new
+        {
+            role = "assistant",
+            content = response.Text,
+            tool_calls = response.ToolCalls.Select(tc => new { id = tc.CallId, name = tc.ToolName, arguments = tc.Arguments }),
+        });
+
+    private sealed class ModelCallScope(Activity? activity, bool enableSensitiveData) : IModelCallScope
     {
         private readonly long _start = Stopwatch.GetTimestamp();
         private bool _completed;
@@ -266,6 +309,8 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
                 activity.SetTag("gen_ai.response.finish_reasons", new[] { FinishReason(response.StopReason) });
                 activity.SetTag("harness.response.tool_calls", response.ToolCalls.Count);
                 activity.SetTag("harness.cost", (double)response.Cost);
+                if (enableSensitiveData)
+                    activity.SetTag("gen_ai.output.messages", SerializeResponse(response));
                 activity.SetStatus(ActivityStatusCode.Ok);
             }
 
@@ -319,7 +364,7 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
         };
     }
 
-    private sealed class ToolCallScope(Activity? activity, string toolName) : IToolCallScope
+    private sealed class ToolCallScope(Activity? activity, string toolName, bool enableSensitiveData) : IToolCallScope
     {
         private readonly long _start = Stopwatch.GetTimestamp();
         private bool _completed;
@@ -332,6 +377,8 @@ public sealed class OpenTelemetryTracer : ITracer, IDisposable
                 activity.SetTag("harness.tool.is_error", result.IsError);
                 if (result.IsError)
                     activity.SetTag("error.type", "tool_error");
+                if (enableSensitiveData)
+                    activity.SetTag("gen_ai.tool.call.result", result.Content);
                 activity.SetStatus(result.IsError ? ActivityStatusCode.Error : ActivityStatusCode.Ok);
             }
 

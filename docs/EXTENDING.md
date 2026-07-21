@@ -424,6 +424,73 @@ change** — update your implementation when you upgrade. `ModelResponse` now al
 `Model`/`Provider` fields (populated by the built-in adapters) that feed `gen_ai.request.model` and
 `gen_ai.provider.name`.
 
+### Exporting to a backend (Application Insights, OTLP)
+
+`OpenTelemetryTracer` has **no OpenTelemetry SDK dependency** — it emits through the runtime's
+`System.Diagnostics.ActivitySource` and `Meter`. Those are inert until the host attaches a listener
+(the OTel SDK) **and** opts the harness's source/meter in by name. Miss this step and
+`ActivitySource.StartActivity(...)` returns `null` on every call, so no spans are created and nothing
+is exported — the harness looks silent even though tracing is "on". This is the single most common
+reason traces never reach a backend.
+
+Register the harness's source and meter by name — the names are public constants so they can't drift:
+
+```csharp
+using Azure.Monitor.OpenTelemetry.AspNetCore; // dotnet add package Azure.Monitor.OpenTelemetry.AspNetCore
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
+using SapphireGuard.ModelHarness.Infrastructure.Tracing;
+
+builder.Services.AddOpenTelemetry().UseAzureMonitor(o =>
+    o.ConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]);
+
+// These two lines are what make the harness's telemetry flow into the exporter:
+builder.Services.ConfigureOpenTelemetryTracerProvider((_, b) => b.AddSource(OpenTelemetryTracer.ActivitySourceName));
+builder.Services.ConfigureOpenTelemetryMeterProvider((_, b) => b.AddMeter(OpenTelemetryTracer.MeterName));
+```
+
+For a vendor-neutral OTLP collector, swap the exporter and keep the same two `AddSource`/`AddMeter` lines:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t.AddSource(OpenTelemetryTracer.ActivitySourceName).AddOtlpExporter())
+    .WithMetrics(m => m.AddMeter(OpenTelemetryTracer.MeterName).AddOtlpExporter());
+```
+
+Two things to know once the traces arrive:
+
+- **The agent run shows up as a *dependency*, not a *request*.** The `invoke_agent` root span is
+  `ActivityKind.Internal`, and Application Insights maps `Internal`/`Client`/`Producer` spans to
+  `dependencies` (only `Server`/`Consumer` become `requests`). Look under **Dependencies** (or the
+  `dependencies` table in Logs), not **Requests**. When the agent runs inside an ASP.NET request the
+  spans nest correctly under that request; a standalone worker has no parent request by design.
+- **A short-lived console app can exit before telemetry is flushed.** The OTel batch exporter sends on
+  a timer, so a process that runs the agent and returns immediately may drop the last batch. Dispose the
+  provider (or call `TracerProvider.ForceFlush()` / `MeterProvider.ForceFlush()`) before exit — a
+  `using`-scoped host or `await host.StopAsync()` handles this for you.
+
+### Content capture and agent naming
+
+`WithOtelTracer(enableSensitiveData, agentName)` takes two optional settings:
+
+- **`enableSensitiveData`** (default `false`) — capture conversation *content*: `gen_ai.input.messages`
+  / `gen_ai.output.messages` (prompt and response bodies) on each `chat` span, `gen_ai.tool.call.arguments`
+  / `gen_ai.tool.call.result` on each `execute_tool` span, the task text on the root, and sensor-reason
+  text on evaluation events. **Off by default** — no user or model content leaves the process unless you
+  opt in. Turn it on in development to read the exchange; leave it off in production (and note that content
+  attributes make spans larger, so ingestion cost rises when it's on). Error-path diagnostics — span
+  status, the `exception` event, `harness.failure.reason` — are always emitted regardless, since they only
+  appear when something already failed.
+- **`agentName`** (default `null`) — stamped on the root span as `gen_ai.agent.name` and into its display
+  name, so several agents in one process are told apart in the backend. For *which deployment* a trace
+  came from, set `service.name` on the host resource instead; the source name itself is a fixed constant
+  and is not meant to be reconfigured (it's the join key your `AddSource(...)` call matches).
+
+```csharp
+// enableSensitiveData off in production; a host env flag is a natural switch for it
+builder.WithOtelTracer(enableSensitiveData: isDevelopment, agentName: "triage-agent");
+```
+
 ## Checkpoint / resume and human-in-the-loop
 
 These two features share the same underlying mechanism — `ICheckpointStore` — but serve
