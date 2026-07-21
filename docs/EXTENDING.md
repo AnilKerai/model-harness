@@ -424,6 +424,51 @@ change** — update your implementation when you upgrade. `ModelResponse` now al
 `Model`/`Provider` fields (populated by the built-in adapters) that feed `gen_ai.request.model` and
 `gen_ai.provider.name`.
 
+### Exporting to a backend (Application Insights, OTLP)
+
+`OpenTelemetryTracer` has **no OpenTelemetry SDK dependency** — it emits through the runtime's
+`System.Diagnostics.ActivitySource` and `Meter`. Those are inert until the host attaches a listener
+(the OTel SDK) **and** opts the harness's source/meter in by name. Miss this step and
+`ActivitySource.StartActivity(...)` returns `null` on every call, so no spans are created and nothing
+is exported — the harness looks silent even though tracing is "on". This is the single most common
+reason traces never reach a backend.
+
+Register the harness's source and meter by name — the names are public constants so they can't drift:
+
+```csharp
+using Azure.Monitor.OpenTelemetry.AspNetCore; // dotnet add package Azure.Monitor.OpenTelemetry.AspNetCore
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
+using SapphireGuard.ModelHarness.Infrastructure.Tracing;
+
+builder.Services.AddOpenTelemetry().UseAzureMonitor(o =>
+    o.ConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]);
+
+// These two lines are what make the harness's telemetry flow into the exporter:
+builder.Services.ConfigureOpenTelemetryTracerProvider((_, b) => b.AddSource(OpenTelemetryTracer.ActivitySourceName));
+builder.Services.ConfigureOpenTelemetryMeterProvider((_, b) => b.AddMeter(OpenTelemetryTracer.MeterName));
+```
+
+For a vendor-neutral OTLP collector, swap the exporter and keep the same two `AddSource`/`AddMeter` lines:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t.AddSource(OpenTelemetryTracer.ActivitySourceName).AddOtlpExporter())
+    .WithMetrics(m => m.AddMeter(OpenTelemetryTracer.MeterName).AddOtlpExporter());
+```
+
+Two things to know once the traces arrive:
+
+- **The agent run shows up as a *dependency*, not a *request*.** The `invoke_agent` root span is
+  `ActivityKind.Internal`, and Application Insights maps `Internal`/`Client`/`Producer` spans to
+  `dependencies` (only `Server`/`Consumer` become `requests`). Look under **Dependencies** (or the
+  `dependencies` table in Logs), not **Requests**. When the agent runs inside an ASP.NET request the
+  spans nest correctly under that request; a standalone worker has no parent request by design.
+- **A short-lived console app can exit before telemetry is flushed.** The OTel batch exporter sends on
+  a timer, so a process that runs the agent and returns immediately may drop the last batch. Dispose the
+  provider (or call `TracerProvider.ForceFlush()` / `MeterProvider.ForceFlush()`) before exit — a
+  `using`-scoped host or `await host.StopAsync()` handles this for you.
+
 ## Checkpoint / resume and human-in-the-loop
 
 These two features share the same underlying mechanism — `ICheckpointStore` — but serve

@@ -173,7 +173,18 @@ public static class DependencyInjection
     public static ModelHarnessBuilder WithConsoleTracer(this ModelHarnessBuilder builder) =>
         builder.WithTracer<ConsoleTracer>();
 
-    /// <summary>Adds an <c>OpenTelemetryTracer</c> that emits spans and metrics via the OpenTelemetry SDK.</summary>
+    /// <summary>
+    /// Adds an <c>OpenTelemetryTracer</c> that emits a <c>gen_ai.*</c> span tree and metrics through
+    /// <see cref="System.Diagnostics.ActivitySource"/> / <see cref="System.Diagnostics.Metrics.Meter"/>.
+    /// <para><b>Required host wiring</b> — the tracer produces telemetry <em>only</em> once its source and
+    /// meter are registered on your OpenTelemetry provider. Until then <c>StartActivity</c> returns
+    /// <see langword="null"/> and nothing is exported (the usual cause of "I see no traces"):</para>
+    /// <code>
+    /// services.ConfigureOpenTelemetryTracerProvider((_, b) => b.AddSource(OpenTelemetryTracer.ActivitySourceName));
+    /// services.ConfigureOpenTelemetryMeterProvider((_, b) => b.AddMeter(OpenTelemetryTracer.MeterName));
+    /// </code>
+    /// <para>See <c>docs/EXTENDING.md#exporting-to-a-backend</c> for a full Application Insights / OTLP example.</para>
+    /// </summary>
     public static ModelHarnessBuilder WithOtelTracer(this ModelHarnessBuilder builder) =>
         builder.WithTracer<OpenTelemetryTracer>();
 

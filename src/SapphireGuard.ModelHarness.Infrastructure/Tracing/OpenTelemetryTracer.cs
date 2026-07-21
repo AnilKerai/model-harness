@@ -13,9 +13,12 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 /// Emits a nested span tree aligned with the OpenTelemetry GenAI semantic conventions —
 /// an <c>invoke_agent</c> root with <c>chat</c> and <c>execute_tool</c> children — plus the
 /// <c>gen_ai.client.token.usage</c> and <c>gen_ai.client.operation.duration</c> metrics, via
-/// <see cref="ActivitySource"/> and <see cref="Meter"/>. Wire up your OTel exporters in the
-/// host; this class has no OTel SDK dependency. Cost has no GenAI attribute (backends compute
-/// it from tokens), so the computed cost is emitted under <c>harness.cost</c>.
+/// <see cref="ActivitySource"/> and <see cref="Meter"/>. This class has no OTel SDK dependency:
+/// the host must register <see cref="ActivitySourceName"/> with its tracer provider (<c>AddSource</c>)
+/// and <see cref="MeterName"/> with its meter provider (<c>AddMeter</c>), then wire an exporter —
+/// without the registration <c>StartActivity</c> returns null and nothing is emitted, exporter or not.
+/// Cost has no GenAI attribute (backends compute it from tokens), so the computed cost is emitted
+/// under <c>harness.cost</c>.
 /// </summary>
 [ExcludeFromCodeCoverage]
 public sealed class OpenTelemetryTracer : ITracer, IDisposable
