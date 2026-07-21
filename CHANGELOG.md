@@ -12,7 +12,7 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
-## [Unreleased]
+## [2.3.0] — 2026-07-21
 
 ### Added
 
