@@ -469,6 +469,28 @@ Two things to know once the traces arrive:
   provider (or call `TracerProvider.ForceFlush()` / `MeterProvider.ForceFlush()`) before exit — a
   `using`-scoped host or `await host.StopAsync()` handles this for you.
 
+### Content capture and agent naming
+
+`WithOtelTracer(enableSensitiveData, agentName)` takes two optional settings:
+
+- **`enableSensitiveData`** (default `false`) — capture conversation *content*: `gen_ai.input.messages`
+  / `gen_ai.output.messages` (prompt and response bodies) on each `chat` span, `gen_ai.tool.call.arguments`
+  / `gen_ai.tool.call.result` on each `execute_tool` span, the task text on the root, and sensor-reason
+  text on evaluation events. **Off by default** — no user or model content leaves the process unless you
+  opt in. Turn it on in development to read the exchange; leave it off in production (and note that content
+  attributes make spans larger, so ingestion cost rises when it's on). Error-path diagnostics — span
+  status, the `exception` event, `harness.failure.reason` — are always emitted regardless, since they only
+  appear when something already failed.
+- **`agentName`** (default `null`) — stamped on the root span as `gen_ai.agent.name` and into its display
+  name, so several agents in one process are told apart in the backend. For *which deployment* a trace
+  came from, set `service.name` on the host resource instead; the source name itself is a fixed constant
+  and is not meant to be reconfigured (it's the join key your `AddSource(...)` call matches).
+
+```csharp
+// enableSensitiveData off in production; a host env flag is a natural switch for it
+builder.WithOtelTracer(enableSensitiveData: isDevelopment, agentName: "triage-agent");
+```
+
 ## Checkpoint / resume and human-in-the-loop
 
 These two features share the same underlying mechanism — `ICheckpointStore` — but serve

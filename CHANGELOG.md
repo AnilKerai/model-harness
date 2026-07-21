@@ -12,6 +12,43 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Added
+
+- **`WithOtelTracer(enableSensitiveData, agentName)` — opt-in content capture and agent naming.**
+  `OpenTelemetryTracer` now takes two optional settings (both additive; existing `WithOtelTracer()`
+  calls compile and keep working):
+  - `enableSensitiveData` (default `false`) captures conversation content on the spans:
+    `gen_ai.input.messages` / `gen_ai.output.messages` (prompt and response bodies) on each `chat`
+    span, `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` on each `execute_tool` span, the
+    task text on the root span, and the sensor-reason text on evaluation events. Off by default, so
+    no user or model content leaves the process unless you opt in — turn it on in development to
+    inspect the actual exchange in your backend.
+  - `agentName` (default `null`) stamps `gen_ai.agent.name` on the root `invoke_agent` span and into
+    its display name (`invoke_agent {name}`), so several agents in one process are distinguishable.
+
+### Changed
+
+- **The OpenTelemetry tracer no longer emits conversation content by default** (behavioural change).
+  Previously `harness.task.text` and the `gen_ai.evaluation.explanation` sensor reason were written
+  to every trace unconditionally. They — and the newly added message / tool-I/O attributes — are now
+  gated behind `enableSensitiveData`, which defaults to `false`. Error-path diagnostics (span status,
+  the `exception` event, `harness.failure.reason`) are unaffected and always emitted.
+
+  **Migration** — if you relied on `harness.task.text` or `gen_ai.evaluation.explanation` reaching
+  your backend, opt back in:
+
+  ```csharp
+  // before — task text and sensor reasons were always exported
+  builder.WithOtelTracer();
+
+  // after — restore that (and additionally capture prompt/response bodies and tool I/O)
+  builder.WithOtelTracer(enableSensitiveData: true);
+  ```
+
+  Leaving it at the default is the recommended production posture: content stays in your process.
+
 ## [2.2.1] — 2026-07-18
 
 Closes the low-severity tail of the systematic audit — every finding from it is now fixed. Patch:

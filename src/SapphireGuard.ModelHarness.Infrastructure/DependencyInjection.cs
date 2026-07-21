@@ -185,8 +185,20 @@ public static class DependencyInjection
     /// </code>
     /// <para>See <c>docs/EXTENDING.md#exporting-to-a-backend</c> for a full Application Insights / OTLP example.</para>
     /// </summary>
-    public static ModelHarnessBuilder WithOtelTracer(this ModelHarnessBuilder builder) =>
-        builder.WithTracer<OpenTelemetryTracer>();
+    /// <param name="builder">The harness builder.</param>
+    /// <param name="enableSensitiveData">
+    /// When <see langword="true"/>, capture conversation content on the spans — task text, prompt/response
+    /// message bodies, tool arguments and results, and sensor-reason text. Default <see langword="false"/>,
+    /// so no user or model content leaves the process by default; turn it on in development to inspect the
+    /// actual exchange. Error diagnostics (span status, exception events) are emitted either way.
+    /// </param>
+    /// <param name="agentName">
+    /// Optional agent name stamped on the root span as <c>gen_ai.agent.name</c>, so several agents in one
+    /// process are distinguishable in the backend. Leave null for a single-agent host.
+    /// </param>
+    public static ModelHarnessBuilder WithOtelTracer(
+        this ModelHarnessBuilder builder, bool enableSensitiveData = false, string? agentName = null) =>
+        builder.WithTracer(_ => new OpenTelemetryTracer(enableSensitiveData, agentName));
 
     // ── Layer 3: opinionated entry point ─────────────────────────────────────
 
