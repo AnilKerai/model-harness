@@ -8,12 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SapphireGuard.ModelHarness" Version="1.0.0" />
-    <PackageReference Include="SapphireGuard.ModelHarness.Infrastructure" Version="1.0.0" />
-    <PackageReference Include="SapphireGuard.ModelHarness.Anthropic" Version="1.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.8" />
+    <PackageReference Include="SapphireGuard.ModelHarness" Version="2.3.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness.Infrastructure" Version="2.3.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness.Anthropic" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>
