@@ -12,6 +12,24 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [2.3.1] — 2026-08-25
+
+Maintenance release — dependency updates only. No API or behavioural changes, no migration needed.
+Build is clean and all 479 unit tests pass; the Anthropic, structured-output, compaction, sensor,
+multi-agent, and checkpoint/resume paths were smoke-tested against the live Anthropic API on the new SDK.
+
+### Changed
+
+- **Dependencies bumped to latest stable.** The consumer-facing floors that rise transitively are the
+  adapter SDKs:
+  - `Anthropic` 12.22.0 → 12.42.0 (Claude adapter)
+  - `Azure.Identity` 1.13.2 → 1.21.0 (Azure OpenAI / AI Foundry adapter)
+  - `OllamaSharp` 5.4.25 → 5.4.30 (Ollama adapter)
+  - `Polly` 8.6.6 → 8.7.0 (resilience)
+  - `Microsoft.Extensions.*` and `System.Text.Json` 10.0.8 → 10.0.11
+  - Build-time only: `Microsoft.SourceLink.GitHub` 8.0.0 → 10.0.400
+  - Test tooling: `Microsoft.NET.Test.Sdk` 17.14.1 → 18.9.0, `xunit.runner.visualstudio` 3.1.0 → 4.0.0
+
 ## [2.3.0] — 2026-07-21
 
 ### Added
