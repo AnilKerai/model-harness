@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "LiveDashboard": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:5137",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

@@ -376,12 +376,28 @@ they are automatically composed into a `CompositeTracer` at resolution time:
 
 ```csharp
 builder
-    .WithConsoleTracer()   // human-readable stdout — handy for local dev
-    .WithOtelTracer()      // OpenTelemetry spans + metrics — handy for production
+    .WithConsoleTracer()        // human-readable stdout — handy for local dev
+    .WithOtelTracer()           // OpenTelemetry spans + metrics — handy for production
+    .WithLiveDashboardTracer()  // in-process live feed — handy for a no-backend dashboard
 ```
 
 Implement `ITracer` and register via `WithTracer<T>()` or `WithTracer(factory)` for a
 custom backend.
+
+`WithLiveDashboardTracer()` adds a `LiveDashboardTracer` — a zero-dependency in-process feed
+for a **live agent console** with no OTLP, collector, or Docker. It turns each loop event into a
+`DashboardEvent` (kind, `taskId`, nullable `turn`, a summary, and a structured `detail` bag),
+keeps a bounded ring buffer so a browser connecting mid-run replays the history, and exposes
+`Subscribe(ct)` for a host endpoint (e.g. Server-Sent Events) to stream. Run/turn aggregation is
+left to the consumer, so the tracer stays transport-neutral. Pass
+`new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to also
+include each model response's text — the run's result — off by default like `WithOtelTracer`'s flag.
+It composes with `WithOtelTracer()` (both run through `CompositeTracer`): local console *and* durable
+OTLP backend at once. To host the browser UI, add the `SapphireGuard.ModelHarness.Dashboard` package
+and call `app.MapHarnessDashboard(prefix = "/dashboard", onRun?)` — it serves the embedded page, assets,
+and SSE feed from the registered `LiveDashboardTracer` (a read-only monitor unless you pass `onRun`,
+which reveals a run bar and maps `POST {prefix}/run`). `samples/LiveDashboard` is the end-to-end wiring;
+see [FEATURES.md](FEATURES.md#live-dashboard).
 
 A tracer is notified at each loop milestone. Task start/completion and every sensor evaluation —
 pass, intervention, or error alike — are one-shot events (`StartTrace`, `Complete`, `LogSensorResult`). **Model and tool calls are

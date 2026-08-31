@@ -7,11 +7,13 @@
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Persistence/SapphireGuard.ModelHarness.Infrastructure.Persistence.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Resilience/SapphireGuard.ModelHarness.Infrastructure.Resilience.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI/SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Dashboard/SapphireGuard.ModelHarness.Infrastructure.Dashboard.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Common/SapphireGuard.ModelHarness.Samples.Common.csproj" />
     <Project Path="samples/CheckpointResume/SapphireGuard.ModelHarness.Samples.CheckpointResume.csproj" />
     <Project Path="samples/HappyPath/SapphireGuard.ModelHarness.Samples.HappyPath.csproj" />
+    <Project Path="samples/LiveDashboard/SapphireGuard.ModelHarness.Samples.LiveDashboard.csproj" />
     <Project Path="samples/Compaction/SapphireGuard.ModelHarness.Samples.Compaction.csproj" />
     <Project Path="samples/Conversation/SapphireGuard.ModelHarness.Samples.Conversation.csproj" />
     <Project Path="samples/OllamaToolCall/SapphireGuard.ModelHarness.Samples.OllamaToolCall.csproj" />

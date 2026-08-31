@@ -74,6 +74,16 @@ dotnet run --project samples/StructuredOutput
 
 `samples/Compaction` runs the same investigation twice — once with a stateless *view* strategy and once with an incremental *fold* — with a tiny context window so eviction fires most turns. Each strategy prints what it does, so you can watch the view re-summarise the whole growing head every turn while the fold only ever touches the newly evicted slice (and persists a rolling summary at a flat cost).
 
+## Live dashboard
+
+`samples/LiveDashboard` is a small web app that watches an agent run in real time — no OTLP, collector, or Docker. It wires `WithLiveDashboardTracer()` and hosts the UI with a single `app.MapHarnessDashboard("/", onRun: …)` from the `SapphireGuard.ModelHarness.Dashboard` package (which embeds the page, assets, and the Server-Sent-Events feed — nothing to copy). The console groups the stream into a **searchable runs** sidebar, per-run stats and the final **result**, a **per-turn telemetry** table, and a turn-divided live trace where every event expands to its **raw detail**. The result is the last model response's text — the sample builds the tracer with `enableSensitiveData: true` to include it (off by default, so no model output leaves the process unless you opt in). Runs with the scripted model client, so no API key is needed (add one to `samples/LiveDashboard/appsettings.local.json` to drive a real model).
+
+```bash
+dotnet run --project samples/LiveDashboard
+```
+
+The launch profile binds it to `http://localhost:5137` (override with `--urls`). Open that address: a task runs on startup, and the **Run** button fires more. Because the feed keeps a ring buffer, a browser opened after a run still replays its history. This is the local operator console; for durable, multi-run history point `WithOtelTracer()` at an OTLP backend (the two compose) — see [EXTENDING.md](EXTENDING.md).
+
 ## What you'll see
 
 Two things stream to stdout: JSON trace events as they happen, then a formatted summary once the run completes.
