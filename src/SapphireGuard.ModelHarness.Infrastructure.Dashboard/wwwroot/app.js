@@ -1,5 +1,6 @@
 // Client for the Model Harness live feed. The SSE stream carries every loop event tagged with
 // taskId + turn + a detail bag; this builds the run -> turn model in the browser and renders it.
+// URLs are relative so a <base href> lets the page live under any prefix (/dashboard, /, …).
 // ponytail: full re-render of the detail pane per event — fine for a dev console's event volume;
 // go incremental only if it ever visibly lags.
 
@@ -16,7 +17,7 @@ const taskEl = document.getElementById('task');
 const searchEl = document.getElementById('run-search');
 let query = '';
 
-const feed = new EventSource('/feed');
+const feed = new EventSource('feed');
 feed.onopen = () => { connEl.textContent = 'live'; connEl.className = 'badge ok'; };
 feed.onerror = () => { connEl.textContent = 'reconnecting…'; connEl.className = 'badge err'; };
 feed.onmessage = ev => ingest(JSON.parse(ev.data));
@@ -26,7 +27,7 @@ taskEl.addEventListener('keydown', e => { if (e.key === 'Enter') start(); });
 searchEl.addEventListener('input', () => { query = searchEl.value.trim().toLowerCase(); renderRuns(); });
 
 function start() {
-  fetch('/run', {
+  fetch('run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ task: taskEl.value }),

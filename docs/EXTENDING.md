@@ -393,7 +393,10 @@ left to the consumer, so the tracer stays transport-neutral. Pass
 `new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to also
 include each model response's text — the run's result — off by default like `WithOtelTracer`'s flag.
 It composes with `WithOtelTracer()` (both run through `CompositeTracer`): local console *and* durable
-OTLP backend at once. `samples/LiveDashboard` is the end-to-end wiring (SSE endpoint + static page);
+OTLP backend at once. To host the browser UI, add the `SapphireGuard.ModelHarness.Dashboard` package
+and call `app.MapHarnessDashboard(prefix = "/dashboard", onRun?)` — it serves the embedded page, assets,
+and SSE feed from the registered `LiveDashboardTracer` (a read-only monitor unless you pass `onRun`,
+which reveals a run bar and maps `POST {prefix}/run`). `samples/LiveDashboard` is the end-to-end wiring;
 see [FEATURES.md](FEATURES.md#live-dashboard).
 
 A tracer is notified at each loop milestone. Task start/completion and every sensor evaluation —

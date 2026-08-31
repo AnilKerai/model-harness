@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>true</IsPackable>
+    <PackageId>SapphireGuard.ModelHarness.Dashboard</PackageId>
+    <Description>Drop-in ASP.NET Core live dashboard for SapphireGuard.ModelHarness. MapHarnessDashboard() serves a real-time agent console — runs, per-turn telemetry, per-event drill-in, and the run result — over Server-Sent Events, fed by LiveDashboardTracer. Requires ASP.NET Core.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SapphireGuard.ModelHarness.Infrastructure\SapphireGuard.ModelHarness.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\index.html" />
+    <EmbeddedResource Include="wwwroot\app.css" />
+    <EmbeddedResource Include="wwwroot\app.js" />
+  </ItemGroup>
+
+</Project>

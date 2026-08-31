@@ -11,7 +11,7 @@ Capabilities the harness ships on top of its [two core patterns](../README.md#co
 
 ## Live dashboard
 
-Watch an agent work in real time — turn by turn, run by run — in a browser, with **no OpenTelemetry backend, collector, or Docker**. `LiveDashboardTracer` is an `ITracer`, so it plugs into the same port as `ConsoleTracer` / `OpenTelemetryTracer` and composes with them through `CompositeTracer`. It turns every loop event into a `DashboardEvent`, streams it to any number of subscribers, and keeps a bounded in-memory ring buffer so a browser that connects mid-run still replays the history. Wire it with `WithLiveDashboardTracer()`.
+Watch an agent work in real time — turn by turn, run by run — in a browser, with **no OpenTelemetry backend, collector, or Docker**. `LiveDashboardTracer` is an `ITracer`, so it plugs into the same port as `ConsoleTracer` / `OpenTelemetryTracer` and composes with them through `CompositeTracer`. It turns every loop event into a `DashboardEvent`, streams it to any number of subscribers, and keeps a bounded in-memory ring buffer so a browser that connects mid-run still replays the history. Wire the tracer with `WithLiveDashboardTracer()`, and drop the browser UI into any ASP.NET Core app with `app.MapHarnessDashboard()` — the page, its assets, and the SSE feed ship embedded in the `SapphireGuard.ModelHarness.Dashboard` package (no `wwwroot` to copy). It's a read-only monitor by default; pass an `onRun` callback to reveal a "run a task" bar for a standalone demo.
 
 ```mermaid
 flowchart LR
@@ -31,7 +31,7 @@ flowchart LR
 |---|---|
 | **It's an `ITracer`, not a new port** | No loop change, no new abstraction — the loop already emits every event a dashboard needs (`BeginModelCall`, `LogSensorResult`, `LogBudgetSnapshot`, …). Compose it *alongside* `OpenTelemetryTracer`: local console and durable OTLP backend at once. |
 | **The tracer is transport-neutral** | It is a plain event feed with **zero web dependencies** (just `System.Threading.Channels`). All run/turn aggregation happens in the consumer over the event stream, so the same tracer drives Server-Sent Events, SignalR, a Blazor circuit, or a terminal UI. |
-| **The UI is a sample, not a package** | `LiveDashboardTracer` ships in the `Infrastructure` package; the SSE endpoint + static page live in `samples/LiveDashboard` (`wwwroot`, no build step) so the framework takes no ASP.NET Core dependency. Copy it, or lift it into your own host. |
+| **Hosting is a thin, separate package** | `LiveDashboardTracer` ships in `Infrastructure` (no web deps); the ASP.NET Core hosting — page, assets, and SSE feed — ships as `SapphireGuard.ModelHarness.Dashboard`, added with one line: `app.MapHarnessDashboard()`. Only that package references ASP.NET Core, so a non-web consumer never pays for it, and the UI is embedded (nothing to copy). |
 | **Content is opt-in** | Metadata and short summaries by default; response text only when `enableSensitiveData` is set. Full prompt/tool-result bodies remain `OpenTelemetryTracer`'s job. |
 
 > The dashboard is the **local operator console**; for durable multi-run history and cross-service correlation, point `WithOtelTracer()` at an OTLP backend (Aspire, Grafana/Tempo, Honeycomb, Datadog). The two compose. See `samples/LiveDashboard` and [RUNNING.md](RUNNING.md#live-dashboard) to run it, and [EXTENDING.md](EXTENDING.md#tracers) for wiring.

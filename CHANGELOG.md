@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Releases are cut as annotated `vX.Y.Z` git
-tags; CI publishes the seven NuGet packages from the tag (versioning is [MinVer](https://github.com/adamralph/minver)-driven,
+tags; CI publishes the eight NuGet packages from the tag (versioning is [MinVer](https://github.com/adamralph/minver)-driven,
 so the tag *is* the version).
 
 **Every breaking change is recorded here with a migration guide.** A breaking change means anything that
@@ -27,10 +27,19 @@ public API even though most consumers only implement a few of them.
   - `new LiveDashboardTracer(enableSensitiveData: true)` also includes each model response's text in
     its `model` event detail — the run's result — off by default, matching
     `WithOtelTracer(enableSensitiveData:)`. No model output leaves the process unless you opt in.
-  - `samples/LiveDashboard` is the end-to-end reference: an SSE endpoint plus a static page
-    (`wwwroot`, no build step) that groups the stream into a searchable runs sidebar, a per-turn
+  - `samples/LiveDashboard` is the end-to-end reference: it wires `app.MapHarnessDashboard("/", onRun: …)`
+    from the new `Dashboard` package (below) to serve the console — a searchable runs sidebar, a per-turn
     telemetry table, a turn-divided live trace with per-event drill-in, and the run's result.
   - Fully additive — no existing API changes, no migration needed.
+
+- **`SapphireGuard.ModelHarness.Dashboard` — a new package: drop-in ASP.NET Core hosting for the live
+  dashboard.** `app.MapHarnessDashboard(prefix = "/dashboard", onRun?)` serves the dashboard page, its
+  assets, and the SSE feed — all embedded in the package, no `wwwroot` to copy — streamed from the
+  DI-registered `LiveDashboardTracer`. A `<base href>` lets it live under any prefix. By default it is a
+  read-only monitor of runs the host triggers elsewhere; pass `onRun` to reveal a "run a task" bar and map
+  `POST {prefix}/run`. This is the only package that takes an ASP.NET Core dependency (`FrameworkReference
+  Microsoft.AspNetCore.App`) — the transport-neutral `LiveDashboardTracer` stays in `Infrastructure`. Brings
+  the published package count to **eight**.
 
 ## [2.3.1] — 2026-08-25
 

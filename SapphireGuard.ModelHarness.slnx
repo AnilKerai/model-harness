@@ -7,6 +7,7 @@
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Persistence/SapphireGuard.ModelHarness.Infrastructure.Persistence.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Resilience/SapphireGuard.ModelHarness.Infrastructure.Resilience.csproj" />
     <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI/SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI.csproj" />
+    <Project Path="src/SapphireGuard.ModelHarness.Infrastructure.Dashboard/SapphireGuard.ModelHarness.Infrastructure.Dashboard.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Common/SapphireGuard.ModelHarness.Samples.Common.csproj" />

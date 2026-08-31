@@ -34,16 +34,9 @@ body {
 .badge.ok { background: #dcfce7; color: var(--green); }
 .badge.err { background: #fee2e2; color: var(--red); }
 
-.controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 14px;
-}
+/* The run bar is a demo affordance — shown only when the host maps it (body.run-enabled). */
+.controls { display: none; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+body.run-enabled .controls { display: flex; }
 .task-input {
     flex: 1 1 320px;
     padding: 10px 12px;
@@ -99,6 +92,14 @@ body {
 .stat .k { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .stat .v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+.result { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.result h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.result.fail { border-color: #fecaca; }
+.result .answer { margin: 0; white-space: pre-wrap; word-break: break-word; }
+p.answer { font-size: 14px; line-height: 1.55; }
+pre.answer { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+.result.fail .answer { color: var(--red); background: none; padding: 0; font-size: 13px; }
+
 .turns {
     background: var(--card);
     border: 1px solid var(--line);
@@ -116,14 +117,6 @@ body {
     position: sticky; top: 0; background: #f1f4f8;
     font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600;
 }
-
-.result { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-.result h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-.result.fail { border-color: #fecaca; }
-.result .answer { margin: 0; white-space: pre-wrap; word-break: break-word; }
-p.answer { font-size: 14px; line-height: 1.55; }
-pre.answer { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
-.result.fail .answer { color: var(--red); background: none; padding: 0; font-size: 13px; }
 
 .timeline { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .timeline h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
