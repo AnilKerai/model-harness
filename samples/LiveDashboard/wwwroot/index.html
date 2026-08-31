@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Model Harness — Live</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="hdr">
+    <h1>◐ Model Harness</h1>
+    <span class="sub">live trace</span>
+    <div class="badges">
+      <span id="conn" class="badge warn">connecting…</span>
+    </div>
+  </header>
+
+  <section class="controls">
+    <input id="task" class="task-input" placeholder="Ask the agent something…"
+           value="What is 124 multiplied by 37?">
+    <button id="run" class="btn primary">Run</button>
+    <p class="hint">Each run appears in the sidebar. Click one to inspect its turns; expand any event for its raw telemetry.</p>
+  </section>
+
+  <div class="layout">
+    <aside class="tasklist">
+      <h2>Runs</h2>
+      <div id="runs"><p class="empty">No runs yet.</p></div>
+    </aside>
+    <main class="taskdetail">
+      <div id="detail"><p class="empty">Select a run, or start one above.</p></div>
+    </main>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

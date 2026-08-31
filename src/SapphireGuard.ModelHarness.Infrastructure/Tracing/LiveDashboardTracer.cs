@@ -13,7 +13,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 /// structured fields (an anonymous object) the browser cherry-picks — there is no shared schema,
 /// so each event kind carries whatever numbers make sense for it.
 /// </summary>
-public sealed record DashboardEvent(long Seq, string Kind, string TaskId, int Turn, string Summary, object? Detail = null);
+public sealed record DashboardEvent(long Seq, string Kind, string TaskId, int? Turn, string Summary, object? Detail = null);
 
 /// <summary>
 /// An <see cref="ITracer"/> that feeds a live in-process console: every loop event becomes a
@@ -66,7 +66,7 @@ public sealed class LiveDashboardTracer : ITracer
 
     // ponytail: single lock guards the ring + subscriber list; a publish is a few non-blocking
     // TryWrites (DropOldest never blocks), so it can't stall the loop thread that called it.
-    private void Publish(string kind, string taskId, int turn, string summary, object? detail = null)
+    private void Publish(string kind, string taskId, int? turn, string summary, object? detail = null)
     {
         var evt = new DashboardEvent(Interlocked.Increment(ref _seq), kind, taskId, turn, summary, detail);
         lock (_gate)
@@ -77,8 +77,9 @@ public sealed class LiveDashboardTracer : ITracer
         }
     }
 
+    // Run-level events carry a null turn so the UI renders them outside any per-turn group.
     public void StartTrace(string taskId, string taskText) =>
-        Publish("run", taskId, 0, Truncate(taskText, 300));
+        Publish("run", taskId, null, Truncate(taskText, 300));
 
     public IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools)
     {
@@ -95,7 +96,16 @@ public sealed class LiveDashboardTracer : ITracer
         if (!result.IsIntervene && !result.IsError) return;
         var verdict = result.IsError ? "error" : "intervene";
         Publish("sensor", taskId, turn, $"{sensorName} @ {hookPoint}: {verdict}",
-            new { sensor = sensorName, hookPoint = hookPoint.ToString(), verdict, reason = result.Reason });
+            new
+            {
+                sensor = sensorName,
+                hookPoint = hookPoint.ToString(),
+                verdict,
+                reason = result.Reason,
+                inputTokens = result.Usage?.InputTokens ?? 0,
+                outputTokens = result.Usage?.OutputTokens ?? 0,
+                cost = result.Cost ?? 0m,
+            });
     }
 
     public void LogGuideError(string taskId, int turn, string guideName, string error) =>
@@ -130,7 +140,7 @@ public sealed class LiveDashboardTracer : ITracer
             });
 
     public void Complete(string taskId, AgentStatus status, string? failureReason) =>
-        Publish("done", taskId, 0, failureReason is null ? $"Finished: {status}" : $"Finished: {status} — {failureReason}",
+        Publish("done", taskId, null, failureReason is null ? $"Finished: {status}" : $"Finished: {status} — {failureReason}",
             new { status = status.ToString(), failureReason });
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
@@ -152,6 +162,7 @@ public sealed class LiveDashboardTracer : ITracer
                     provider = response.Provider,
                     response.Usage.InputTokens,
                     response.Usage.OutputTokens,
+                    cachedTokens = response.CachedInputTokens,
                     cost = response.Cost,
                     finish = response.StopReason.ToString(),
                     toolCalls = response.ToolCalls.Count,
