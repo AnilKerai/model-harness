@@ -1,10 +1,40 @@
 # Features
 
-Capabilities the harness ships on top of its [two core patterns](../README.md#core-patterns) — guides and sensors. None is a separate subsystem: each is composed from a guide, a sensor, and/or a tool, with **no changes to the loop**, and each is opt-in. This doc holds the deep write-ups; the [README](../README.md#batteries-included) has the one-line catalogue and [EXTENDING.md](EXTENDING.md) the wiring recipes.
+Capabilities the harness ships on top of its [two core patterns](../README.md#core-patterns) — guides and sensors. None is a separate subsystem: each is composed from a guide, a sensor, a tool, or a tracer, with **no changes to the loop**, and each is opt-in. This doc holds the deep write-ups; the [README](../README.md#batteries-included) has the one-line catalogue and [EXTENDING.md](EXTENDING.md) the wiring recipes.
 
+- [Live dashboard](#live-dashboard)
 - [Agent Learning](#agent-learning-experimental)
 - [AI-powered sensors](#ai-powered-sensors-experimental)
 - [Prompt injection and taint tracking](#prompt-injection-and-taint-tracking-experimental)
+
+---
+
+## Live dashboard
+
+Watch an agent work in real time — turn by turn, run by run — in a browser, with **no OpenTelemetry backend, collector, or Docker**. `LiveDashboardTracer` is an `ITracer`, so it plugs into the same port as `ConsoleTracer` / `OpenTelemetryTracer` and composes with them through `CompositeTracer`. It turns every loop event into a `DashboardEvent`, streams it to any number of subscribers, and keeps a bounded in-memory ring buffer so a browser that connects mid-run still replays the history. Wire it with `WithLiveDashboardTracer()`.
+
+```mermaid
+flowchart LR
+    LOOP[HarnessLoop] -->|every loop event| LDT[LiveDashboardTracer\nring buffer + subscribers]
+    LDT -->|Server-Sent Events| BR[Browser\ngroups by run then turn]
+    LDT -. composes with .-> OT[OpenTelemetryTracer\nOTLP → Aspire / Grafana]
+```
+
+- **Distinct runs** — every event carries a `taskId`, so the UI lists each run, lets you switch between them, and filters them by keyword.
+- **Grouped by turn** — every event carries a zero-based `turn` (nullable: run-level events like `run`/`done` sit outside any turn), so the UI totals tokens / cost / tool-calls per turn and divides the live trace into turns.
+- **Drill into any event** — each event carries a structured `detail` bag (tokens, cost, finish reason, sensor verdict, checkpoint timing, …) shown on demand.
+- **The run's result** — build the tracer with `enableSensitiveData: true` and each `model` event also carries the response text, so the UI can show the final answer (the result *is* the last model response's text). Off by default, matching `OpenTelemetryTracer` — no model output leaves the process unless you opt in.
+
+### Why it's built this way
+
+| Decision | Why |
+|---|---|
+| **It's an `ITracer`, not a new port** | No loop change, no new abstraction — the loop already emits every event a dashboard needs (`BeginModelCall`, `LogSensorResult`, `LogBudgetSnapshot`, …). Compose it *alongside* `OpenTelemetryTracer`: local console and durable OTLP backend at once. |
+| **The tracer is transport-neutral** | It is a plain event feed with **zero web dependencies** (just `System.Threading.Channels`). All run/turn aggregation happens in the consumer over the event stream, so the same tracer drives Server-Sent Events, SignalR, a Blazor circuit, or a terminal UI. |
+| **The UI is a sample, not a package** | `LiveDashboardTracer` ships in the `Infrastructure` package; the SSE endpoint + static page live in `samples/LiveDashboard` (`wwwroot`, no build step) so the framework takes no ASP.NET Core dependency. Copy it, or lift it into your own host. |
+| **Content is opt-in** | Metadata and short summaries by default; response text only when `enableSensitiveData` is set. Full prompt/tool-result bodies remain `OpenTelemetryTracer`'s job. |
+
+> The dashboard is the **local operator console**; for durable multi-run history and cross-service correlation, point `WithOtelTracer()` at an OTLP backend (Aspire, Grafana/Tempo, Honeycomb, Datadog). The two compose. See `samples/LiveDashboard` and [RUNNING.md](RUNNING.md#live-dashboard) to run it, and [EXTENDING.md](EXTENDING.md#tracers) for wiring.
 
 ---
 

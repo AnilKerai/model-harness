@@ -12,6 +12,26 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Added
+
+- **`WithLiveDashboardTracer()` — a zero-dependency in-process live dashboard feed.** A new
+  `LiveDashboardTracer` (an `ITracer`, shipped in the existing `SapphireGuard.ModelHarness.Infrastructure`
+  package — **not** a new package) streams every loop event as a `DashboardEvent` for a live agent
+  console with no OTLP backend, collector, or Docker. It keeps a bounded ring buffer so a browser
+  connecting mid-run replays the history, exposes `Subscribe(ct)` for a host endpoint (e.g.
+  Server-Sent Events), and composes with `WithOtelTracer()` through `CompositeTracer`. Run/turn
+  aggregation is left to the consumer, so the tracer stays transport-neutral — no web dependencies,
+  just `System.Threading.Channels`.
+  - `new LiveDashboardTracer(enableSensitiveData: true)` also includes each model response's text in
+    its `model` event detail — the run's result — off by default, matching
+    `WithOtelTracer(enableSensitiveData:)`. No model output leaves the process unless you opt in.
+  - `samples/LiveDashboard` is the end-to-end reference: an SSE endpoint plus a static page
+    (`wwwroot`, no build step) that groups the stream into a searchable runs sidebar, a per-turn
+    telemetry table, a turn-divided live trace with per-event drill-in, and the run's result.
+  - Fully additive — no existing API changes, no migration needed.
+
 ## [2.3.1] — 2026-08-25
 
 Maintenance release — dependency updates only. No API or behavioural changes, no migration needed.

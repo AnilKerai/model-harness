@@ -372,6 +372,7 @@ Most of these are built from the two patterns above — a guide, a sensor, or a 
 **Models & production**
 - Model adapters: **Anthropic**, **Azure OpenAI / AI Foundry**, and **Ollama** (local inference) — plus prompt caching and circuit-breaker resilience
 - **OpenTelemetry** GenAI spans + metrics, **checkpoint/resume**, **human-in-the-loop** (async suspend/resume), and **sub-agents** (each with its own model, sensors, and budget)
+- **[Live dashboard](docs/FEATURES.md#live-dashboard)** — `WithLiveDashboardTracer()` streams every loop event to an in-process browser console (runs, per-turn telemetry, drill-in, result) with zero backend; composes with OTel
 
 ---
 
