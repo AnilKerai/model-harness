@@ -22,11 +22,15 @@ public sealed record DashboardEvent(long Seq, string Kind, string TaskId, int? T
 /// history. Zero external dependencies — no OTLP, no collector, no Docker. Compose it alongside
 /// <see cref="OpenTelemetryTracer"/> via the builder (both run through <see cref="CompositeTracer"/>):
 /// the dashboard is the local operator console, OTLP is the durable backend.
-/// <para>Deliberately surfaces <em>metadata and short summaries</em> — token counts, cost, tool
-/// names, sensor verdicts, budget burn-down — not full prompt or tool-result bodies. Full-fidelity
-/// content capture is <see cref="OpenTelemetryTracer"/>'s job (its <c>enableSensitiveData</c> flag).</para>
+/// <para>Surfaces <em>metadata and short summaries</em> by default — token counts, cost, tool names,
+/// sensor verdicts, budget burn-down — never full prompt bodies or tool-result content, which remain
+/// <see cref="OpenTelemetryTracer"/>'s job. Set <paramref name="enableSensitiveData"/> to also include
+/// each model response's <em>text</em> in its event detail, so a UI can show the run's result (the final
+/// answer is the last model response's text). Off by default so no model output leaves the process; the
+/// dashboard sample turns it on because it is a local operator console.</para>
 /// </summary>
-public sealed class LiveDashboardTracer : ITracer
+/// <param name="enableSensitiveData">Include model response text in <c>model</c> event detail. Default <see langword="false"/>.</param>
+public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITracer
 {
     private const int RingCapacity = 500;
 
@@ -84,7 +88,7 @@ public sealed class LiveDashboardTracer : ITracer
     public IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools)
     {
         Publish("model:start", taskId, turn, $"Turn {turn + 1}: calling model ({prompt.Count} msgs, {tools.Count} tools)");
-        return new ModelCallScope(this, taskId, turn);
+        return new ModelCallScope(this, taskId, turn, enableSensitiveData);
     }
 
     public IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call) =>
@@ -145,7 +149,7 @@ public sealed class LiveDashboardTracer : ITracer
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
 
-    private sealed class ModelCallScope(LiveDashboardTracer owner, string taskId, int turn) : IModelCallScope
+    private sealed class ModelCallScope(LiveDashboardTracer owner, string taskId, int turn, bool enableSensitiveData) : IModelCallScope
     {
         private readonly long _start = Stopwatch.GetTimestamp();
         private bool _completed;
@@ -167,6 +171,8 @@ public sealed class LiveDashboardTracer : ITracer
                     finish = response.StopReason.ToString(),
                     toolCalls = response.ToolCalls.Count,
                     ms,
+                    // Off by default (see enableSensitiveData); the final answer is the last model text.
+                    text = enableSensitiveData ? response.Text : null,
                 });
         }
 

@@ -76,7 +76,7 @@ dotnet run --project samples/StructuredOutput
 
 ## Live dashboard
 
-`samples/LiveDashboard` is a small web app that watches an agent run in real time — no OTLP, collector, or Docker. It wires `WithLiveDashboardTracer()` and streams every loop event to the browser over Server-Sent Events; the page (`wwwroot/index.html` + `app.css` + `app.js`, no build step) groups the stream into a **runs** sidebar, a **per-turn telemetry** table, and a turn-divided live trace where every event expands to its **raw detail**. Runs with the scripted model client, so no API key is needed (add one to `samples/LiveDashboard/appsettings.local.json` to drive a real model).
+`samples/LiveDashboard` is a small web app that watches an agent run in real time — no OTLP, collector, or Docker. It wires `WithLiveDashboardTracer()` and streams every loop event to the browser over Server-Sent Events; the page (`wwwroot/index.html` + `app.css` + `app.js`, no build step) groups the stream into a **searchable runs** sidebar, per-run stats and the final **result**, a **per-turn telemetry** table, and a turn-divided live trace where every event expands to its **raw detail**. The result is the last model response's text — the sample builds the tracer with `enableSensitiveData: true` to include it (off by default, so no model output leaves the process unless you opt in). Runs with the scripted model client, so no API key is needed (add one to `samples/LiveDashboard/appsettings.local.json` to drive a real model).
 
 ```bash
 dotnet run --project samples/LiveDashboard

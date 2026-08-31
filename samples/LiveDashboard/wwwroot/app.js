@@ -13,6 +13,8 @@ const runsEl = document.getElementById('runs');
 const detailEl = document.getElementById('detail');
 const connEl = document.getElementById('conn');
 const taskEl = document.getElementById('task');
+const searchEl = document.getElementById('run-search');
+let query = '';
 
 const feed = new EventSource('/feed');
 feed.onopen = () => { connEl.textContent = 'live'; connEl.className = 'badge ok'; };
@@ -21,6 +23,7 @@ feed.onmessage = ev => ingest(JSON.parse(ev.data));
 
 document.getElementById('run').onclick = start;
 taskEl.addEventListener('keydown', e => { if (e.key === 'Enter') start(); });
+searchEl.addEventListener('input', () => { query = searchEl.value.trim().toLowerCase(); renderRuns(); });
 
 function start() {
   fetch('/run', {
@@ -81,6 +84,7 @@ function ingest(e) {
     }
     case 'done':
       r.status = (d.status || 'done').toLowerCase();
+      r.failure = d.failureReason;
       break;
   }
   renderRuns();
@@ -89,7 +93,9 @@ function ingest(e) {
 
 function renderRuns() {
   if (order.length === 0) { runsEl.innerHTML = '<p class="empty">No runs yet.</p>'; return; }
-  runsEl.innerHTML = order.map(id => {
+  const ids = query ? order.filter(id => runs.get(id).title.toLowerCase().includes(query)) : order;
+  if (ids.length === 0) { runsEl.innerHTML = '<p class="empty">No runs match.</p>'; return; }
+  runsEl.innerHTML = ids.map(id => {
     const r = runs.get(id);
     return `<button class="taskrow ${id === selected ? 'active' : ''}" data-id="${id}">
       <span class="taskrow-top">
@@ -107,9 +113,34 @@ function renderDetail() {
   const r = runs.get(selected);
   if (!r) { detailEl.innerHTML = '<p class="empty">Select a run, or start one above.</p>'; return; }
   const turns = [...r.turns.values()].sort((a, b) => a.turn - b.turn);
-  detailEl.innerHTML = statsHtml(r) + (turns.length ? turnsHtml(turns) : '') + timelineHtml(r);
+  detailEl.innerHTML = statsHtml(r) + resultHtml(r) + (turns.length ? turnsHtml(turns) : '') + timelineHtml(r);
   detailEl.querySelectorAll('details[data-seq]').forEach(el =>
     el.ontoggle = () => { const s = +el.dataset.seq; el.open ? expanded.add(s) : expanded.delete(s); });
+}
+
+// The run's result is the final answer: the text of the last model response (present only when the
+// tracer was built with enableSensitiveData). A failed run shows its failure reason instead.
+function resultHtml(r) {
+  if (r.status === 'failed') return `<section class="result fail"><h2>Result</h2><pre class="answer">${escapeHtml(r.failure || 'Run failed.')}</pre></section>`;
+  const ans = resultText(r);
+  if (!ans) return '';
+  return `<section class="result"><h2>Result</h2>${renderAnswer(ans)}</section>`;
+}
+
+function resultText(r) {
+  for (let i = r.events.length - 1; i >= 0; i--) {
+    const e = r.events[i];
+    if (e.kind === 'model' && e.detail && e.detail.text) return e.detail.text;
+  }
+  return null;
+}
+
+function renderAnswer(s) {
+  const t = s.trim();
+  if (t[0] === '{' || t[0] === '[') {
+    try { return `<pre class="answer">${escapeHtml(JSON.stringify(JSON.parse(t), null, 2))}</pre>`; } catch { /* not JSON */ }
+  }
+  return `<p class="answer">${escapeHtml(s)}</p>`;
 }
 
 function statsHtml(r) {

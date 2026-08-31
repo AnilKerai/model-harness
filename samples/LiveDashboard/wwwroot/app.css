@@ -70,6 +70,8 @@ body {
 
 .tasklist { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
 .tasklist h2 { font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.run-search { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+.run-search:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
 .taskrow {
     display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left;
     background: transparent; border: 1px solid transparent; border-radius: 8px;
@@ -114,6 +116,14 @@ body {
     position: sticky; top: 0; background: #f1f4f8;
     font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600;
 }
+
+.result { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.result h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.result.fail { border-color: #fecaca; }
+.result .answer { margin: 0; white-space: pre-wrap; word-break: break-word; }
+p.answer { font-size: 14px; line-height: 1.55; }
+pre.answer { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+.result.fail .answer { color: var(--red); background: none; padding: 0; font-size: 13px; }
 
 .timeline { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .timeline h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }

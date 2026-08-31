@@ -20,7 +20,8 @@ var usingRealModel = !string.IsNullOrWhiteSpace(apiKey);
 
 // The dashboard endpoints need this exact instance to Subscribe(), so construct it here and hand
 // it to the builder (which also registers it as a singleton for anything else that wants it).
-var dashboard = new LiveDashboardTracer();
+// enableSensitiveData: this is a local console, so include model response text — that's the run's result.
+var dashboard = new LiveDashboardTracer(enableSensitiveData: true);
 
 builder.Services.AddStandardModelHarness(h =>
 {
