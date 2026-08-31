@@ -200,6 +200,22 @@ public static class DependencyInjection
         this ModelHarnessBuilder builder, bool enableSensitiveData = false, string? agentName = null) =>
         builder.WithTracer(_ => new OpenTelemetryTracer(enableSensitiveData, agentName));
 
+    /// <summary>
+    /// Adds a <see cref="LiveDashboardTracer"/> — a zero-dependency in-process feed for a live agent
+    /// console (no OTLP, no collector, no Docker). The same instance is registered as a singleton so a
+    /// host endpoint (e.g. Server-Sent Events) can resolve it and call <see cref="LiveDashboardTracer.Subscribe"/>.
+    /// Pass your own <paramref name="tracer"/> when the endpoint needs to close over the instance directly;
+    /// otherwise one is created and resolvable from DI. Composes with <see cref="WithOtelTracer"/>.
+    /// See <c>samples/LiveDashboard</c>.
+    /// </summary>
+    public static ModelHarnessBuilder WithLiveDashboardTracer(
+        this ModelHarnessBuilder builder, LiveDashboardTracer? tracer = null)
+    {
+        var instance = tracer ?? new LiveDashboardTracer();
+        builder.Services.AddSingleton(instance);
+        return builder.WithTracer(_ => instance);
+    }
+
     // ── Layer 3: opinionated entry point ─────────────────────────────────────
 
     /// <summary>
