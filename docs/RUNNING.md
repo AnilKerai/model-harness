@@ -79,10 +79,10 @@ dotnet run --project samples/StructuredOutput
 `samples/LiveDashboard` is a small web app that watches an agent run in real time — no OTLP, collector, or Docker. It wires `WithLiveDashboardTracer()` and streams every loop event (turns, model calls, tool calls, sensor interventions, budget burn-down) to a browser over Server-Sent Events. Runs with the scripted model client, so no API key is needed (add one to `samples/LiveDashboard/appsettings.local.json` to drive a real model).
 
 ```bash
-dotnet run --project samples/LiveDashboard --urls http://localhost:5137
+dotnet run --project samples/LiveDashboard
 ```
 
-Open `http://localhost:5137`: a task runs on startup, and the **Run** button fires more. Because the feed keeps a ring buffer, a browser opened after a run still replays its history. This is the local operator console; for durable, multi-run history point `WithOtelTracer()` at an OTLP backend (the two compose) — see [EXTENDING.md](EXTENDING.md).
+The launch profile binds it to `http://localhost:5137` (override with `--urls`). Open that address: a task runs on startup, and the **Run** button fires more. Because the feed keeps a ring buffer, a browser opened after a run still replays its history. This is the local operator console; for durable, multi-run history point `WithOtelTracer()` at an OTLP backend (the two compose) — see [EXTENDING.md](EXTENDING.md).
 
 ## What you'll see
 
