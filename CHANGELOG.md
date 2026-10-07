@@ -14,11 +14,13 @@ public API even though most consumers only implement a few of them.
 
 ## [Unreleased]
 
-Langfuse-ready traces, using only the standard OpenTelemetry GenAI attributes — the library still has no
-OpenTelemetry SDK or vendor dependency, so the same spans read correctly in any GenAI-aware backend. The new
-`samples/Langfuse` exports a two-turn chat to Langfuse over OTLP. Nothing is removed and nothing stops
-compiling; the content-capture JSON shape changes (opt-in, see below), and a double-registered tracer now
-emits one span tree instead of two.
+A minor release (3.1.0). Two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI
+attributes — the library still has no OpenTelemetry SDK or vendor dependency, so the same spans read correctly
+in any GenAI-aware backend, and the new `samples/Langfuse` exports a two-turn chat to Langfuse over OTLP — and
+Claude pricing brought up to date. Nothing is removed and nothing stops compiling. The behavioural changes are
+corrections, each marked below with what to re-check: `ModelResponse.Cost` for Claude models now matches the
+first-party price list, the content-capture JSON follows the GenAI schema (opt-in), and a double-registered
+tracer emits one span tree instead of two.
 
 ### Added
 
@@ -60,6 +62,41 @@ emits one span tree instead of two.
   `gen_ai.response.finish_reasons` is unchanged.
 
 ### Fixed
+
+- **`ClaudeModelClient` priced Claude from a stale three-family table.** It matched only `haiku` / `opus` /
+  everything-else, at May 2026 rates: every Haiku at $0.80 / $4, every Opus at $15 / $75, and everything
+  else (Sonnet, Fable, unknown ids) at $3 / $15 per million input / output tokens, with cache reads at 0.1×
+  input for all. Current first-party prices differ on almost every model, and a family cannot tell Opus 4.x
+  from Opus 5.5, Sonnet 4.6 from Sonnet 5.x, or Haiku 4.5 from Haiku 5.5. Pricing now lives in an internal
+  `ClaudePricing` table matched by the longest model-id prefix (so dated ids such as
+  `claude-haiku-4-5-20251001` resolve), checked against the pricing page on 2026-10-11:
+
+  | Model | Input | Output | Cache read |
+  |---|---:|---:|---:|
+  | Fable 5.1 / Mythos 5.1 | $10 | $50 | $0.25 (0.025×) |
+  | Fable 5 / Mythos 5 | $10 | $50 | $1.00 |
+  | Opus 5.5 | $4 | $20 | $0.20 (0.05×) |
+  | Opus 5, 4.8, 4.7, 4.6, 4.5 | $5 | $25 | $0.50 |
+  | Sonnet 5.5 | $2 | $10 | $0.10 (0.05×) |
+  | Sonnet 5 | $2 | $10 | $0.20 |
+  | Sonnet 4.6, 4.5 | $3 | $15 | $0.30 |
+  | Haiku 5.5, prompt up to 100K tokens | $0.10 | $0.50 | $0.01 |
+  | Haiku 5.5, prompt over 100K tokens | $0.50 | $2.50 | $0.05 |
+  | Haiku 4.5 | $1 | $5 | $0.10 |
+
+  5-minute cache writes stay at 1.25× input. Haiku 5.5 is priced per request by prompt length: a prompt over
+  100,000 tokens — counting cache reads and writes — moves the whole request, output included, to the higher
+  row. An id missing from the table is now priced at the top tier ($10 / $50) rather than at Sonnet's rate, so
+  a stale table over-reports and stops a `MaxCost` budget early instead of letting a run overspend unnoticed.
+
+  **Behavioural change:** `ModelResponse.Cost` changes for every Claude model, and with it everything summed
+  from it — `AgentState.TotalSpend()`, `Budget.MaxCost` enforcement, sub-agent spend rolled up by
+  `AgentTool`, the `harness.cost` telemetry and the live dashboard. A Haiku 4.5 run now reports 25% more
+  than before and a Fable 5.x run 3⅓× as much, so they reach a `MaxCost` cap sooner; Opus 4.x reports a
+  third, Sonnet 5.x two thirds and Haiku 5.5 an eighth (five eighths on long prompts) of before, so they reach
+  it later. No code change is needed. Re-check any `MaxCost` set against the old figures, and drop any
+  downstream repricing written to work around this (for example re-deriving Haiku 4.5 cost from token usage).
+  For Haiku 4.5, `harness.cost` now matches the figure Langfuse computes from the same tokens.
 
 - **`WithOtelTracer(...)` on a standard harness emitted every span twice.** `AddStandardModelHarness`,
   `AddStandardChatHarness` and `AgentFactory.AddStandardAgent` already add an `OpenTelemetryTracer`, and

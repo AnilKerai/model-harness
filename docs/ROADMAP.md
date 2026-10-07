@@ -222,10 +222,11 @@ optimisation decisions.
 
 - **Token / prompt caching** — **done for Anthropic**: `ClaudeModelClient` sets a top-level
   `cache_control` breakpoint each turn (auto-placed on the last block), so the stable
-  tool + system + prior-turn prefix is a cache read (~0.1× input cost) on the next turn
-  instead of re-billed in full. Opt out via `ClaudeClientOptions.EnablePromptCaching = false`.
-  Usage/cost accounting folds the cache buckets into `Usage.InputTokens` so token budgets see the
-  true prompt size, and `ModelResponse.CachedInputTokens`/`CacheWriteTokens` surface the breakdown
+  tool + system + prior-turn prefix is a cache read (0.1× input cost, less on Opus 5.5, Sonnet 5.5
+  and Fable 5.1) on the next turn instead of re-billed in full. Opt out via
+  `ClaudeClientOptions.EnablePromptCaching = false`. Usage/cost accounting folds the cache buckets
+  into `Usage.InputTokens` so token budgets see the true prompt size, prices each bucket at the
+  model's own rate (`ClaudePricing`, matched by model id prefix; Haiku 5.5's long-prompt tier is applied per request), and `ModelResponse.CachedInputTokens`/`CacheWriteTokens` surface the breakdown
   as `cache_read`/`cache_creation` token types in telemetry so hit-rate is observable.
   Azure/OpenAI caches prefixes automatically server-side (no code); Ollama is local. Kept
   adapter-local — the harness annotates no caching hints on `ContextDraft`. If a shared

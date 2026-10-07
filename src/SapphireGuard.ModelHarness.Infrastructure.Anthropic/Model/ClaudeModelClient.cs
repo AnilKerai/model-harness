@@ -225,9 +225,9 @@ public sealed class ClaudeModelClient : IModelClient
         }
 
         // With prompt caching on, Anthropic reports input_tokens as the uncached remainder only;
-        // the cached prefix is billed separately (read ~0.1x, 5-min write 1.25x). Fold all three
-        // buckets into the reported input count so token budgets see the true prompt size, and
-        // price each bucket at its own rate below.
+        // the cached prefix is billed separately (reads at a per-model fraction of input, 5-min writes
+        // at 1.25x). Fold all three buckets into the reported input count so token budgets see the
+        // true prompt size, and price each bucket at its own rate below.
         var uncachedInput = response.Usage.InputTokens;
         var cacheReadTokens = response.Usage.CacheReadInputTokens ?? 0;
         var cacheWriteTokens = response.Usage.CacheCreationInputTokens ?? 0;
@@ -247,8 +247,7 @@ public sealed class ClaudeModelClient : IModelClient
         var rateLimitedInput = (int)(uncachedInput + cacheWriteTokens);
 
         var stopReason = ClaudeWireFormat.MapStopReason(response.StopReason?.Raw());
-        var cost = CalculateCost(
-            ExtractModelFamily(response.Model), uncachedInput, cacheReadTokens, cacheWriteTokens, outputTokens);
+        var cost = ClaudePricing.Cost(response.Model, uncachedInput, cacheReadTokens, cacheWriteTokens, outputTokens);
 
         return new ModelResponse
         {
@@ -263,32 +262,5 @@ public sealed class ClaudeModelClient : IModelClient
             CacheWriteTokens = (int)cacheWriteTokens,
             InputTokensTowardRateLimit = rateLimitedInput
         };
-    }
-
-    // Approximate cost based on published pricing (May 2026).
-    // Prices change — update from https://www.anthropic.com/pricing when stale.
-    // Cache reads bill at ~0.1x the input rate; 5-minute cache writes at 1.25x.
-    private static decimal CalculateCost(
-        string modelFamily, long uncachedInput, long cacheReadTokens, long cacheWriteTokens, long outputTokens)
-    {
-        var (inputPer1M, outputPer1M) = modelFamily switch
-        {
-            "haiku" => (0.80m, 4.00m),
-            "opus" => (15.00m, 75.00m),
-            _ => (3.00m, 15.00m) // sonnet default
-        };
-
-        return (uncachedInput * inputPer1M
-              + cacheReadTokens * inputPer1M * 0.1m
-              + cacheWriteTokens * inputPer1M * 1.25m) / 1_000_000m
-             + (outputTokens * outputPer1M / 1_000_000m);
-    }
-
-    private static string ExtractModelFamily(string? modelId)
-    {
-        if (modelId is null) return "sonnet";
-        if (modelId.Contains("haiku", StringComparison.OrdinalIgnoreCase)) return "haiku";
-        if (modelId.Contains("opus", StringComparison.OrdinalIgnoreCase)) return "opus";
-        return "sonnet";
     }
 }
