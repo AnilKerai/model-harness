@@ -36,8 +36,10 @@ public sealed class ToneSensor(IModelClient modelClient) : ISensor
         var verdict = response.Text ?? "";
         var start = verdict.IndexOf('{');
         var end = verdict.LastIndexOf('}');
+        // The call worked but produced no verdict. That is not a pass: Failed is non-blocking and is
+        // recorded as a sensor error, the same as a throw.
         if (start < 0 || end <= start)
-            throw new InvalidOperationException("The tone model returned no JSON verdict.");
+            return SensorResult.Failed("The tone model returned no JSON verdict.");
 
         using var json = JsonDocument.Parse(verdict[start..(end + 1)]);
         var pass = json.RootElement.GetProperty("pass").GetBoolean();

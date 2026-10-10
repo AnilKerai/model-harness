@@ -249,8 +249,11 @@ at the same hookpoint. See the [sensor pattern](../README.md#the-sensor-pattern-
 **Don't catch your own failures.** A sensor that throws is failed *open* by the runner — it neither
 intervenes nor blocks, and the model keeps its turn — and is recorded as a sensor error: the
 `harness.sensor.evaluations` counter gets `verdict=error`, and the `gen_ai.evaluation.result` event is
-tagged `error.type=sensor_error` with the exception summary in `exception.message`. That summary is
-emitted even when `enableSensitiveData` is off, so keep conversation content out of it. Most
+tagged `error.type=sensor_error` with the error reason in `exception.message`. When your check runs
+but yields nothing usable — the model answered without a verdict — return `SensorResult.Failed(reason)`
+yourself rather than `Pass` (adding `with { Usage = …, Cost = … }` if you called a model, as
+`CriticSensor` does); it is recorded the same way. Either reason — the runner's exception summary or
+your own — is emitted even when `enableSensitiveData` is off, so keep conversation content out of it. Most
 exceptions are safe to let through — an HTTP failure, a malformed-JSON error, a missing property — but
 the BCL `Parse` methods (`int.Parse`, `decimal.Parse`, `bool.Parse`, `Enum.Parse`, …) quote the value
 they rejected: use `TryParse` on model output rather than letting such an exception escape.

@@ -85,9 +85,9 @@ Every entry that changes behaviour you can observe is marked.
   `DefaultSensorRunner` already fails open on a throwing sensor, so the answer is still returned — but
   the evaluation is recorded as an *error* (`harness.sensor.evaluations` with `verdict=error`, and an
   `error.type=sensor_error` event) instead of a pass. A response it cannot parse a score from is
-  reported the same way — previously a pass with a "review inconclusive" reason, which no tracer
-  surfaces — and still charged to the run. `samples/AiToneSensor` is updated to match, and the guidance
-  that told sensor authors to catch and return `Pass` is corrected.
+  reported the same way — previously a pass with a "review inconclusive" reason, which only
+  `ConsoleTracer` prints — and still charged to the run. `samples/AiToneSensor` no longer swallows
+  either case, and the guidance that told sensor authors to catch and return `Pass` is corrected.
 
   **Behavioural change:** nothing changes for a harness built with `AddModelHarness` /
   `AddStandardModelHarness` beyond the telemetry verdict. If you supply your **own `ISensorRunner`**,

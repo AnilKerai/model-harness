@@ -133,9 +133,9 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
                 tags["gen_ai.evaluation.explanation"] = result.Reason ?? string.Empty;
             if (result.IsError)
             {
-                // An error's reason is the runner's exception summary, not content the sensor flagged,
-                // so it is emitted ungated like a guide error — a failing sensor has to be diagnosable
-                // without turning on content capture.
+                // An error's reason describes the failure — the runner's exception summary, or a
+                // sensor's own Failed reason — not content the sensor flagged, so it is emitted ungated
+                // like a guide error: a failing sensor has to be diagnosable without content capture.
                 tags["error.type"] = "sensor_error";
                 tags["exception.message"] = result.Reason ?? string.Empty;
             }
