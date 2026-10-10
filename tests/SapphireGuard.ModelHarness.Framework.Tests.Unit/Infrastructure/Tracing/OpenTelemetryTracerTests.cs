@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Text.Json;
+using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Framework.Tracing;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
 using Xunit;
 
@@ -89,5 +91,76 @@ public sealed class OpenTelemetryTracerTests
         var root = activities.Single(a => a.OperationName == "invoke_agent" && (string?)a.GetTagItem("harness.task.id") == taskId);
         Assert.Equal("triage-agent", root.GetTagItem("gen_ai.agent.name"));
         Assert.Equal("invoke_agent triage-agent", root.DisplayName);
+    }
+
+    // Starts a trace, lets the caller emit events against it, and returns the tags of the one
+    // root-span event with the given name.
+    private static Dictionary<string, object?> RootEventTags(OpenTelemetryTracer tracer, string eventName, Action<string> emit)
+    {
+        var taskId = "otel-evt-" + Guid.NewGuid().ToString("N");
+        var activities = Capture(() =>
+        {
+            tracer.StartTrace(taskId, "task");
+            emit(taskId);
+            tracer.Complete(taskId, AgentStatus.Done, failureReason: null);
+        });
+
+        var root = activities.Single(a => a.OperationName == "invoke_agent" && (string?)a.GetTagItem("harness.task.id") == taskId);
+        return root.Events.Single(e => e.Name == eventName).Tags.ToDictionary(t => t.Key, t => t.Value);
+    }
+
+    [Fact]
+    public void A_sensor_failure_is_diagnosable_without_enabling_content_capture()
+    {
+        var tracer = new OpenTelemetryTracer();
+
+        var tags = RootEventTags(tracer, "gen_ai.evaluation.result", taskId =>
+            tracer.LogSensorResult(taskId, 0, HookPoint.PreReturn, "critic",
+                SensorResult.Failed("critic threw HttpRequestException: 401 Unauthorized")));
+
+        Assert.Equal("sensor_error", tags["error.type"]);
+        Assert.Equal("critic threw HttpRequestException: 401 Unauthorized", tags["exception.message"]);
+    }
+
+    [Fact]
+    public void An_intervention_reason_stays_gated_because_it_can_quote_flagged_content()
+    {
+        var tracer = new OpenTelemetryTracer();
+
+        var tags = RootEventTags(tracer, "gen_ai.evaluation.result", taskId =>
+            tracer.LogSensorResult(taskId, 0, HookPoint.PostModelCall, "pii",
+                SensorResult.Intervene("response contained jane@example.com")));
+
+        Assert.DoesNotContain("gen_ai.evaluation.explanation", tags.Keys);
+        Assert.DoesNotContain("exception.message", tags.Keys);
+    }
+
+    [Fact]
+    public void A_failed_compaction_is_flagged_on_the_compact_context_event()
+    {
+        var tracer = new OpenTelemetryTracer();
+
+        var tags = RootEventTags(tracer, "compact_context", taskId =>
+            tracer.LogCompaction(taskId, 0,
+                new CompactionTrace(StepsEvicted: 2, TokensReclaimed: 100, Folded: false, Usage.Zero, Cost: 0m)
+                {
+                    Error = "HttpRequestException: 503 Service Unavailable"
+                }));
+
+        Assert.Equal("compaction_error", tags["error.type"]);
+        Assert.Equal("HttpRequestException: 503 Service Unavailable", tags["exception.message"]);
+    }
+
+    [Fact]
+    public void A_successful_compaction_carries_no_error_tags()
+    {
+        var tracer = new OpenTelemetryTracer();
+
+        var tags = RootEventTags(tracer, "compact_context", taskId =>
+            tracer.LogCompaction(taskId, 0,
+                new CompactionTrace(StepsEvicted: 2, TokensReclaimed: 100, Folded: true, Usage.Zero, Cost: 0m)));
+
+        Assert.DoesNotContain("error.type", tags.Keys);
+        Assert.DoesNotContain("exception.message", tags.Keys);
     }
 }

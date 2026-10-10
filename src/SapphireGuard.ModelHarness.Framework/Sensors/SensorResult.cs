@@ -47,6 +47,8 @@ public sealed record SensorResult(bool IsIntervene, string? Reason, bool Suppres
     /// not a pass) rather than silently swallowed. Produced by the sensor runner when a sensor's
     /// <c>CheckAsync</c> throws. A sensor that must fail <em>closed</em> (e.g. a hard security gate)
     /// should catch its own exception and return an <see cref="Intervene(string)"/> instead.
+    /// Unlike an intervention's reason, <paramref name="reason"/> is emitted to telemetry without
+    /// content gating, so it must describe the failure and never quote conversation content.
     /// </summary>
     public static SensorResult Failed(string reason) => new(false, reason, IsError: true);
 }

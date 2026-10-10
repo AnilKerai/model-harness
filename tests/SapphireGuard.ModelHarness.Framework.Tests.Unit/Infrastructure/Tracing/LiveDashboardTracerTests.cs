@@ -1,5 +1,7 @@
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Sensors;
+using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Framework.Tracing;
 using SapphireGuard.ModelHarness.Infrastructure.Tracing;
 using Xunit;
 
@@ -44,5 +46,24 @@ public sealed class LiveDashboardTracerTests
         Assert.Equal("sensor", feed.Current.Kind);
         // A leaked pass would arrive first with a null reason; the intervene carries "blocked".
         Assert.Contains("blocked", JsonSerializer.Serialize(feed.Current.Detail));
+    }
+
+    [Fact]
+    public async Task LogCompaction_WithAnError_ReportsTheFallbackNotASuccess()
+    {
+        var tracer = new LiveDashboardTracer();
+        tracer.LogCompaction("t", 0,
+            new CompactionTrace(StepsEvicted: 2, TokensReclaimed: 100, Folded: false, Usage.Zero, Cost: 0m)
+            {
+                Error = "HttpRequestException: 503"
+            });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var feed = tracer.Subscribe(cts.Token).GetAsyncEnumerator();
+
+        Assert.True(await feed.MoveNextAsync()); // replayed from the backlog
+        Assert.Equal("compaction", feed.Current.Kind);
+        Assert.Contains("HttpRequestException: 503", feed.Current.Summary);
+        Assert.DoesNotContain("Compacted", feed.Current.Summary);
     }
 }

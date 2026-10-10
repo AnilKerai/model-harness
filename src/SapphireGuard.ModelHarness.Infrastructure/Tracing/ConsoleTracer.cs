@@ -70,7 +70,8 @@ public sealed class ConsoleTracer(TimeProvider? timeProvider = null) : ITracer
             tokensReclaimed = trace.TokensReclaimed,
             folded = trace.Folded,
             usage = new { input = trace.Usage.InputTokens, output = trace.Usage.OutputTokens },
-            cost = trace.Cost
+            cost = trace.Cost,
+            error = trace.Error
         });
 
     public void LogGuideError(string taskId, int turn, string guideName, string error) =>

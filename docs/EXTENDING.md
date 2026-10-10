@@ -246,6 +246,17 @@ builder.WithSensor<MySensor>()
 `DefaultSensorRunner` picks it up automatically and runs it in parallel with other sensors
 at the same hookpoint. See the [sensor pattern](../README.md#the-sensor-pattern--observing-and-intervening) for how to implement `ISensor`.
 
+**Don't catch your own failures.** A sensor that throws is failed *open* by the runner — it neither
+intervenes nor blocks, and the model keeps its turn — and is recorded as a sensor error: the
+`harness.sensor.evaluations` counter gets `verdict=error`, and the `gen_ai.evaluation.result` event is
+tagged `error.type=sensor_error` with the exception summary in `exception.message`. That summary is
+emitted even when `enableSensitiveData` is off, so keep conversation content out of it: a parse
+exception can quote the input it choked on (`Enum.Parse`, `int.Parse`), so handle a failed parse of
+model output yourself rather than letting it escape.
+Returning `SensorResult.Pass` from a `catch` gives the same run behaviour but hides the fault behind a
+clean result. The one exception is a hard security gate that must fail *closed*: catch and return
+`Intervene`, as `TaintTrackingSensor` does at `PreToolCall`.
+
 ## Taint tracking *(Experimental)*
 
 Taint tracking guards against prompt injection attacks that attempt to use external content to trigger privileged side-effecting actions. See the [Prompt injection and taint tracking](FEATURES.md#prompt-injection-and-taint-tracking-experimental) feature write-up for the threat model, and [PRIMER.md](PRIMER.md#prompt-injection-and-taint-tracking) for the theory.
@@ -428,7 +439,8 @@ keeps turn numbering continuous across a resume: a HITL suspend/resume, checkpoi
 chat turn re-enters `RunAsync`, and a from-zero counter would restart the loop-emitted numbering
 while the guide-derived index (read from the restored trajectory) kept counting. The guide runner
 also fires `LogCompaction`
-with a `CompactionTrace` (steps evicted, tokens reclaimed, folded, spend) whenever the trajectory
+with a `CompactionTrace` (steps evicted, tokens reclaimed, folded, spend, and an `Error` when the pass
+fell back instead of compacting) whenever the trajectory
 guide compacts — the telemetry for watching eviction on a long run. Three further per-turn hooks give
 the loop full trace coverage: `LogRateLimit` (a rate-limit backoff wait), `LogCheckpoint` (each
 checkpoint save and its duration), and `LogBudgetSnapshot` (cumulative turns/tokens/cost/wall-clock
@@ -495,8 +507,10 @@ Two things to know once the traces arrive:
   text on evaluation events. **Off by default** — no user or model content leaves the process unless you
   opt in. Turn it on in development to read the exchange; leave it off in production (and note that content
   attributes make spans larger, so ingestion cost rises when it's on). Error-path diagnostics — span
-  status, the `exception` event, `harness.failure.reason` — are always emitted regardless, since they only
-  appear when something already failed.
+  status, the `exception` event, `harness.failure.reason`, and the exception summary
+  (`exception.message`) on a failed guide (`guide_error`), sensor (`sensor_error`) or compaction pass
+  (`compaction_error`) — are always emitted regardless, since they only appear when something already
+  failed.
 - **`agentName`** (default `null`) — stamped on the root span as `gen_ai.agent.name` and into its display
   name, so several agents in one process are told apart in the backend. For *which deployment* a trace
   came from, set `service.name` on the host resource instead; the source name itself is a fixed constant
@@ -802,7 +816,7 @@ builder.WithAiCompaction(
 
 **Size `WindowTokens` to the task, not tight.** Below the window the trajectory guide does nothing, so a task that fits never compacts and pays zero cost or lossiness. Compaction trades fidelity for bounded context — it earns its keep only on long-horizon runs (deep research, multi-hour coding, long chat). A bounded task (e.g. a verification agent that loads a procedure, checks a few sources, and emits a report) should keep a generous window and leave compaction dormant; forcing a small window just pays the fidelity cost for no benefit.
 
-The rolling summary is checkpointed, so a resumed run rehydrates it and folds onward rather than recomputing. The strategy's token usage and cost accumulate on `AgentState.CompactionUsage` / `CompactionCost` and are counted by the budget enforcer. It fails open — on model error or empty output the prior summary is preserved and a bare note is injected for the newly evicted slice (retried next turn), so a compaction failure never blocks the run. Use a fast, cheap model (Haiku-class).
+The rolling summary is checkpointed, so a resumed run rehydrates it and folds onward rather than recomputing. The strategy's token usage and cost accumulate on `AgentState.CompactionUsage` / `CompactionCost` and are counted by the budget enforcer. It fails open — on model error, timeout, or empty output the prior summary is preserved and a bare note is injected for the newly evicted slice (retried next turn), so a compaction failure never blocks the run. The reason is reported on the compaction trace (`CompactionTrace.Error`; `OpenTelemetryTracer` tags the `compact_context` event `error.type=compaction_error` with the exception summary), so a degraded fold is visible rather than silent. Use a fast, cheap model (Haiku-class).
 
 ### Write a custom compaction strategy
 
@@ -831,7 +845,7 @@ public sealed class MyCompactionStrategy : ICompactionStrategy
 }
 ```
 
-Return `UpdatedSummary = null` to behave as a stateless view (the `NullCompactionStrategy` default); return a folded `RollingSummary` to compact incrementally. `CompactAsync` runs in the loop's hot path — it should not throw (the harness wraps it and falls back to an omission note) but must honour cancellation.
+Return `UpdatedSummary = null` to behave as a stateless view (the `NullCompactionStrategy` default); return a folded `RollingSummary` to compact incrementally. `CompactAsync` runs in the loop's hot path — it should not throw (the harness wraps it, falls back to an omission note, and records the exception on `CompactionTrace.Error`) but must honour cancellation. A strategy that degrades internally instead of throwing should set `CompactionResult.Error`, so its fallback shows up in telemetry the same way.
 
 `samples/Compaction` is a runnable, no-API-key demo: it runs the same task with a narrating view strategy and a narrating fold strategy so you can watch, turn by turn, the view re-summarise the whole growing head while the fold only touches the newly evicted slice at a flat cost.
 

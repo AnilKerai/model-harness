@@ -16,4 +16,8 @@
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SapphireGuard.ModelHarness.Framework.Tests.Unit" />
+  </ItemGroup>
+
 </Project>

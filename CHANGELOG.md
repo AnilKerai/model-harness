@@ -12,6 +12,94 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+Two fixes from a repo audit: the Azure adapter was dropping assistant text from history, and a failing
+AI sensor or compaction fold was invisible in telemetry. No API removed; one additive property pair.
+Every entry that changes behaviour you can observe is marked.
+
+### Fixed
+
+- **The Azure OpenAI adapter dropped assistant text from the conversation history.** When it batched a
+  run of assistant turns into one `AssistantChatMessage` it kept only the *last* text, and discarded
+  the text entirely whenever the run included a tool call. Two consequences: a `PreReturn` challenge
+  (`CriticSensor`, the `WithStructuredOutput<T>()` repair loop) renders as `[answer, harness
+  observation]`, so the observation overwrote the very answer the model was being asked to correct;
+  and a `PostToolCall` advisory (a `PromptInjectionSensor` or `TaintTrackingSensor` warning) vanished
+  from history as soon as another tool call followed it. The run is still sent as a single assistant
+  message — providers differ in how they treat back-to-back assistant messages — but every text in it
+  is now kept, joined with a blank line, and carried on the same message as the tool call.
+
+  **Behavioural change:** Azure requests now include assistant text that was previously missing, so
+  prompts are slightly larger and the model sees its own earlier text and every harness observation.
+  The Anthropic and Ollama adapters were not affected.
+
+- **A guide's or compaction strategy's own timeout ended the run as "cancelled".** An `HttpClient`
+  timeout surfaces as `TaskCanceledException` — an `OperationCanceledException` — even though the
+  harness token was never cancelled. `DefaultGuideRunner` and `HeadEvictionTrajectoryGuide` rethrew
+  every `OperationCanceledException`, so a slow memory store, skill store, or third-party
+  `ICompactionStrategy` took the whole run down instead of degrading the turn — the case their
+  fail-open handling exists for. Both now let only *genuine* cancellation (`ct.IsCancellationRequested`)
+  propagate, matching what `DefaultSensorRunner` already did for sensors.
+
+  **Behavioural change:** a run that previously returned `Failed` ("cancelled") on such a timeout now
+  continues: the guide's contribution is skipped and logged via `LogGuideError`, or the evicted slice
+  falls back to an omission note.
+
+### Changed
+
+- **`CriticSensor` no longer swallows a failed model call.** It caught every exception and returned
+  `SensorResult.Pass`, so a permanently broken critic (a bad key, a retired model) was
+  indistinguishable from one that approved every answer. It now lets the exception propagate.
+  `DefaultSensorRunner` already fails open on a throwing sensor, so the answer is still returned — but
+  the evaluation is recorded as an *error* (`harness.sensor.evaluations` with `verdict=error`, and an
+  `error.type=sensor_error` event) instead of a pass. `samples/AiToneSensor` is updated the same way,
+  and the guidance that told sensor authors to catch and return `Pass` is corrected.
+
+  **Behavioural change:** nothing changes for a harness built with `AddModelHarness` /
+  `AddStandardModelHarness` beyond the telemetry verdict. If you supply your **own `ISensorRunner`**,
+  or call `CriticSensor.CheckAsync` directly, a failed critic call now throws to you:
+
+  ```csharp
+  // Before — the critic never threw
+  var result = await critic.CheckAsync(HookPoint.PreReturn, state, step, ct);
+
+  // After — fail open yourself, as DefaultSensorRunner does
+  SensorResult result;
+  try { result = await critic.CheckAsync(HookPoint.PreReturn, state, step, ct); }
+  catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+  catch (Exception ex) { result = SensorResult.Failed($"critic threw {ex.GetType().Name}: {ex.Message}"); }
+  ```
+
+- **A sensor failure is diagnosable in OpenTelemetry without `enableSensitiveData`.** The
+  `gen_ai.evaluation.result` event for a failed sensor carried `error.type=sensor_error` but put the
+  reason behind the content gate, so by default you could see *that* a sensor failed and not *why*.
+  The runner's exception summary is now always emitted as `exception.message`, the same way a guide
+  error's already was. Intervention reasons stay gated — they can quote the content a sensor flagged.
+
+  **Behavioural change:** the text of an exception thrown by a sensor now leaves the process by
+  default. Provider-SDK exception messages describe the failure, not the conversation — but a parse
+  failure can quote the input it choked on (`Enum.Parse` and `int.Parse` name the offending value).
+  A sensor of **your own** that parses model output should handle a failed parse itself, or throw a
+  content-free message, rather than let such an exception escape.
+
+### Added
+
+- **`CompactionResult.Error` and `CompactionTrace.Error` — a failed compaction is no longer silent.**
+  Compaction fails open twice over (the guide falls back to an omission note when a strategy throws;
+  `AiCompactionStrategy` keeps the prior summary when its model call fails or returns nothing), and
+  both paths did so without a trace — a compaction model that was down simply produced omission notes
+  forever. The reason now travels on the result into the trace: `OpenTelemetryTracer` tags the
+  `compact_context` event `error.type=compaction_error` with the summary in `exception.message`,
+  `ConsoleTracer` adds `error` to its `compaction` line, and `LiveDashboardTracer` publishes a
+  "Compaction fell back" line instead of "Compacted". Both properties are optional and `null` on
+  success — additive, no migration. A custom `ICompactionStrategy` that degrades internally instead of
+  throwing can set `CompactionResult.Error` to report through the same channel.
+
+  **Behavioural change:** a pass that carries an `Error` now reports `Folded = false`.
+  `AiCompactionStrategy` fails open by handing the prior summary back unchanged, which previously set
+  `harness.compaction.folded=true` on a pass that had folded nothing.
+
 ## [2.4.0] — 2026-08-31
 
 ### Added

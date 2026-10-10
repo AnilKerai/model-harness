@@ -184,6 +184,45 @@ public sealed class DefaultGuideRunnerTests
         Assert.DoesNotContain(tracer.Contributions, c => c.Guide == "boom");
     }
 
+    private sealed class TimingOutGuide(string name) : IGuide
+    {
+        public string Name => name;
+        public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+            => throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
+    }
+
+    [Fact]
+    public async Task SupportingGuideTimesOutOnItsOwn_IsSkippedAndLoggedAsError()
+    {
+        // A memory or skill store's HTTP timeout surfaces as TaskCanceledException — an
+        // OperationCanceledException — even though the harness token was never cancelled. It must
+        // degrade the turn like any other guide fault, not end the run as "cancelled".
+        var tracer = new RecordingTracer();
+        var log = new List<string>();
+        var runner = new DefaultGuideRunner(
+            [new TimingOutGuide("memory"), new RecordingGuide("c", log)],
+            new RecordingTrajectoryGuide(log),
+            tracer);
+
+        await runner.RunAsync(State(), [], CancellationToken.None);
+
+        Assert.Equal(new[] { "c", "trajectory" }, log);
+        var error = Assert.Single(tracer.GuideErrors);
+        Assert.Equal("memory", error.Guide);
+        Assert.Contains("TaskCanceledException", error.Error);
+    }
+
+    [Fact]
+    public async Task HarnessCancellationRequested_StillPropagates()
+    {
+        // The fail-open filter must not swallow genuine cancellation — that is real control flow.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var runner = new DefaultGuideRunner([new TimingOutGuide("memory")], new RecordingTrajectoryGuide([]), new RecordingTracer());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(State(), [], cts.Token));
+    }
+
     [Fact]
     public async Task EmitsCompactionTrace_WhenTrajectoryGuidePopulatesOne()
     {

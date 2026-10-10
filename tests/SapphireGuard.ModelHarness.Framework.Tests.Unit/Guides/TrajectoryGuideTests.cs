@@ -278,6 +278,86 @@ public sealed class HeadEvictionTrajectoryGuideTests
     }
 
     [Fact]
+    public async Task Contribute_StrategyThrows_RecordsWhyOnTheCompactionTrace()
+    {
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new ThrowingCompactionStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Equal("InvalidOperationException: strategy boom", draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_StrategyReportsItsOwnFailure_CarriesItOntoTheCompactionTrace()
+    {
+        // A strategy that fails open internally (AiCompactionStrategy keeps the prior summary) still
+        // has to be visible: its reported error rides the trace exactly like a thrown one.
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new SelfReportingFailureStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Equal("HttpRequestException: 503", draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_FoldFailsButKeepsThePriorSummary_IsNotReportedAsFolded()
+    {
+        // AiCompactionStrategy fails open by handing the prior summary back unchanged. That is a
+        // fallback, not a fold — the trace must not claim the newly evicted slice was folded.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new SelfReportingFailureStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.False(draft.CompactionTrace!.Folded);
+    }
+
+    [Fact]
+    public async Task Contribute_StrategySucceeds_LeavesTheTraceErrorNull()
+    {
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new RecordingCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Null(draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_StrategyTimesOutOnItsOwn_FailsOpenInsteadOfCancellingTheRun()
+    {
+        // A strategy's own HTTP timeout surfaces as TaskCanceledException — an
+        // OperationCanceledException — even though the harness token was never cancelled. It must
+        // fall back to the omission note like any other fault, not end the run as "cancelled".
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new TimingOutCompactionStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains("omitted", draft.Compaction!.InjectedText);
+        Assert.StartsWith("TaskCanceledException", draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_HarnessCancellationRequested_StillPropagates()
+    {
+        // The fail-open filter must not swallow genuine cancellation — that is real control flow.
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            EvictingGuide(new TimingOutCompactionStrategy()).ContributeAsync(new ContextDraft(), state, cts.Token));
+    }
+
+    [Fact]
     public async Task Contribute_WhenCompacting_PopulatesCompactionTrace()
     {
         var state = EmptyState()
@@ -353,5 +433,23 @@ public sealed class HeadEvictionTrajectoryGuideTests
     {
         public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
             throw new InvalidOperationException("strategy boom");
+    }
+
+    private sealed class TimingOutCompactionStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
+    }
+
+    // Mirrors how AiCompactionStrategy fails open: prior summary handed back, error reported.
+    private sealed class SelfReportingFailureStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            Task.FromResult(new CompactionResult
+            {
+                InjectedText = "[steps omitted — compaction unavailable]",
+                UpdatedSummary = request.PriorSummary,
+                Error = "HttpRequestException: 503"
+            });
     }
 }

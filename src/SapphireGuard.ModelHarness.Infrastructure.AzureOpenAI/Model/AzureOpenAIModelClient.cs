@@ -57,7 +57,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
         return MapResponse(result.Value);
     }
 
-    private static List<ChatMessage> BuildMessages(IReadOnlyList<FrameworkMessage> messages)
+    internal static List<ChatMessage> BuildMessages(IReadOnlyList<FrameworkMessage> messages)
     {
         var result = new List<ChatMessage>();
 
@@ -83,24 +83,36 @@ public sealed class AzureOpenAIModelClient : IModelClient
             }
             else if (msg.Role is MessageRole.Assistant or MessageRole.ToolUse)
             {
-                // Collect consecutive assistant/tool-use messages into a single AssistantChatMessage.
-                // GPT models can return text alongside tool calls in one turn; both are batched here.
-                string? text = null;
+                // Collect consecutive assistant/tool-use messages into a single AssistantChatMessage:
+                // chat-completions providers differ in how they treat back-to-back assistant messages,
+                // so the run is sent as one. Every text in it is kept — a harness observation following
+                // an answer must not replace the answer, and text beside a tool call rides on the same
+                // message rather than being dropped.
+                var texts = new List<string>();
                 var toolCalls = new List<ChatToolCall>();
 
                 while (i < nonSystem.Count &&
                        nonSystem[i].Role is MessageRole.Assistant or MessageRole.ToolUse)
                 {
                     if (nonSystem[i].Role == MessageRole.Assistant)
-                        text = nonSystem[i].Content;
+                        texts.Add(nonSystem[i].Content);
                     else
                         toolCalls.Add(ParseToolUse(nonSystem[i].Content));
                     i++;
                 }
 
-                result.Add(toolCalls.Count > 0
-                    ? new AssistantChatMessage(toolCalls)
-                    : new AssistantChatMessage(text ?? string.Empty));
+                var text = string.Join("\n\n", texts);
+                if (toolCalls.Count == 0)
+                {
+                    result.Add(new AssistantChatMessage(text));
+                }
+                else
+                {
+                    var assistant = new AssistantChatMessage(toolCalls);
+                    if (text.Length > 0)
+                        assistant.Content.Add(ChatMessageContentPart.CreateTextPart(text));
+                    result.Add(assistant);
+                }
             }
             else if (msg.Role == MessageRole.Tool)
             {

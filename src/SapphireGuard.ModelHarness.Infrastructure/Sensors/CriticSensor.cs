@@ -12,8 +12,10 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Sensors;
 /// harness observation and gives the model a fresh turn with its prior answer still visible; the
 /// loop's own consecutive-intervention cap bounds how many revision rounds run before it
 /// force-finalises, so no separate refinement counter is needed.
-/// Fails open — any model or parse failure passes the answer through, so a flaky critic never
-/// blocks a return. Pass a fast, cheap model (Haiku-class) to keep the per-answer overhead low.
+/// A flaky critic never blocks a return: an unparseable verdict passes the answer through, and a
+/// failed model call propagates to the sensor runner, which fails open and records it as a sensor
+/// error — so a broken critic shows up in telemetry instead of looking like a passed review.
+/// Pass a fast, cheap model (Haiku-class) to keep the per-answer overhead low.
 /// </summary>
 public sealed class CriticSensor(IModelClient modelClient, double passThreshold = 0.6) : ISensor
 {
@@ -35,21 +37,16 @@ public sealed class CriticSensor(IModelClient modelClient, double passThreshold 
         if (triggeringStep is not ModelCallStep { Response.Text: { Length: > 0 } answer })
             return SensorResult.Pass;
 
-        ModelResponse response;
-        try
-        {
-            response = await modelClient.CallAsync(
-                [
-                    SystemMessage,
-                    new Message(MessageRole.User, $"Task:\n{state.TaskText}\n\nProposed answer:\n{answer}")
-                ],
-                [],
-                ct);
-        }
-        catch
-        {
-            return SensorResult.Pass; // fail open — a flaky critic must never block a return
-        }
+        // Not wrapped in a try/catch: the sensor runner already fails open on a throwing sensor and
+        // records it as an error. Catching here and returning Pass would make a broken critic
+        // indistinguishable from a passed review.
+        var response = await modelClient.CallAsync(
+            [
+                SystemMessage,
+                new Message(MessageRole.User, $"Task:\n{state.TaskText}\n\nProposed answer:\n{answer}")
+            ],
+            [],
+            ct);
 
         if (!TryParseVerdict(response.Text, out var score, out var deficiencies))
             return SensorResult.PassWithUsage(response.Usage, response.Cost,

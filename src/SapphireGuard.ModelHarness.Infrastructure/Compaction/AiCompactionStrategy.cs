@@ -37,7 +37,7 @@ public sealed class AiCompactionStrategy(IModelClient modelClient) : ICompaction
                 ct);
 
             if (string.IsNullOrWhiteSpace(response.Text))
-                return FailOpen(request);
+                return FailOpen(request, "the compaction model returned an empty summary");
 
             var text = $"[Summary of {foldedCount} earlier step(s)] {response.Text.Trim()}";
             return new CompactionResult
@@ -48,19 +48,26 @@ public sealed class AiCompactionStrategy(IModelClient modelClient) : ICompaction
                 Cost = response.Cost
             };
         }
-        catch
+        // Genuine harness cancellation propagates; the model client's own timeout (a
+        // TaskCanceledException with our token untouched) fails open like any other fault.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return FailOpen(request);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return FailOpen(request, $"{ex.GetType().Name}: {ex.Message}");
         }
     }
 
     // On failure keep the prior summary intact (don't advance the watermark) and inject a bare note
-    // for the new slice — the guide re-evicts and retries it next turn, so nothing is lost.
-    private static CompactionResult FailOpen(CompactionRequest request)
+    // for the new slice — the guide re-evicts and retries it next turn, so nothing is lost. The
+    // error rides the result into the compaction trace, so the degraded turn is visible.
+    private static CompactionResult FailOpen(CompactionRequest request, string error)
     {
         var note = $"[{request.EvictedSteps.Count} recent step(s) omitted — compaction unavailable]";
         var text = request.PriorSummary is { } prior ? $"{prior.Text}\n{note}" : note;
-        return new CompactionResult { InjectedText = text, UpdatedSummary = request.PriorSummary };
+        return new CompactionResult { InjectedText = text, UpdatedSummary = request.PriorSummary, Error = error };
     }
 
     // The strategy owns its rendering — it receives typed steps, not pre-rendered prompt text, so it

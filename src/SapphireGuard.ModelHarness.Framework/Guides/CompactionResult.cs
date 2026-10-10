@@ -33,6 +33,14 @@ public sealed record CompactionResult
     public decimal Cost { get; init; } = 0m;
 
     /// <summary>
+    /// Why the strategy could not compact as intended and fell back — set by a strategy that fails
+    /// open internally, and by the harness when a strategy throws. <see langword="null"/> on success.
+    /// Surfaced in telemetry via <see cref="Tracing.CompactionTrace.Error"/> without content gating,
+    /// so it must describe the failure (an exception type and message), never conversation content.
+    /// </summary>
+    public string? Error { get; init; }
+
+    /// <summary>
     /// The standard bare omission note — a stateless view over <paramref name="evictedStepCount"/>
     /// dropped steps. Used by <see cref="NullCompactionStrategy"/> and as the harness's fail-open
     /// fallback when a strategy throws.

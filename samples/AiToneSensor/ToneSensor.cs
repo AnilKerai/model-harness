@@ -25,32 +25,28 @@ public sealed class ToneSensor(IModelClient modelClient) : ISensor
         if (triggeringStep is not ModelCallStep { Response.Text: { } text } || string.IsNullOrWhiteSpace(text))
             return SensorResult.Pass;
 
-        try
-        {
-            var response = await modelClient.CallAsync(
-                [SystemMessage, new Message(MessageRole.User, $"Evaluate the tone of this response:\n\n{text}")],
-                [],
-                ct);
+        // No try/catch: if the model call or the parse throws, the sensor runner fails open (the
+        // response is still returned) and records a sensor error. Catching here and returning Pass
+        // would hide a broken tone check behind what looks like a clean result.
+        var response = await modelClient.CallAsync(
+            [SystemMessage, new Message(MessageRole.User, $"Evaluate the tone of this response:\n\n{text}")],
+            [],
+            ct);
 
-            if (response.Text is null)
-                return SensorResult.Pass;
-
-            var start = response.Text.IndexOf('{');
-            var end = response.Text.LastIndexOf('}');
-            if (start < 0 || end <= start)
-                return SensorResult.Pass;
-
-            using var json = JsonDocument.Parse(response.Text[start..(end + 1)]);
-            var pass = json.RootElement.GetProperty("pass").GetBoolean();
-            var reason = json.RootElement.GetProperty("reason").GetString() ?? "Tone check failed.";
-
-            return pass
-                ? SensorResult.Pass
-                : SensorResult.Intervene($"Tone check failed: {reason} Restate your response with a professional and respectful tone.");
-        }
-        catch
-        {
+        if (response.Text is null)
             return SensorResult.Pass;
-        }
+
+        var start = response.Text.IndexOf('{');
+        var end = response.Text.LastIndexOf('}');
+        if (start < 0 || end <= start)
+            return SensorResult.Pass;
+
+        using var json = JsonDocument.Parse(response.Text[start..(end + 1)]);
+        var pass = json.RootElement.GetProperty("pass").GetBoolean();
+        var reason = json.RootElement.GetProperty("reason").GetString() ?? "Tone check failed.";
+
+        return pass
+            ? SensorResult.Pass
+            : SensorResult.Intervene($"Tone check failed: {reason} Restate your response with a professional and respectful tone.");
     }
 }

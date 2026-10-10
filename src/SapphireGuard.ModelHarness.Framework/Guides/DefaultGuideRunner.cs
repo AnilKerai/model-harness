@@ -39,7 +39,11 @@ public sealed class DefaultGuideRunner(
             {
                 await guide.ContributeAsync(draft, state, ct);
             }
-            catch (OperationCanceledException)
+            // Only genuine harness cancellation propagates. A guide's *own* OperationCanceledException —
+            // a memory or skill store's HttpClient timeout surfaces as TaskCanceledException even
+            // though our token is untouched — must fall through to the fail-open catch below, or one
+            // slow store ends the run as "cancelled".
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw;
             }

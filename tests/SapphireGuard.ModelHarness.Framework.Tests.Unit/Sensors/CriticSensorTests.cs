@@ -80,16 +80,19 @@ public sealed class CriticSensorTests
     }
 
     [Fact]
-    public async Task ModelThrows_FailsOpenWithoutUsage()
+    public async Task ModelThrows_SurfacesAsASensorErrorNotAPass()
     {
-        var model = new ThrowingModel();
-        var sut = new CriticSensor(model);
+        // The critic does not swallow a model failure. The sensor runner fails open — the answer is
+        // still returned — and records an error, so a broken critic is visible in telemetry rather
+        // than indistinguishable from a passed review.
+        var runner = new DefaultSensorRunner([new CriticSensor(new ThrowingModel())]);
 
-        var result = await sut.CheckAsync(HookPoint.PreReturn, EmptyState(), ModelStep("answer"), CancellationToken.None);
+        var results = await runner.RunAsync(HookPoint.PreReturn, EmptyState(), ModelStep("answer"), CancellationToken.None);
 
+        var result = Assert.Single(results).Result;
+        Assert.True(result.IsError);
         Assert.False(result.IsIntervene);
-        Assert.Null(result.Usage);
-        Assert.Equal(1, model.Calls);
+        Assert.Contains("model down", result.Reason);
     }
 
     [Fact]
