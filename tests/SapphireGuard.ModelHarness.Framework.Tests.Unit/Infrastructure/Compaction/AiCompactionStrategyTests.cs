@@ -96,4 +96,17 @@ public sealed class AiCompactionStrategyTests
         Assert.Contains("omitted", result.InjectedText);
         Assert.Contains("empty summary", result.Error);
     }
+
+    [Fact]
+    public async Task EmptySummary_StillChargesTheCallThatProducedIt()
+    {
+        // The model was called and billed; a useless answer must not make that spend disappear
+        // from the run's budget.
+        var sut = new AiCompactionStrategy(new ScriptedModelClient(Summary(null)));
+
+        var result = await sut.CompactAsync(Request(prior: null), CancellationToken.None);
+
+        Assert.Equal(new Usage(40, 12), result.Usage);
+        Assert.Equal(0.002m, result.Cost);
+    }
 }

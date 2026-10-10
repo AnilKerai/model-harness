@@ -250,9 +250,10 @@ at the same hookpoint. See the [sensor pattern](../README.md#the-sensor-pattern-
 intervenes nor blocks, and the model keeps its turn — and is recorded as a sensor error: the
 `harness.sensor.evaluations` counter gets `verdict=error`, and the `gen_ai.evaluation.result` event is
 tagged `error.type=sensor_error` with the exception summary in `exception.message`. That summary is
-emitted even when `enableSensitiveData` is off, so keep conversation content out of it: a parse
-exception can quote the input it choked on (`Enum.Parse`, `int.Parse`), so handle a failed parse of
-model output yourself rather than letting it escape.
+emitted even when `enableSensitiveData` is off, so keep conversation content out of it. Most
+exceptions are safe to let through — an HTTP failure, a malformed-JSON error, a missing property — but
+a few quote the input they choked on (`Enum.Parse` and `int.Parse` name the offending value): guard
+those when parsing model output rather than letting them escape.
 Returning `SensorResult.Pass` from a `catch` gives the same run behaviour but hides the fault behind a
 clean result. The one exception is a hard security gate that must fail *closed*: catch and return
 `Intervene`, as `TaintTrackingSensor` does at `PreToolCall`.
@@ -845,7 +846,7 @@ public sealed class MyCompactionStrategy : ICompactionStrategy
 }
 ```
 
-Return `UpdatedSummary = null` to behave as a stateless view (the `NullCompactionStrategy` default); return a folded `RollingSummary` to compact incrementally. `CompactAsync` runs in the loop's hot path — it should not throw (the harness wraps it, falls back to an omission note, and records the exception on `CompactionTrace.Error`) but must honour cancellation. A strategy that degrades internally instead of throwing should set `CompactionResult.Error`, so its fallback shows up in telemetry the same way.
+Return `UpdatedSummary = null` to behave as a stateless view (the `NullCompactionStrategy` default); return a folded `RollingSummary` to compact incrementally. `CompactAsync` runs in the loop's hot path — it should not throw (the harness wraps it, falls back to an omission note — behind any prior summary, which stays in context — and records the exception on `CompactionTrace.Error`) but must honour cancellation. A strategy that degrades internally instead of throwing should set `CompactionResult.Error`, so its fallback shows up in telemetry the same way.
 
 `samples/Compaction` is a runnable, no-API-key demo: it runs the same task with a narrating view strategy and a narrating fold strategy so you can watch, turn by turn, the view re-summarise the whole growing head while the fold only touches the newly evicted slice at a flat cost.
 

@@ -290,6 +290,23 @@ public sealed class HeadEvictionTrajectoryGuideTests
     }
 
     [Fact]
+    public async Task Contribute_StrategyThrowsWithAPriorSummary_KeepsTheSummaryInContext()
+    {
+        // Steps behind the fold watermark are no longer rendered, so the rolling summary is the only
+        // trace of them. A fallback that replaced it with a bare note would leave the model with
+        // neither — on every turn, if the strategy keeps failing.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new ThrowingCompactionStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        var rendered = Assert.Single(draft.TrajectoryMessages, m => m.Content.Contains("omitted"));
+        Assert.Contains("PRIOR SUMMARY", rendered.Content);
+    }
+
+    [Fact]
     public async Task Contribute_StrategyReportsItsOwnFailure_CarriesItOntoTheCompactionTrace()
     {
         // A strategy that fails open internally (AiCompactionStrategy keeps the prior summary) still

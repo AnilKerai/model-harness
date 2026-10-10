@@ -91,7 +91,14 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
             {
                 // A third-party strategy must never take down the run — fall back to a bare note,
                 // and carry the reason so the failure is visible in telemetry rather than silent.
-                result = CompactionResult.OmissionNote(trimCount) with { Error = $"{ex.GetType().Name}: {ex.Message}" };
+                // Steps behind the fold watermark are no longer rendered, so a prior summary stays in
+                // front of the note: it is the only trace of them left in context.
+                var note = CompactionResult.OmissionNote(trimCount);
+                result = note with
+                {
+                    InjectedText = priorSummary is null ? note.InjectedText : $"{priorSummary.Text}\n{note.InjectedText}",
+                    Error = $"{ex.GetType().Name}: {ex.Message}"
+                };
             }
 
             summaryToRender = result.InjectedText;

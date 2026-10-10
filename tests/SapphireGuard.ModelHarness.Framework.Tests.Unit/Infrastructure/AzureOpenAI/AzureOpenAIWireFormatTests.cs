@@ -98,6 +98,42 @@ public sealed class AzureOpenAIWireFormatTests
     }
 
     [Fact]
+    public void OnlyTheFirstSystemMessage_IsSent_AndLeadsTheConversation()
+    {
+        var messages = AzureOpenAIWireFormat.BuildMessages(
+        [
+            User("hello"),
+            new Message(MessageRole.System, "You are a test agent."),
+            new Message(MessageRole.System, "a later system message")
+        ]);
+
+        Assert.Equal("You are a test agent.", TextOf(Assert.IsType<SystemChatMessage>(messages[0])));
+        Assert.Single(messages.OfType<SystemChatMessage>());
+        Assert.IsType<UserChatMessage>(messages[1]);
+    }
+
+    // The parsers fall back to an empty call id when a marker is malformed, and the SDK refuses to
+    // build a message from one — so a malformed marker fails the call rather than reaching the
+    // provider as a tool call nothing can be matched to.
+    [Theory]
+    [InlineData("just some assistant text")]      // not a tool-call marker at all
+    [InlineData("[tool_call name=lookup id=c1")]  // marker never closed
+    public void MalformedToolCall_IsRejectedRatherThanSentWithAnEmptyId(string content)
+    {
+        Assert.Throws<ArgumentException>(() =>
+            AzureOpenAIWireFormat.BuildMessages([User("go"), new Message(MessageRole.ToolUse, content)]));
+    }
+
+    [Theory]
+    [InlineData("plain result text")]              // not a tool-result marker at all
+    [InlineData("[tool_result id=c1 error=False")] // marker never closed
+    public void MalformedToolResult_IsRejectedRatherThanSentWithAnEmptyId(string content)
+    {
+        Assert.Throws<ArgumentException>(() =>
+            AzureOpenAIWireFormat.BuildMessages([User("go"), new Message(MessageRole.Tool, content)]));
+    }
+
+    [Fact]
     public void ToolCallWithNoAssistantText_CarriesNoContent()
     {
         var messages = AzureOpenAIWireFormat.BuildMessages(

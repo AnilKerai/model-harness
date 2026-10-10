@@ -36,8 +36,13 @@ public sealed class AiCompactionStrategy(IModelClient modelClient) : ICompaction
                 [],
                 ct);
 
+            // The call was made and billed even though its answer is unusable — keep its spend.
             if (string.IsNullOrWhiteSpace(response.Text))
-                return FailOpen(request, "the compaction model returned an empty summary");
+                return FailOpen(request, "the compaction model returned an empty summary") with
+                {
+                    Usage = response.Usage,
+                    Cost = response.Cost
+                };
 
             var text = $"[Summary of {foldedCount} earlier step(s)] {response.Text.Trim()}";
             return new CompactionResult

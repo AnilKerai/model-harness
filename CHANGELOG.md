@@ -46,6 +46,20 @@ Every entry that changes behaviour you can observe is marked.
   continues: the guide's contribution is skipped and logged via `LogGuideError`, or the evicted slice
   falls back to an omission note.
 
+- **A throwing compaction strategy dropped the rolling summary from context.** When an
+  `ICompactionStrategy` threw, the guide replaced the rendered summary with a bare omission note. The
+  steps behind the fold watermark are no longer rendered, so for that turn the model saw neither them
+  nor their summary — and on every turn, if the strategy kept failing. The fallback now keeps the
+  prior summary in front of the note, as `AiCompactionStrategy`'s own fail-open path always did. Only
+  a custom fold strategy that throws was affected.
+
+- **An empty compaction summary was billed but not charged to the run.** When the compaction model
+  returned nothing usable, `AiCompactionStrategy` failed open without the call's usage and cost, so
+  that spend never reached `AgentState.CompactionUsage` / `CompactionCost` — and the slice is retried
+  every turn.
+
+  **Behavioural change:** that spend now counts toward `MaxCost` and `MaxTotalTokens`.
+
 ### Changed
 
 - **`CriticSensor` no longer swallows a failed model call.** It caught every exception and returned
@@ -78,10 +92,10 @@ Every entry that changes behaviour you can observe is marked.
   error's already was. Intervention reasons stay gated — they can quote the content a sensor flagged.
 
   **Behavioural change:** the text of an exception thrown by a sensor now leaves the process by
-  default. Provider-SDK exception messages describe the failure, not the conversation — but a parse
-  failure can quote the input it choked on (`Enum.Parse` and `int.Parse` name the offending value).
-  A sensor of **your own** that parses model output should handle a failed parse itself, or throw a
-  content-free message, rather than let such an exception escape.
+  default. Most exception messages describe the failure, not the conversation — an HTTP error, a
+  malformed-JSON error, a missing property — but a few quote the input they choked on (`Enum.Parse`
+  and `int.Parse` name the offending value). If a sensor of **your own** parses model output with one
+  of those, guard that parse rather than letting the exception escape.
 
 ### Added
 
