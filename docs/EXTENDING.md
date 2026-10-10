@@ -259,7 +259,14 @@ the BCL `Parse` methods (`int.Parse`, `decimal.Parse`, `bool.Parse`, `Enum.Parse
 they rejected: use `TryParse` on model output rather than letting such an exception escape.
 Returning `SensorResult.Pass` from a `catch` gives the same run behaviour but hides the fault behind a
 clean result. The one exception is a hard security gate that must fail *closed*: catch and return
-`Intervene`, as `TaintTrackingSensor` does at `PreToolCall`.
+`Intervene`, as `TaintTrackingSensor` does at `PreToolCall`. Catch `OperationCanceledException` too —
+a dependency's own timeout is one, and the runner fails open on whatever escapes — letting through
+only genuine cancellation:
+
+```csharp
+catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+catch (Exception ex) { return SensorResult.Intervene($"Blocked: could not be evaluated ({ex.Message})."); }
+```
 
 ## Taint tracking *(Experimental)*
 
@@ -307,7 +314,9 @@ builder.Services.Replace(ServiceDescriptor.Singleton<ITrustPolicy>(new MyTrustPo
 builder.WithSensor<TaintTrackingSensor>();
 ```
 
-`TaintTrackingSensor` depends only on `ITrustPolicy`, so swapping the policy changes nothing else.
+`TaintTrackingSensor` depends only on `ITrustPolicy`, so swapping the policy changes nothing else. A
+policy that throws — including one that times out on I/O — blocks the privileged action: the sensor
+fails closed whenever taint cannot be determined.
 
 ## Add a guide
 

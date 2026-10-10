@@ -46,6 +46,40 @@ Every entry that changes behaviour you can observe is marked.
   continues: the guide's contribution is skipped and logged via `LogGuideError`, or the evicted slice
   falls back to an omission note.
 
+- **A model client's own timeout ended the run as "cancelled", with no detail on the `chat` span.**
+  The same `TaskCanceledException` confusion, at the model call. `HarnessLoop` skipped
+  `IModelCallScope.Fail` for every `OperationCanceledException` and reported every one as a
+  cancellation, so a provider request that timed out came back as `Failed` with `FailureReason`
+  `"cancelled"` — though nothing had cancelled the run — and the span said only that the call did not
+  complete. The loop now treats an `OperationCanceledException` as cancellation only when its own
+  token is cancelled. Anything else is a failure like any other: the `chat` span gets the exception
+  (`exception.type`/`message`/`stacktrace`), and the outcome carries its message. The same holds for
+  any other collaborator the loop awaits directly — a checkpoint store or rate limiter that times out
+  is no longer reported as a cancellation either.
+
+  **Behavioural change:** `AgentOutcome.FailureReason` for such a run is now the exception's message
+  (for an `HttpClient` timeout, "The request was canceled due to the configured HttpClient.Timeout of
+  … seconds elapsing.") instead of `"cancelled"`, and the reason passed to `ITracer.Complete` changes
+  with it. `Status` is still `Failed`. `"cancelled"` now means exactly one thing — the
+  `CancellationToken` you passed to `RunAsync` was cancelled — so code that compares against it to
+  skip error reporting or a retry needs no edit, but will start seeing these timeouts as the failures
+  they are.
+
+  A custom `ITracer` is affected in one way: `IModelCallScope.Fail` is now called with an
+  `OperationCanceledException` for a client-side timeout. It was never passed one before.
+
+- **`TaintTrackingSensor` failed open when a custom `ITrustPolicy` timed out.** Its `PreToolCall`
+  gate catches a throwing policy so that it fails *closed*, but the catch let every
+  `OperationCanceledException` through. A policy that blocks on I/O with a timeout raises
+  `TaskCanceledException`; that escaped the sensor, `DefaultSensorRunner` failed it open like any other
+  sensor fault, and the privileged tool call went ahead with tainted content in context. The sensor
+  now lets only genuine harness cancellation propagate — which ends the run before the tool is
+  dispatched — and blocks on everything else. The built-in `TrustPolicy` does no I/O and was never
+  affected.
+
+  **Behavioural change:** with a custom `ITrustPolicy` that can time out, a privileged call that
+  previously ran is now blocked, and the model is told the trust policy could not be evaluated.
+
 - **A compaction result that persisted nothing dropped the rolling summary from context.** The guide
   rendered a strategy's `InjectedText` *in place of* the prior summary. That is right for a fold, which
   returns the whole updated summary — but a result with `UpdatedSummary = null` describes only the

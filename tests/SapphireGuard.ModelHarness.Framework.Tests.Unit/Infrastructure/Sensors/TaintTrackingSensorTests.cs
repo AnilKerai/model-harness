@@ -49,6 +49,44 @@ public sealed class TaintTrackingSensorTests
         Assert.Contains("send_email", result.Reason);
     }
 
+    [Fact]
+    public async Task PreToolCall_TrustPolicyThrowsOwnOperationCanceled_FailsClosedAndBlocksTheAction()
+    {
+        // ITrustPolicy is synchronous, but a policy that blocks on I/O with a timeout throws
+        // TaskCanceledException — an OperationCanceledException — though the harness token was never
+        // cancelled. Left to escape, DefaultSensorRunner fails it OPEN and the privileged action runs.
+        var sut = new TaintTrackingSensor(new TimingOutTrustPolicy());
+
+        var result = await sut.CheckAsync(
+            HookPoint.PreToolCall, EmptyState(), PendingStep("send_email"), CancellationToken.None);
+
+        Assert.True(result.IsIntervene);
+        Assert.Contains("send_email", result.Reason);
+    }
+
+    [Fact]
+    public async Task PreToolCall_HarnessCancellationRequested_StillPropagates()
+    {
+        // The fail-closed catch must not swallow genuine cancellation — that is real control flow,
+        // and the propagating exception ends the run before the tool is ever dispatched.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var sut = new TaintTrackingSensor(new TimingOutTrustPolicy());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => sut.CheckAsync(HookPoint.PreToolCall, EmptyState(), PendingStep("send_email"), cts.Token));
+    }
+
+    private sealed class TimingOutTrustPolicy : ITrustPolicy
+    {
+        public bool IsUntrustedSource(string toolName) => throw Timeout();
+
+        public bool IsPrivilegedAction(string toolName) => throw Timeout();
+
+        private static TaskCanceledException Timeout() => new(
+            "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.");
+    }
+
     private sealed class ThrowingTrustPolicy : ITrustPolicy
     {
         public bool IsUntrustedSource(string toolName) =>

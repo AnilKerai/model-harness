@@ -150,7 +150,11 @@ public sealed class HarnessLoop(
                 }
             }
         }
-        catch (OperationCanceledException)
+        // Only genuine cancellation is reported as "cancelled". A collaborator's *own*
+        // OperationCanceledException — a model client's request timeout surfaces as
+        // TaskCanceledException even though our token is untouched — is a failure like any other,
+        // and falls through to the catch-all so the outcome names it.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             return FailOutcome(state, failureReason: "cancelled", traceReason: "cancelled");
         }
@@ -279,7 +283,14 @@ public sealed class HarnessLoop(
         {
             response = await modelClient.CallAsync(messages, modelTools, ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // Genuine cancellation is expected control flow, not a call failure. The client's own
+        // timeout — a TaskCanceledException with our token untouched — is one, and the span must
+        // carry it.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
         {
             scope.Fail(ex);
             throw;

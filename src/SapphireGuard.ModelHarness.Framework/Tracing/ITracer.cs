@@ -83,8 +83,9 @@ public interface IModelCallScope : IDisposable
     /// <summary>
     /// Records that the model call threw, capturing the exception type/message/stack on the span
     /// (a bare disposal-without-<see cref="Complete"/> only marks it failed with no detail). Default
-    /// no-op so existing implementations compile unchanged. Cancellation is deliberately not reported
-    /// through this — it is expected control flow, not a call failure.
+    /// no-op so existing implementations compile unchanged. Cancellation of the run is deliberately
+    /// not reported through this — it is expected control flow, not a call failure. A model client's
+    /// own timeout is reported, even though it surfaces as an <see cref="OperationCanceledException"/>.
     /// </summary>
     void Fail(Exception exception) { }
 }
