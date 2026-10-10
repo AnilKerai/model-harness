@@ -12,9 +12,12 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
-## [Unreleased]
+## [2.5.0] — 2026-10-10
 
-Two fixes from a repo audit: the Azure adapter was dropping assistant text from history, and a failing
+A reliability release, started from a repo audit. The common thread: a component's own timeout — an
+`HttpClient` timeout surfaces as `TaskCanceledException` with the harness token untouched — was being
+read as "the run was cancelled", so runs ended, a security gate failed open, and circuit breakers
+never opened. Alongside it, the Azure adapter was dropping assistant text from history, and a failing
 AI sensor or compaction fold was invisible in telemetry. No API removed; one additive property pair.
 Every entry that changes behaviour you can observe is marked.
 
