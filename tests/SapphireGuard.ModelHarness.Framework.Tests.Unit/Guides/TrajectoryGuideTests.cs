@@ -347,6 +347,21 @@ public sealed class HeadEvictionTrajectoryGuideTests
     }
 
     [Fact]
+    public async Task Contribute_StrategyReturnsNullText_DoesNotFaultTheRun()
+    {
+        // InjectedText is non-nullable, but a strategy compiled without nullable checks can still
+        // hand back null. The trajectory guide is not wrapped by the runner, so throwing here would
+        // end the run — render the prior summary and carry on.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new NullTextStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content == "PRIOR SUMMARY");
+    }
+
+    [Fact]
     public async Task Contribute_StrategyReportsItsOwnFailure_CarriesItOntoTheCompactionTrace()
     {
         // A strategy that fails open internally (AiCompactionStrategy keeps the prior summary) still
@@ -503,6 +518,12 @@ public sealed class HeadEvictionTrajectoryGuideTests
     {
         public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
             Task.FromResult(new CompactionResult { InjectedText = "" });
+    }
+
+    private sealed class NullTextStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            Task.FromResult(new CompactionResult { InjectedText = null! });
     }
 
     // Mirrors how AiCompactionStrategy fails open: prior summary handed back, error reported.

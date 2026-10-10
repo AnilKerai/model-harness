@@ -58,16 +58,14 @@ Every entry that changes behaviour you can observe is marked.
   **Behavioural change — affects a custom `ICompactionStrategy`:** for *every* result with
   `UpdatedSummary = null` over a state that already carries a rolling summary, the prompt now renders
   that summary ahead of your `InjectedText`. A strategy that was already repeating the prior summary
-  in such a result would now show it twice — return only the slice, or hand the summary back:
+  in such a result would now show it twice — return only the slice:
 
   ```csharp
   // Before — repeated the prior summary itself while persisting nothing
   return new CompactionResult { InjectedText = $"{request.PriorSummary?.Text}\n{note}" };
 
-  // After — either describe only the newly evicted slice…
+  // After — describe only the newly evicted slice; the harness keeps the summary in front
   return new CompactionResult { InjectedText = note };
-  // …or keep the text self-contained and say the summary is unchanged
-  return new CompactionResult { InjectedText = $"{request.PriorSummary?.Text}\n{note}", UpdatedSummary = request.PriorSummary };
   ```
 
   A fold (`UpdatedSummary` non-null) is unaffected: its `InjectedText` still replaces the prior summary.
