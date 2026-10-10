@@ -9,8 +9,8 @@ public static class DependencyInjection
 {
     /// <summary>
     /// Registers a <see cref="ClaudeModelClient"/> as the model client. Pair with
-    /// <c>WithResilientModel</c> from <c>Infrastructure.Resilience</c> to add Polly
-    /// retry and circuit-breaker behaviour.
+    /// <c>WithResilientModel</c> from <c>Infrastructure.Resilience</c> to add a Polly
+    /// circuit breaker.
     /// </summary>
     public static ModelHarnessBuilder WithClaudeModel(this ModelHarnessBuilder builder, ClaudeClientOptions options) =>
         builder.WithModel(_ => new ClaudeModelClient(options));
