@@ -33,15 +33,13 @@ public sealed class ToneSensor(IModelClient modelClient) : ISensor
             [],
             ct);
 
-        if (response.Text is null)
-            return SensorResult.Pass;
-
-        var start = response.Text.IndexOf('{');
-        var end = response.Text.LastIndexOf('}');
+        var verdict = response.Text ?? "";
+        var start = verdict.IndexOf('{');
+        var end = verdict.LastIndexOf('}');
         if (start < 0 || end <= start)
-            return SensorResult.Pass;
+            throw new InvalidOperationException("The tone model returned no JSON verdict.");
 
-        using var json = JsonDocument.Parse(response.Text[start..(end + 1)]);
+        using var json = JsonDocument.Parse(verdict[start..(end + 1)]);
         var pass = json.RootElement.GetProperty("pass").GetBoolean();
         var reason = json.RootElement.GetProperty("reason").GetString() ?? "Tone check failed.";
 

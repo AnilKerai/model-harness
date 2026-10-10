@@ -212,15 +212,28 @@ public sealed class DefaultGuideRunnerTests
         Assert.Contains("TaskCanceledException", error.Error);
     }
 
+    private sealed class CancelledMidGuide(CancellationTokenSource cts) : IGuide
+    {
+        public string Name => "cancelled-mid-guide";
+        public Task ContributeAsync(ContextDraft draft, AgentState state, CancellationToken ct)
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(ct);
+        }
+    }
+
     [Fact]
-    public async Task HarnessCancellationRequested_StillPropagates()
+    public async Task HarnessCancelledWhileAGuideRuns_PropagatesWithoutBeingLoggedAsAGuideError()
     {
         // The fail-open filter must not swallow genuine cancellation — that is real control flow.
+        // Cancelled mid-guide, not before it: the runner's up-front check would otherwise throw
+        // first and the filter would never be reached.
         using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
-        var runner = new DefaultGuideRunner([new TimingOutGuide("memory")], new RecordingTrajectoryGuide([]), new RecordingTracer());
+        var tracer = new RecordingTracer();
+        var runner = new DefaultGuideRunner([new CancelledMidGuide(cts)], new RecordingTrajectoryGuide([]), tracer);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(State(), [], cts.Token));
+        Assert.Empty(tracer.GuideErrors);
     }
 
     [Fact]

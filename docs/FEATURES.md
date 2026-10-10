@@ -129,8 +129,10 @@ The key design points:
   turns it into a non-blocking error result, so a transient failure never blocks an agent response,
   *and* it is recorded in telemetry (`harness.sensor.evaluations` with `verdict=error`, plus an
   `error.type=sensor_error` event carrying the exception summary). A swallowed failure looks exactly
-  like a passed check, so a broken sensor would go unnoticed. Unparseable output is yours to decide —
-  `CriticSensor` passes the answer through with a "review inconclusive" reason.
+  like a passed check, so a broken sensor would go unnoticed. The same goes for output you cannot
+  use: when the call succeeds but yields no verdict, return
+  `SensorResult.Failed(reason) with { Usage = …, Cost = … }` — non-blocking, charged, and visible —
+  as `CriticSensor` does for a response it cannot parse a score from.
 - **Model usage is propagated to the run budget.** Return `SensorResult.PassWithUsage(usage, cost)` or
   `SensorResult.InterveneWithUsage(reason, usage, cost)` instead of the plain variants and the
   harness accumulates the tokens and cost on `AgentState.SensorUsage` / `AgentState.SensorCost`.

@@ -12,9 +12,10 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Sensors;
 /// harness observation and gives the model a fresh turn with its prior answer still visible; the
 /// loop's own consecutive-intervention cap bounds how many revision rounds run before it
 /// force-finalises, so no separate refinement counter is needed.
-/// A flaky critic never blocks a return: an unparseable verdict passes the answer through, and a
-/// failed model call propagates to the sensor runner, which fails open and records it as a sensor
-/// error — so a broken critic shows up in telemetry instead of looking like a passed review.
+/// A flaky critic never blocks a return, and never hides: an unparseable verdict is reported as a
+/// non-blocking sensor error (still charged for the call it made), and a failed model call
+/// propagates to the sensor runner, which fails open and records it the same way — so a broken
+/// critic shows up in telemetry instead of looking like a passed review.
 /// Pass a fast, cheap model (Haiku-class) to keep the per-answer overhead low.
 /// </summary>
 public sealed class CriticSensor(IModelClient modelClient, double passThreshold = 0.6) : ISensor
@@ -48,9 +49,15 @@ public sealed class CriticSensor(IModelClient modelClient, double passThreshold 
             [],
             ct);
 
+        // No verdict is not a pass. Reported as a sensor error — non-blocking, so the answer is still
+        // returned, and with the call's spend — so a critic that never yields a score is visible
+        // rather than indistinguishable from one that approves every answer.
         if (!TryParseVerdict(response.Text, out var score, out var deficiencies))
-            return SensorResult.PassWithUsage(response.Usage, response.Cost,
-                "Self-review inconclusive: could not parse a score from the model response.");
+            return SensorResult.Failed("Self-review inconclusive: could not parse a score from the critic's response.") with
+            {
+                Usage = response.Usage,
+                Cost = response.Cost
+            };
 
         if (score >= passThreshold)
             return SensorResult.PassWithUsage(response.Usage, response.Cost,
@@ -67,7 +74,7 @@ public sealed class CriticSensor(IModelClient modelClient, double passThreshold 
     }
 
     // ponytail: tolerant extraction — models often wrap JSON in prose or code fences, so take the
-    // outermost braces. Anything unparseable returns false and the answer is passed through.
+    // outermost braces. Anything unparseable returns false and is reported as an error by the caller.
     private static bool TryParseVerdict(string? text, out double score, out IReadOnlyList<string> deficiencies)
     {
         score = 0;

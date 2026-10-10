@@ -96,16 +96,20 @@ public sealed class CriticSensorTests
     }
 
     [Fact]
-    public async Task UnparseableResponse_FailsOpenWithUsage()
+    public async Task UnparseableVerdict_IsReportedAsAnErrorButStillChargesTheCall()
     {
-        var model = new ScriptedModel("Honestly it looks pretty good to me", new Usage(5, 5), 0m);
+        // No verdict is not a pass: a critic that never yields a score must not look like one that
+        // approves every answer. The answer is still returned, and the call it made is still charged.
+        var model = new ScriptedModel("Honestly it looks pretty good to me", new Usage(5, 5), 0.001m);
         var sut = new CriticSensor(model);
 
         var result = await sut.CheckAsync(HookPoint.PreReturn, EmptyState(), ModelStep("answer"), CancellationToken.None);
 
+        Assert.True(result.IsError);
         Assert.False(result.IsIntervene);
         Assert.Contains("parse", result.Reason!);
         Assert.Equal(new Usage(5, 5), result.Usage);
+        Assert.Equal(0.001m, result.Cost);
     }
 
     [Fact]
