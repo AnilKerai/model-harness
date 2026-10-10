@@ -16,7 +16,8 @@ public static class DependencyInjection
 
     /// <summary>
     /// Registers <typeparamref name="TImpl"/> wrapped in a <see cref="ResilientTool"/>
-    /// using the default Polly retry and circuit-breaker policy.
+    /// using the default Polly retry and circuit-breaker policy. Each registered tool gets
+    /// its own breaker.
     /// </summary>
     public static ModelHarnessBuilder WithResilientTool<TImpl>(this ModelHarnessBuilder builder)
         where TImpl : class, ITool
@@ -44,8 +45,8 @@ public static class DependencyInjection
 
     /// <summary>
     /// Registers <typeparamref name="TImpl"/> wrapped in a
-    /// <see cref="ResilientModelClientDecorator"/> using the default Polly retry and
-    /// circuit-breaker policy.
+    /// <see cref="ResilientModelClientDecorator"/> using the default Polly circuit-breaker
+    /// policy. Each registered client gets its own breaker.
     /// </summary>
     public static ModelHarnessBuilder WithResilientModel<TImpl>(this ModelHarnessBuilder builder)
         where TImpl : class, IModelClient
@@ -70,8 +71,8 @@ public static class DependencyInjection
 
     /// <summary>
     /// Wraps the model client returned by <paramref name="factory"/> in a
-    /// <see cref="ResilientModelClientDecorator"/> using the default Polly retry and
-    /// circuit-breaker policy.
+    /// <see cref="ResilientModelClientDecorator"/> using the default Polly circuit-breaker
+    /// policy. Each registered client gets its own breaker.
     /// </summary>
     public static ModelHarnessBuilder WithResilientModel(
         this ModelHarnessBuilder builder,

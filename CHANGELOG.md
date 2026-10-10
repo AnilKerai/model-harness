@@ -80,6 +80,49 @@ Every entry that changes behaviour you can observe is marked.
   **Behavioural change:** with a custom `ITrustPolicy` that can time out, a privileged call that
   previously ran is now blocked, and the model is told the trust policy could not be evaluated.
 
+- **The circuit breakers never opened on a dependency that timed out.** The same
+  `TaskCanceledException` confusion, in `Infrastructure.Resilience`. Both default breakers —
+  `ResilientModelClientDecorator`'s and `ResilientTool`'s — left every `OperationCanceledException`
+  out of what they count, and Polly records an outcome its predicate rejects as a *success*. So a
+  provider or tool backend that hangs until the client's own timeout elapses — the outage a breaker
+  exists for — never opened the circuit, and a timed-out probe in the half-open state closed it. Both
+  now exclude only the *caller* cancelling the call; the callee's own timeout counts as a failure.
+
+  **Behavioural change:** after a run of such timeouts (at least half of four or more calls in 30
+  seconds) the next calls fail fast with `BrokenCircuitException` for 15 seconds instead of each
+  waiting out the timeout. In a harness run, an open model breaker ends the run as `Failed` with that
+  exception's message; an open tool breaker is a recoverable `IsError` tool result. `ResilientTool`'s
+  **retry** is unchanged: it still does not retry a tool's own timeout, because the call may already
+  have run its side effect. A pipeline you pass in yourself is untouched.
+
+- **Every wrapped model client shared one circuit breaker, and every resilient tool another.** The
+  default pipelines were `static`, so their failure history was process-wide. An outage at one
+  provider fast-failed calls to every other client wrapped with `WithResilientModel` — a sub-agent's,
+  or a second provider's. For tools it was worse: one failed invocation is one attempt plus three
+  retries, which is exactly the breaker's minimum throughput, so a single failing tool call blocked
+  *every* `WithResilientTool` tool for 15 seconds. Each decorator and each tool built with the
+  default policy now gets its own breaker.
+
+  **Behavioural change:** nothing changes for a harness wired through `WithResilientModel` /
+  `WithResilientTool` beyond the isolation — both register singletons, so each breaker still
+  accumulates history for the life of the container. If you construct the wrappers yourself **per
+  call or per request**, each new instance now starts with a closed breaker that never accumulates;
+  build one pipeline and pass it in to keep the history, which is also how to share a breaker
+  deliberately:
+
+  ```csharp
+  // Before — every instance fed the same process-wide breaker
+  IModelClient Create() => new ResilientModelClientDecorator(new ClaudeModelClient(options));
+
+  // After — own the pipeline, and with it the breaker's lifetime and scope
+  private static readonly ResiliencePipeline<ModelResponse> Breaker =
+      new ResiliencePipelineBuilder<ModelResponse>()
+          .AddCircuitBreaker(new CircuitBreakerStrategyOptions<ModelResponse> { /* … */ })
+          .Build();
+
+  IModelClient Create() => new ResilientModelClientDecorator(new ClaudeModelClient(options), Breaker);
+  ```
+
 - **A compaction result that persisted nothing dropped the rolling summary from context.** The guide
   rendered a strategy's `InjectedText` *in place of* the prior summary. That is right for a fold, which
   returns the whole updated summary — but a result with `UpdatedSummary = null` describes only the

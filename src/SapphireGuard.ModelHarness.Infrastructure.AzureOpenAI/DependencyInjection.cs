@@ -12,7 +12,7 @@ public static class DependencyInjection
     /// Supports both API key and DefaultAzureCredential authentication — set
     /// <see cref="AzureOpenAIClientOptions.ApiKey"/> to null to use managed identity.
     /// Pair with <c>WithResilientModel</c> from <c>Infrastructure.Resilience</c> to add
-    /// Polly retry and circuit-breaker behaviour.
+    /// a Polly circuit breaker.
     /// </summary>
     public static ModelHarnessBuilder WithAzureOpenAIModel(
         this ModelHarnessBuilder builder,

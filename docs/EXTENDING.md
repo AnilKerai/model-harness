@@ -132,6 +132,16 @@ retry + circuit-breaking via the Resilience package:
 builder.WithResilientTool<MyApiTool>()
 ```
 
+The default policy retries `HttpRequestException` and `TimeoutException` up to three times with
+exponential back-off, behind a circuit breaker that fast-fails the tool for 15 seconds once at least
+half of four or more attempts in 30 seconds have failed. Each registered tool gets its own breaker,
+so one failing backend never blocks another tool. The breaker also counts the tool's *own* timeout —
+an `HttpClient` timeout surfaces as `TaskCanceledException` with the harness token untouched — but
+that timeout is not retried: the call may already have run its side effect, and each retry would wait
+out the full timeout again. Cancellation by the harness, including `Budget.MaxToolCallDuration`, is
+neither retried nor counted. Pass a `ResiliencePipeline<ToolResult>` as an argument to replace the
+policy; pass the same pipeline to several tools to share one breaker deliberately.
+
 ### Large tool results
 
 A `ToolResult.Content` is stored verbatim on an **append-only** trajectory and checkpointed with the
@@ -792,7 +802,7 @@ builder.WithAzureOpenAIModel(new AzureOpenAIClientOptions
 
 For a custom transport, implement `IModelClient` and register it with the generic `builder.WithModel(_ => new MyModelClient(...))`.
 
-**Production resilience (opt-in).** `builder.WithResilientModel(...)` (from `Infrastructure.Resilience`) wraps any model client in a Polly **circuit breaker** — after a run of failures it fast-fails for a cooldown instead of hammering a down provider, which matters under high throughput or across a fleet. It deliberately adds *no* retry or timeout (the provider SDKs already own those — a stacked second retry caused compounding back-off), so a single agent run rarely needs it:
+**Production resilience (opt-in).** `builder.WithResilientModel(...)` (from `Infrastructure.Resilience`) wraps any model client in a Polly **circuit breaker** — after a run of failures it fast-fails for a cooldown instead of hammering a down provider, which matters under high throughput or across a fleet. It deliberately adds *no* retry or timeout (the provider SDKs already own those — a stacked second retry caused compounding back-off), so a single agent run rarely needs it. Every failure counts except the caller cancelling the run — including the client's own request timeout, which is the form a hung provider takes — and each wrapped client gets its own breaker, so one provider's outage never fast-fails another's calls (a sub-agent's client included):
 
 ```csharp
 builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { ApiKey = apiKey }))
