@@ -46,12 +46,16 @@ Every entry that changes behaviour you can observe is marked.
   continues: the guide's contribution is skipped and logged via `LogGuideError`, or the evicted slice
   falls back to an omission note.
 
-- **A throwing compaction strategy dropped the rolling summary from context.** When an
-  `ICompactionStrategy` threw, the guide replaced the rendered summary with a bare omission note. The
-  steps behind the fold watermark are no longer rendered, so for that turn the model saw neither them
-  nor their summary — and on every turn, if the strategy kept failing. The fallback now keeps the
-  prior summary in front of the note, as `AiCompactionStrategy`'s own fail-open path always did. Only
-  a custom fold strategy that throws was affected.
+- **A compaction result that persisted nothing dropped the rolling summary from context.** The guide
+  rendered a strategy's `InjectedText` *in place of* the prior summary. That is right for a fold, which
+  returns the whole updated summary — but a result with `UpdatedSummary = null` describes only the
+  newly evicted slice, and the steps behind the fold watermark are no longer rendered, so the model saw
+  neither them nor their summary. Two ways to get there: a custom fold strategy that throws (the guide
+  falls back to a bare omission note), and a checkpoint written under a fold strategy then resumed with
+  the default view strategy wired. The guide now keeps the prior summary in front of any such result,
+  as `AiCompactionStrategy`'s own fail-open path always did.
+
+  **Behavioural change:** on those turns the prompt now carries the prior summary ahead of the note.
 
 - **An empty compaction summary was billed but not charged to the run.** When the compaction model
   returned nothing usable, `AiCompactionStrategy` failed open without the call's usage and cost, so
@@ -93,9 +97,9 @@ Every entry that changes behaviour you can observe is marked.
 
   **Behavioural change:** the text of an exception thrown by a sensor now leaves the process by
   default. Most exception messages describe the failure, not the conversation — an HTTP error, a
-  malformed-JSON error, a missing property — but a few quote the input they choked on (`Enum.Parse`
-  and `int.Parse` name the offending value). If a sensor of **your own** parses model output with one
-  of those, guard that parse rather than letting the exception escape.
+  malformed-JSON error, a missing property — but the BCL `Parse` methods (`int.Parse`,
+  `decimal.Parse`, `bool.Parse`, `Enum.Parse`, …) quote the value they rejected. If a sensor of
+  **your own** parses model output, use `TryParse` rather than letting such an exception escape.
 
 ### Added
 

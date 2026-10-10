@@ -307,6 +307,20 @@ public sealed class HeadEvictionTrajectoryGuideTests
     }
 
     [Fact]
+    public async Task Contribute_ViewStrategyOverAStateWithARollingSummary_KeepsTheSummaryInContext()
+    {
+        // A checkpoint written under a fold strategy can be resumed with the default view strategy
+        // wired. A view describes only the newly evicted slice, so the summary must still render.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+
+        var draft = await ContributeAsync(state, windowTokens: 1); // NullCompactionStrategy
+
+        var rendered = Assert.Single(draft.TrajectoryMessages, m => m.Content.Contains("omitted"));
+        Assert.Contains("PRIOR SUMMARY", rendered.Content);
+    }
+
+    [Fact]
     public async Task Contribute_StrategyReportsItsOwnFailure_CarriesItOntoTheCompactionTrace()
     {
         // A strategy that fails open internally (AiCompactionStrategy keeps the prior summary) still

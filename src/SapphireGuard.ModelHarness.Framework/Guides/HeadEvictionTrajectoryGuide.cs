@@ -91,17 +91,15 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
             {
                 // A third-party strategy must never take down the run — fall back to a bare note,
                 // and carry the reason so the failure is visible in telemetry rather than silent.
-                // Steps behind the fold watermark are no longer rendered, so a prior summary stays in
-                // front of the note: it is the only trace of them left in context.
-                var note = CompactionResult.OmissionNote(trimCount);
-                result = note with
-                {
-                    InjectedText = priorSummary is null ? note.InjectedText : $"{priorSummary.Text}\n{note.InjectedText}",
-                    Error = $"{ex.GetType().Name}: {ex.Message}"
-                };
+                result = CompactionResult.OmissionNote(trimCount) with { Error = $"{ex.GetType().Name}: {ex.Message}" };
             }
 
-            summaryToRender = result.InjectedText;
+            // A result that persists nothing — a view, or a fallback — describes only the newly
+            // evicted slice. Steps behind the fold watermark are no longer rendered, so a prior
+            // summary must stay in front of it: it is the only trace of them left in context.
+            summaryToRender = result.UpdatedSummary is null && priorSummary is not null
+                ? string.Join("\n", new[] { priorSummary.Text, result.InjectedText }.Where(t => t.Length > 0))
+                : result.InjectedText;
             draft.Compaction = result;
             draft.CompactionTrace = new CompactionTrace(
                 StepsEvicted: trimCount,
