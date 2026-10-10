@@ -18,7 +18,7 @@ public sealed class HarnessLoopTests
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static HarnessLoop BuildHarness(
-        ScriptedModelClient modelClient,
+        Model.IModelClient modelClient,
         IEnumerable<ISensor>? sensors = null,
         IToolRegistry? toolRegistry = null,
         BudgetNs.IBudgetEnforcer? budgetEnforcer = null,
@@ -169,6 +169,44 @@ public sealed class HarnessLoopTests
         var toolStep = outcome.FinalState.Trajectory.OfType<ToolCallStep>().Single();
         Assert.True(toolStep.Result.IsError);
         Assert.Contains("deadline", toolStep.Result.Content);
+    }
+
+    [Fact]
+    public async Task RunAsync_ToolTimesOutOnItsOwn_ReturnsRecoverableErrorAndContinues()
+    {
+        // No deadline is configured and the harness token is untouched, so the tool's own timeout
+        // is a tool fault like any other: an IsError result the model can replan around.
+        var registry = new StubToolRegistry(_ => throw new TaskCanceledException("tool request timed out"));
+        var client = new ScriptedModelClient(
+            ToolUseResponse(MakeToolCall("slow-tool")),
+            EndTurnResponse("recovered after timeout"));
+        var harness = BuildHarness(client, toolRegistry: registry);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        var toolStep = outcome.FinalState.Trajectory.OfType<ToolCallStep>().Single();
+        Assert.True(toolStep.Result.IsError);
+        Assert.Contains("tool request timed out", toolStep.Result.Content);
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledDuringToolCall_ReturnsCancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        var registry = new StubToolRegistry(_ =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+        var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall()), EndTurnResponse());
+        var harness = BuildHarness(client, toolRegistry: registry);
+
+        var outcome = await harness.RunAsync(NewState(), cts.Token);
+
+        Assert.Equal(AgentStatus.Failed, outcome.Status);
+        Assert.Equal("cancelled", outcome.FailureReason);
+        Assert.Equal(1, client.CallCount);
     }
 
     // ── Budget ────────────────────────────────────────────────────────────────
@@ -416,6 +454,35 @@ public sealed class HarnessLoopTests
     }
 
     [Fact]
+    public async Task RunAsync_ModelClientTimesOutOnItsOwn_ReturnsFailedWithTheTimeoutNotCancelled()
+    {
+        // A model client's own request timeout surfaces as TaskCanceledException — an
+        // OperationCanceledException — though the harness token was never cancelled. Nothing
+        // cancelled the run, so the outcome must name the timeout rather than say "cancelled".
+        var harness = BuildHarness(new TimingOutModelClient());
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Failed, outcome.Status);
+        Assert.Equal(TimingOutModelClient.TimeoutMessage, outcome.FailureReason);
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledDuringModelCall_ReturnsCancelledWithoutRecordingAModelFailure()
+    {
+        // Genuine cancellation is expected control flow: still "cancelled", and not a call failure.
+        using var cts = new CancellationTokenSource();
+        var tracer = new RecordingTracer();
+        var harness = BuildHarness(new CancelledMidCallModelClient(cts), tracer: tracer);
+
+        var outcome = await harness.RunAsync(NewState(), cts.Token);
+
+        Assert.Equal(AgentStatus.Failed, outcome.Status);
+        Assert.Equal("cancelled", outcome.FailureReason);
+        Assert.Empty(tracer.ModelFailures);
+    }
+
+    [Fact]
     public async Task RunAsync_SensorThrows_FailsOpenAndRunCompletes()
     {
         // A throwing sensor must not take the run down: the runner surfaces it as a non-intervention
@@ -528,6 +595,21 @@ public sealed class HarnessLoopTests
         Assert.Empty(tracer.ModelCompletions);
         Assert.Equal(1, tracer.ModelScopesDisposed);
         Assert.IsType<InvalidOperationException>(Assert.Single(tracer.ModelFailures));
+    }
+
+    [Fact]
+    public async Task RunAsync_ModelCallTimesOutOnItsOwn_RecordsTheFailureOnTheModelScope()
+    {
+        // The client's own timeout is a call failure, so the span must carry it — skipping Fail
+        // because the exception happens to be an OperationCanceledException leaves it bare.
+        var tracer = new RecordingTracer();
+        var harness = BuildHarness(new TimingOutModelClient(), tracer: tracer);
+
+        await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.IsType<TaskCanceledException>(Assert.Single(tracer.ModelFailures));
+        Assert.Empty(tracer.ModelCompletions);
+        Assert.Equal(1, tracer.ModelScopesDisposed);
     }
 
     [Fact]
@@ -679,6 +761,34 @@ file sealed class ThrowingModelClient(string message) : Model.IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct) =>
         throw new InvalidOperationException(message);
+}
+
+// Simulates a model client whose own request timeout elapses. HttpClient surfaces that as a
+// TaskCanceledException — an OperationCanceledException that has nothing to do with the harness's
+// cancellation token.
+file sealed class TimingOutModelClient : Model.IModelClient
+{
+    public const string TimeoutMessage =
+        "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.";
+
+    public Task<ModelResponse> CallAsync(
+        IReadOnlyList<Message> messages,
+        IReadOnlyList<ToolDefinition> availableTools,
+        CancellationToken ct) =>
+        throw new TaskCanceledException(TimeoutMessage);
+}
+
+// Simulates the caller cancelling the run while the model call is in flight.
+file sealed class CancelledMidCallModelClient(CancellationTokenSource cts) : Model.IModelClient
+{
+    public async Task<ModelResponse> CallAsync(
+        IReadOnlyList<Message> messages,
+        IReadOnlyList<ToolDefinition> availableTools,
+        CancellationToken ct)
+    {
+        await cts.CancelAsync();
+        throw new OperationCanceledException(ct);
+    }
 }
 
 // A tool that blocks until its cancellation token fires — used to exercise the per-tool deadline.
