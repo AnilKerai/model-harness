@@ -55,7 +55,22 @@ Every entry that changes behaviour you can observe is marked.
   the default view strategy wired. The guide now keeps the prior summary in front of any such result,
   as `AiCompactionStrategy`'s own fail-open path always did.
 
-  **Behavioural change:** on those turns the prompt now carries the prior summary ahead of the note.
+  **Behavioural change — affects a custom `ICompactionStrategy`:** for *every* result with
+  `UpdatedSummary = null` over a state that already carries a rolling summary, the prompt now renders
+  that summary ahead of your `InjectedText`. A strategy that was already repeating the prior summary
+  in such a result would now show it twice — return only the slice, or hand the summary back:
+
+  ```csharp
+  // Before — repeated the prior summary itself while persisting nothing
+  return new CompactionResult { InjectedText = $"{request.PriorSummary?.Text}\n{note}" };
+
+  // After — either describe only the newly evicted slice…
+  return new CompactionResult { InjectedText = note };
+  // …or keep the text self-contained and say the summary is unchanged
+  return new CompactionResult { InjectedText = $"{request.PriorSummary?.Text}\n{note}", UpdatedSummary = request.PriorSummary };
+  ```
+
+  A fold (`UpdatedSummary` non-null) is unaffected: its `InjectedText` still replaces the prior summary.
 
 - **An empty compaction summary was billed but not charged to the run.** When the compaction model
   returned nothing usable, `AiCompactionStrategy` failed open without the call's usage and cost, so

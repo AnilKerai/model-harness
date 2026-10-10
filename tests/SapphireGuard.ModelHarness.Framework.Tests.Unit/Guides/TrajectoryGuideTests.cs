@@ -321,6 +321,32 @@ public sealed class HeadEvictionTrajectoryGuideTests
     }
 
     [Fact]
+    public async Task Contribute_Fold_RendersItsOwnTextInPlaceOfThePriorSummary()
+    {
+        // A fold returns the whole updated summary, so the prior one must not be rendered beside it.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new RecordingCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content == "SUMMARY");
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("PRIOR SUMMARY"));
+    }
+
+    [Fact]
+    public async Task Contribute_ViewThatInjectsNothing_StillRendersThePriorSummaryAlone()
+    {
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new SilentViewStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content == "PRIOR SUMMARY");
+    }
+
+    [Fact]
     public async Task Contribute_StrategyReportsItsOwnFailure_CarriesItOntoTheCompactionTrace()
     {
         // A strategy that fails open internally (AiCompactionStrategy keeps the prior summary) still
@@ -470,6 +496,13 @@ public sealed class HeadEvictionTrajectoryGuideTests
     {
         public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
             throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
+    }
+
+    // A view that only drops steps: persists nothing and injects nothing.
+    private sealed class SilentViewStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            Task.FromResult(new CompactionResult { InjectedText = "" });
     }
 
     // Mirrors how AiCompactionStrategy fails open: prior summary handed back, error reported.

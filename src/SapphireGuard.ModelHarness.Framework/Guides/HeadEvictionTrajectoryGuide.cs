@@ -98,7 +98,7 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
             // evicted slice. Steps behind the fold watermark are no longer rendered, so a prior
             // summary must stay in front of it: it is the only trace of them left in context.
             summaryToRender = result.UpdatedSummary is null && priorSummary is not null
-                ? string.Join("\n", new[] { priorSummary.Text, result.InjectedText }.Where(t => t.Length > 0))
+                ? string.Join("\n", new[] { priorSummary.Text, result.InjectedText }.Where(t => !string.IsNullOrEmpty(t)))
                 : result.InjectedText;
             draft.Compaction = result;
             draft.CompactionTrace = new CompactionTrace(
