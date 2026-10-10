@@ -142,7 +142,7 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
             activity?.AddEvent(new ActivityEvent("gen_ai.evaluation.result", tags: tags));
         }
 
-        // A sensor that threw and failed open is not an intervention — don't inflate the count.
+        // A sensor error is not an intervention — don't inflate the count.
         if (result.IsIntervene)
             SensorInterventions.Add(1,
                 new TagList { { "harness.sensor.name", sensorName }, { "harness.sensor.hook_point", hookPoint.ToString() } });

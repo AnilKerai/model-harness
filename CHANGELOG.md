@@ -87,7 +87,8 @@ Every entry that changes behaviour you can observe is marked.
   `error.type=sensor_error` event) instead of a pass. A response it cannot parse a score from is
   reported the same way — previously a pass with a "review inconclusive" reason, which only
   `ConsoleTracer` prints — and still charged to the run. `samples/AiToneSensor` no longer swallows
-  either case, and the guidance that told sensor authors to catch and return `Pass` is corrected.
+  either case (and now charges the tone model's spend to the run, as the guidance always said to), and
+  the guidance that told sensor authors to catch and return `Pass` is corrected.
 
   **Behavioural change:** nothing changes for a harness built with `AddModelHarness` /
   `AddStandardModelHarness` beyond the telemetry verdict. If you supply your **own `ISensorRunner`**,
@@ -107,14 +108,17 @@ Every entry that changes behaviour you can observe is marked.
 - **A sensor failure is diagnosable in OpenTelemetry without `enableSensitiveData`.** The
   `gen_ai.evaluation.result` event for a failed sensor carried `error.type=sensor_error` but put the
   reason behind the content gate, so by default you could see *that* a sensor failed and not *why*.
-  The runner's exception summary is now always emitted as `exception.message`, the same way a guide
+  The reason of any error result is now always emitted as `exception.message`, the same way a guide
   error's already was. Intervention reasons stay gated — they can quote the content a sensor flagged.
 
-  **Behavioural change:** the text of an exception thrown by a sensor now leaves the process by
-  default. Most exception messages describe the failure, not the conversation — an HTTP error, a
-  malformed-JSON error, a missing property — but the BCL `Parse` methods (`int.Parse`,
-  `decimal.Parse`, `bool.Parse`, `Enum.Parse`, …) quote the value they rejected. If a sensor of
-  **your own** parses model output, use `TryParse` rather than letting such an exception escape.
+  **Behavioural change:** the reason of an error result now leaves the process by default. That is
+  two things — keep conversation content out of both:
+  - **A `SensorResult.Failed(reason)` one of your own sensors returns.** Its reason used to be gated.
+  - **The text of an exception a sensor throws.** Most exception messages describe the failure, not
+    the conversation — an HTTP error, a malformed-JSON error, a missing property — but the BCL `Parse`
+    methods (`int.Parse`, `decimal.Parse`, `bool.Parse`, `Enum.Parse`, …) quote the value they
+    rejected. If a sensor of your own parses model output, use `TryParse` rather than letting such an
+    exception escape.
 
 ### Added
 

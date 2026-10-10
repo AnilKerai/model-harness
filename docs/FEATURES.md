@@ -128,7 +128,7 @@ The key design points:
   `try/catch` that returns `SensorResult.Pass`. Let the exception propagate: `DefaultSensorRunner`
   turns it into a non-blocking error result, so a transient failure never blocks an agent response,
   *and* it is recorded in telemetry (`harness.sensor.evaluations` with `verdict=error`, plus an
-  `error.type=sensor_error` event carrying the exception summary). A swallowed failure looks exactly
+  `error.type=sensor_error` event carrying the error reason). A swallowed failure looks exactly
   like a passed check, so a broken sensor would go unnoticed. The same goes for output you cannot
   use: when the call succeeds but yields no verdict, return
   `SensorResult.Failed(reason) with { Usage = …, Cost = … }` — non-blocking, charged, and visible —

@@ -511,7 +511,7 @@ Two things to know once the traces arrive:
   text on evaluation events. **Off by default** — no user or model content leaves the process unless you
   opt in. Turn it on in development to read the exchange; leave it off in production (and note that content
   attributes make spans larger, so ingestion cost rises when it's on). Error-path diagnostics — span
-  status, the `exception` event, `harness.failure.reason`, and the exception summary
+  status, the `exception` event, `harness.failure.reason`, and the error reason
   (`exception.message`) on a failed guide (`guide_error`), sensor (`sensor_error`) or compaction pass
   (`compaction_error`) — are always emitted regardless, since they only appear when something already
   failed.
@@ -820,7 +820,7 @@ builder.WithAiCompaction(
 
 **Size `WindowTokens` to the task, not tight.** Below the window the trajectory guide does nothing, so a task that fits never compacts and pays zero cost or lossiness. Compaction trades fidelity for bounded context — it earns its keep only on long-horizon runs (deep research, multi-hour coding, long chat). A bounded task (e.g. a verification agent that loads a procedure, checks a few sources, and emits a report) should keep a generous window and leave compaction dormant; forcing a small window just pays the fidelity cost for no benefit.
 
-The rolling summary is checkpointed, so a resumed run rehydrates it and folds onward rather than recomputing. The strategy's token usage and cost accumulate on `AgentState.CompactionUsage` / `CompactionCost` and are counted by the budget enforcer. It fails open — on model error, timeout, or empty output the prior summary is preserved and a bare note is injected for the newly evicted slice (retried next turn), so a compaction failure never blocks the run. The reason is reported on the compaction trace (`CompactionTrace.Error`; `OpenTelemetryTracer` tags the `compact_context` event `error.type=compaction_error` with the exception summary), so a degraded fold is visible rather than silent. Use a fast, cheap model (Haiku-class).
+The rolling summary is checkpointed, so a resumed run rehydrates it and folds onward rather than recomputing. The strategy's token usage and cost accumulate on `AgentState.CompactionUsage` / `CompactionCost` and are counted by the budget enforcer. It fails open — on model error, timeout, or empty output the prior summary is preserved and a bare note is injected for the newly evicted slice (retried next turn), so a compaction failure never blocks the run. The reason is reported on the compaction trace (`CompactionTrace.Error`; `OpenTelemetryTracer` tags the `compact_context` event `error.type=compaction_error` with the reason), so a degraded fold is visible rather than silent. Use a fast, cheap model (Haiku-class).
 
 ### Write a custom compaction strategy
 

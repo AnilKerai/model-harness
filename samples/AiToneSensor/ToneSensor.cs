@@ -37,16 +37,24 @@ public sealed class ToneSensor(IModelClient modelClient) : ISensor
         var start = verdict.IndexOf('{');
         var end = verdict.LastIndexOf('}');
         // The call worked but produced no verdict. That is not a pass: Failed is non-blocking and is
-        // recorded as a sensor error, the same as a throw.
+        // recorded as a sensor error, the same as a throw. Every outcome below carries the call's
+        // usage and cost, so the tone model's spend counts toward the run's budget.
         if (start < 0 || end <= start)
-            return SensorResult.Failed("The tone model returned no JSON verdict.");
+            return SensorResult.Failed("The tone model returned no JSON verdict.") with
+            {
+                Usage = response.Usage,
+                Cost = response.Cost
+            };
 
         using var json = JsonDocument.Parse(verdict[start..(end + 1)]);
         var pass = json.RootElement.GetProperty("pass").GetBoolean();
         var reason = json.RootElement.GetProperty("reason").GetString() ?? "Tone check failed.";
 
         return pass
-            ? SensorResult.Pass
-            : SensorResult.Intervene($"Tone check failed: {reason} Restate your response with a professional and respectful tone.");
+            ? SensorResult.PassWithUsage(response.Usage, response.Cost)
+            : SensorResult.InterveneWithUsage(
+                $"Tone check failed: {reason} Restate your response with a professional and respectful tone.",
+                response.Usage,
+                response.Cost);
     }
 }
