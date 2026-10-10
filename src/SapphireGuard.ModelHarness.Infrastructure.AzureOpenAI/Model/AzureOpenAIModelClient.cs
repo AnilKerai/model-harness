@@ -45,7 +45,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct)
     {
-        var chatMessages = BuildMessages(messages);
+        var chatMessages = AzureOpenAIWireFormat.BuildMessages(messages);
 
         var options = new ChatCompletionOptions();
         if (_maxOutputTokens is { } max)
@@ -55,114 +55,6 @@ public sealed class AzureOpenAIModelClient : IModelClient
 
         var result = await _chatClient.CompleteChatAsync(chatMessages, options, ct);
         return MapResponse(result.Value);
-    }
-
-    private static List<ChatMessage> BuildMessages(IReadOnlyList<FrameworkMessage> messages)
-    {
-        var result = new List<ChatMessage>();
-
-        var systemText = messages
-            .Where(m => m.Role == MessageRole.System)
-            .Select(m => m.Content)
-            .FirstOrDefault();
-
-        if (systemText is not null)
-            result.Add(new SystemChatMessage(systemText));
-
-        var nonSystem = messages.Where(m => m.Role != MessageRole.System).ToList();
-
-        int i = 0;
-        while (i < nonSystem.Count)
-        {
-            var msg = nonSystem[i];
-
-            if (msg.Role == MessageRole.User)
-            {
-                result.Add(new UserChatMessage(msg.Content));
-                i++;
-            }
-            else if (msg.Role is MessageRole.Assistant or MessageRole.ToolUse)
-            {
-                // Collect consecutive assistant/tool-use messages into a single AssistantChatMessage.
-                // GPT models can return text alongside tool calls in one turn; both are batched here.
-                string? text = null;
-                var toolCalls = new List<ChatToolCall>();
-
-                while (i < nonSystem.Count &&
-                       nonSystem[i].Role is MessageRole.Assistant or MessageRole.ToolUse)
-                {
-                    if (nonSystem[i].Role == MessageRole.Assistant)
-                        text = nonSystem[i].Content;
-                    else
-                        toolCalls.Add(ParseToolUse(nonSystem[i].Content));
-                    i++;
-                }
-
-                result.Add(toolCalls.Count > 0
-                    ? new AssistantChatMessage(toolCalls)
-                    : new AssistantChatMessage(text ?? string.Empty));
-            }
-            else if (msg.Role == MessageRole.Tool)
-            {
-                var (callId, resultText) = ParseToolResult(msg.Content);
-                result.Add(new ToolChatMessage(callId, resultText));
-                i++;
-            }
-            else
-            {
-                i++;
-            }
-        }
-
-        return result;
-    }
-
-    private static ChatToolCall ParseToolUse(string content)
-    {
-        // Format written by HeadEvictionTrajectoryGuide: "[tool_call name={name} id={callId}] {argsJson}"
-        string name = "";
-        string callId = "";
-        string argsJson = "{}";
-
-        if (content.StartsWith("[tool_call ", StringComparison.Ordinal))
-        {
-            var closeBracket = content.IndexOf(']');
-            if (closeBracket > 0)
-            {
-                var meta = content[1..closeBracket];
-                argsJson = content[(closeBracket + 1)..].TrimStart();
-                foreach (var part in meta.Split(' '))
-                {
-                    if (part.StartsWith("name=", StringComparison.Ordinal)) name = part[5..];
-                    if (part.StartsWith("id=", StringComparison.Ordinal)) callId = part[3..];
-                }
-            }
-        }
-
-        return ChatToolCall.CreateFunctionToolCall(callId, name, BinaryData.FromString(argsJson));
-    }
-
-    private static (string CallId, string ResultText) ParseToolResult(string content)
-    {
-        // Format written by HeadEvictionTrajectoryGuide: "[tool_result id={callId} error={bool}] {resultText}"
-        string callId = "";
-        string resultText = content;
-
-        if (content.StartsWith("[tool_result ", StringComparison.Ordinal))
-        {
-            var closeBracket = content.IndexOf(']');
-            if (closeBracket > 0)
-            {
-                var meta = content[1..closeBracket];
-                resultText = content[(closeBracket + 1)..].TrimStart();
-                foreach (var part in meta.Split(' '))
-                {
-                    if (part.StartsWith("id=", StringComparison.Ordinal)) callId = part[3..];
-                }
-            }
-        }
-
-        return (callId, resultText);
     }
 
     private static ChatTool MapTool(ToolDefinition def) =>

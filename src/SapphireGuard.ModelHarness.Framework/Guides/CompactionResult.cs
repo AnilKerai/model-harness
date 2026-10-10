@@ -4,16 +4,20 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 
 /// <summary>
 /// What a <see cref="ICompactionStrategy"/> produces for one compaction pass. <see cref="InjectedText"/>
-/// is the complete replacement rendered in place of the evicted steps this turn; the optional
-/// <see cref="UpdatedSummary"/> decides whether the strategy behaves as a stateless view or an
-/// incremental fold.
+/// is rendered in place of the evicted steps this turn; the optional <see cref="UpdatedSummary"/>
+/// decides whether the strategy behaves as a stateless view or an incremental fold — and with it,
+/// whether <see cref="InjectedText"/> replaces the prior rolling summary or follows it.
 /// </summary>
 public sealed record CompactionResult
 {
     /// <summary>
-    /// The complete text rendered into the prompt in place of the evicted steps. It must stand on its
-    /// own — a fold returns the full folded summary here, not just the delta. An empty string injects
-    /// nothing (e.g. a strategy that only drops steps deterministically).
+    /// The text rendered into the prompt in place of the evicted steps. For a fold (a non-null
+    /// <see cref="UpdatedSummary"/>) it is the complete replacement and must stand on its own — return
+    /// the full folded summary, not just the delta. For a result that persists nothing
+    /// (<see cref="UpdatedSummary"/> is <see langword="null"/>) it covers only the steps evicted this
+    /// pass: the harness renders any prior rolling summary in front of it, so do not repeat that
+    /// summary here. An empty string injects nothing (e.g. a strategy that only drops steps
+    /// deterministically).
     /// </summary>
     public required string InjectedText { get; init; }
 
@@ -31,6 +35,14 @@ public sealed record CompactionResult
 
     /// <summary>Model cost the strategy incurred, if any — attributed to the run's budget. Zero for deterministic strategies.</summary>
     public decimal Cost { get; init; } = 0m;
+
+    /// <summary>
+    /// Why the strategy could not compact as intended and fell back — set by a strategy that fails
+    /// open internally, and by the harness when a strategy throws. <see langword="null"/> on success.
+    /// Surfaced in telemetry via <see cref="Tracing.CompactionTrace.Error"/> without content gating,
+    /// so it must describe the failure (an exception type and message), never conversation content.
+    /// </summary>
+    public string? Error { get; init; }
 
     /// <summary>
     /// The standard bare omission note — a stateless view over <paramref name="evictedStepCount"/>

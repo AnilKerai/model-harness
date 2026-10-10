@@ -131,11 +131,18 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
             // so it is conversation content — gated. The sensor name/hook_point/verdict stay always-on.
             if (enableSensitiveData)
                 tags["gen_ai.evaluation.explanation"] = result.Reason ?? string.Empty;
-            if (result.IsError) tags["error.type"] = "sensor_error";
+            if (result.IsError)
+            {
+                // An error's reason describes the failure — the runner's exception summary, or a
+                // sensor's own Failed reason — not content the sensor flagged, so it is emitted ungated
+                // like a guide error: a failing sensor has to be diagnosable without content capture.
+                tags["error.type"] = "sensor_error";
+                tags["exception.message"] = result.Reason ?? string.Empty;
+            }
             activity?.AddEvent(new ActivityEvent("gen_ai.evaluation.result", tags: tags));
         }
 
-        // A sensor that threw and failed open is not an intervention — don't inflate the count.
+        // A sensor error is not an intervention — don't inflate the count.
         if (result.IsIntervene)
             SensorInterventions.Add(1,
                 new TagList { { "harness.sensor.name", sensorName }, { "harness.sensor.hook_point", hookPoint.ToString() } });
@@ -177,7 +184,7 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
     {
         if (!_activities.TryGetValue(taskId, out var activity)) return;
 
-        activity?.AddEvent(new ActivityEvent("compact_context", tags: new ActivityTagsCollection
+        var tags = new ActivityTagsCollection
         {
             ["harness.turn"] = turn,
             ["harness.compaction.steps_evicted"] = trace.StepsEvicted,
@@ -186,7 +193,13 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
             ["harness.compaction.usage.input_tokens"] = trace.Usage.InputTokens,
             ["harness.compaction.usage.output_tokens"] = trace.Usage.OutputTokens,
             ["harness.cost"] = (double)trace.Cost,
-        }));
+        };
+        if (trace.Error is { } error)
+        {
+            tags["error.type"] = "compaction_error";
+            tags["exception.message"] = error;
+        }
+        activity?.AddEvent(new ActivityEvent("compact_context", tags: tags));
 
         CompactionReclaimed.Record(trace.TokensReclaimed, new TagList { { "harness.compaction.folded", trace.Folded } });
     }

@@ -79,20 +79,39 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
                     RemainingTokenBudget = budget
                 }, ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // Only genuine harness cancellation propagates. A strategy's *own* OperationCanceledException
+            // — an HttpClient timeout surfaces as TaskCanceledException even though our token is
+            // untouched — must fall through to the fail-open catch below, or one slow compaction
+            // model ends the run as "cancelled".
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // A third-party strategy must never take down the run — fall back to a bare note.
-                result = CompactionResult.OmissionNote(trimCount);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // A third-party strategy must never take down the run — fall back to a bare note,
+                // and carry the reason so the failure is visible in telemetry rather than silent.
+                result = CompactionResult.OmissionNote(trimCount) with { Error = $"{ex.GetType().Name}: {ex.Message}" };
             }
 
-            summaryToRender = result.InjectedText;
+            // A result that persists nothing — a view, or a fallback — describes only the newly
+            // evicted slice. Steps behind the fold watermark are no longer rendered, so a prior
+            // summary must stay in front of it: it is the only trace of them left in context.
+            summaryToRender = result.UpdatedSummary is null && priorSummary is not null
+                ? string.Join("\n", new[] { priorSummary.Text, result.InjectedText }.Where(t => !string.IsNullOrEmpty(t)))
+                : result.InjectedText;
             draft.Compaction = result;
             draft.CompactionTrace = new CompactionTrace(
                 StepsEvicted: trimCount,
                 TokensReclaimed: tokensReclaimed,
-                Folded: result.UpdatedSummary is not null,
+                // A strategy that fails open by handing the prior summary back has not folded the
+                // new slice, so an error never counts as a fold.
+                Folded: result.Error is null && result.UpdatedSummary is not null,
                 Usage: result.Usage,
-                Cost: result.Cost);
+                Cost: result.Cost)
+            {
+                Error = result.Error
+            };
             liveGroups = liveGroups[trimCount..];
         }
 

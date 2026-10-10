@@ -278,6 +278,158 @@ public sealed class HeadEvictionTrajectoryGuideTests
     }
 
     [Fact]
+    public async Task Contribute_StrategyThrows_RecordsWhyOnTheCompactionTrace()
+    {
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new ThrowingCompactionStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Equal("InvalidOperationException: strategy boom", draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_StrategyThrowsWithAPriorSummary_KeepsTheSummaryInContext()
+    {
+        // Steps behind the fold watermark are no longer rendered, so the rolling summary is the only
+        // trace of them. A fallback that replaced it with a bare note would leave the model with
+        // neither — on every turn, if the strategy keeps failing.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new ThrowingCompactionStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        var rendered = Assert.Single(draft.TrajectoryMessages, m => m.Content.Contains("omitted"));
+        Assert.Contains("PRIOR SUMMARY", rendered.Content);
+    }
+
+    [Fact]
+    public async Task Contribute_ViewStrategyOverAStateWithARollingSummary_KeepsTheSummaryInContext()
+    {
+        // A checkpoint written under a fold strategy can be resumed with the default view strategy
+        // wired. A view describes only the newly evicted slice, so the summary must still render.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+
+        var draft = await ContributeAsync(state, windowTokens: 1); // NullCompactionStrategy
+
+        var rendered = Assert.Single(draft.TrajectoryMessages, m => m.Content.Contains("omitted"));
+        Assert.Contains("PRIOR SUMMARY", rendered.Content);
+    }
+
+    [Fact]
+    public async Task Contribute_Fold_RendersItsOwnTextInPlaceOfThePriorSummary()
+    {
+        // A fold returns the whole updated summary, so the prior one must not be rendered beside it.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new RecordingCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content == "SUMMARY");
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("PRIOR SUMMARY"));
+    }
+
+    [Fact]
+    public async Task Contribute_ViewThatInjectsNothing_StillRendersThePriorSummaryAlone()
+    {
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new SilentViewStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content == "PRIOR SUMMARY");
+    }
+
+    [Fact]
+    public async Task Contribute_StrategyReturnsNullText_DoesNotFaultTheRun()
+    {
+        // InjectedText is non-nullable, but a strategy compiled without nullable checks can still
+        // hand back null. The trajectory guide is not wrapped by the runner, so throwing here would
+        // end the run — render the prior summary and carry on.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new NullTextStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content == "PRIOR SUMMARY");
+    }
+
+    [Fact]
+    public async Task Contribute_StrategyReportsItsOwnFailure_CarriesItOntoTheCompactionTrace()
+    {
+        // A strategy that fails open internally (AiCompactionStrategy keeps the prior summary) still
+        // has to be visible: its reported error rides the trace exactly like a thrown one.
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new SelfReportingFailureStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Equal("HttpRequestException: 503", draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_FoldFailsButKeepsThePriorSummary_IsNotReportedAsFolded()
+    {
+        // AiCompactionStrategy fails open by handing the prior summary back unchanged. That is a
+        // fallback, not a fold — the trace must not claim the newly evicted slice was folded.
+        var state = (EmptyState() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 0) })
+            .AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new SelfReportingFailureStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.False(draft.CompactionTrace!.Folded);
+    }
+
+    [Fact]
+    public async Task Contribute_StrategySucceeds_LeavesTheTraceErrorNull()
+    {
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new RecordingCompactionStrategy()).ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Null(draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_StrategyTimesOutOnItsOwn_FailsOpenInsteadOfCancellingTheRun()
+    {
+        // A strategy's own HTTP timeout surfaces as TaskCanceledException — an
+        // OperationCanceledException — even though the harness token was never cancelled. It must
+        // fall back to the omission note like any other fault, not end the run as "cancelled".
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        var draft = new ContextDraft();
+
+        await EvictingGuide(new TimingOutCompactionStrategy())
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Contains("omitted", draft.Compaction!.InjectedText);
+        Assert.StartsWith("TaskCanceledException", draft.CompactionTrace!.Error);
+    }
+
+    [Fact]
+    public async Task Contribute_HarnessCancellationRequested_StillPropagates()
+    {
+        // The fail-open filter must not swallow genuine cancellation — that is real control flow.
+        var state = EmptyState().AppendStep(ModelStep("tail to evict"));
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            EvictingGuide(new TimingOutCompactionStrategy()).ContributeAsync(new ContextDraft(), state, cts.Token));
+    }
+
+    [Fact]
     public async Task Contribute_WhenCompacting_PopulatesCompactionTrace()
     {
         var state = EmptyState()
@@ -353,5 +505,36 @@ public sealed class HeadEvictionTrajectoryGuideTests
     {
         public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
             throw new InvalidOperationException("strategy boom");
+    }
+
+    private sealed class TimingOutCompactionStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
+    }
+
+    // A view that only drops steps: persists nothing and injects nothing.
+    private sealed class SilentViewStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            Task.FromResult(new CompactionResult { InjectedText = "" });
+    }
+
+    private sealed class NullTextStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            Task.FromResult(new CompactionResult { InjectedText = null! });
+    }
+
+    // Mirrors how AiCompactionStrategy fails open: prior summary handed back, error reported.
+    private sealed class SelfReportingFailureStrategy : ICompactionStrategy
+    {
+        public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct) =>
+            Task.FromResult(new CompactionResult
+            {
+                InjectedText = "[steps omitted — compaction unavailable]",
+                UpdatedSummary = request.PriorSummary,
+                Error = "HttpRequestException: 503"
+            });
     }
 }

@@ -117,8 +117,10 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
 
     public void LogCompaction(string taskId, int turn, CompactionTrace trace) =>
         Publish("compaction", taskId, turn,
-            $"Compacted: reclaimed {trace.TokensReclaimed} tok (evicted {trace.StepsEvicted} steps)",
-            new { trace.TokensReclaimed, trace.StepsEvicted, trace.Folded });
+            trace.Error is { } error
+                ? $"Compaction fell back ({trace.StepsEvicted} steps omitted): {error}"
+                : $"Compacted: reclaimed {trace.TokensReclaimed} tok (evicted {trace.StepsEvicted} steps)",
+            new { trace.TokensReclaimed, trace.StepsEvicted, trace.Folded, trace.Error });
 
     public void LogRateLimit(string taskId, int turn, TimeSpan delay) =>
         Publish("ratelimit", taskId, turn, $"Rate-limit backoff: {delay.TotalSeconds:0.#}s",

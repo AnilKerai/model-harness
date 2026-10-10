@@ -80,29 +80,36 @@ public sealed class CriticSensorTests
     }
 
     [Fact]
-    public async Task ModelThrows_FailsOpenWithoutUsage()
+    public async Task ModelThrows_SurfacesAsASensorErrorNotAPass()
     {
-        var model = new ThrowingModel();
-        var sut = new CriticSensor(model);
+        // The critic does not swallow a model failure. The sensor runner fails open — the answer is
+        // still returned — and records an error, so a broken critic is visible in telemetry rather
+        // than indistinguishable from a passed review.
+        var runner = new DefaultSensorRunner([new CriticSensor(new ThrowingModel())]);
 
-        var result = await sut.CheckAsync(HookPoint.PreReturn, EmptyState(), ModelStep("answer"), CancellationToken.None);
+        var results = await runner.RunAsync(HookPoint.PreReturn, EmptyState(), ModelStep("answer"), CancellationToken.None);
 
+        var result = Assert.Single(results).Result;
+        Assert.True(result.IsError);
         Assert.False(result.IsIntervene);
-        Assert.Null(result.Usage);
-        Assert.Equal(1, model.Calls);
+        Assert.Contains("model down", result.Reason);
     }
 
     [Fact]
-    public async Task UnparseableResponse_FailsOpenWithUsage()
+    public async Task UnparseableVerdict_IsReportedAsAnErrorButStillChargesTheCall()
     {
-        var model = new ScriptedModel("Honestly it looks pretty good to me", new Usage(5, 5), 0m);
+        // No verdict is not a pass: a critic that never yields a score must not look like one that
+        // approves every answer. The answer is still returned, and the call it made is still charged.
+        var model = new ScriptedModel("Honestly it looks pretty good to me", new Usage(5, 5), 0.001m);
         var sut = new CriticSensor(model);
 
         var result = await sut.CheckAsync(HookPoint.PreReturn, EmptyState(), ModelStep("answer"), CancellationToken.None);
 
+        Assert.True(result.IsError);
         Assert.False(result.IsIntervene);
         Assert.Contains("parse", result.Reason!);
         Assert.Equal(new Usage(5, 5), result.Usage);
+        Assert.Equal(0.001m, result.Cost);
     }
 
     [Fact]
