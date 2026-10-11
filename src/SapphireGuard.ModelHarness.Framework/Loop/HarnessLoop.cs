@@ -113,19 +113,16 @@ public sealed class HarnessLoop(
                     continue;
                 }
 
+                // Allowlist, not denylist: a response is a final answer or a set of calls to dispatch only
+                // if it ended normally. Truncated, refused, filtered or unrecognised responses stop here —
+                // after PostModelCall (so a content gate still runs) but before tool dispatch (a cut-short
+                // tool call may carry partial arguments) and before PreReturn (a validator would challenge
+                // a remnant the model cannot repair under the same cap). → ADR-004
+                if (CutShortReason(response.StopReason) is { } cutShort)
+                    return PartialOutcome(state, response.Text, cutShort);
+
                 if (response.ToolCalls.Count == 0)
                 {
-                    // A response the provider truncated at its output-token cap is not a final answer,
-                    // even though it carries no tool calls. Checked *before* the PreReturn sensors on
-                    // purpose: a validating sensor (the WithStructuredOutput<T> repair loop) would
-                    // challenge the malformed remnant, the retry would hit the same cap, and the run
-                    // would burn to the intervention limit and report *that* as the reason instead of
-                    // the truncation. No second model call either — re-asking under the same cap only
-                    // truncates again.
-                    if (response.StopReason == StopReason.MaxTokens)
-                        return PartialOutcome(state, response.Text,
-                            "Response truncated at the provider's output-token limit — raise the adapter's MaxOutputTokens, or narrow the task.");
-
                     var (preReturnState, challenged, suppressToolsOnChallenge) = await RunSensorsAsync(state, turnIndex, HookPoint.PreReturn, state.Trajectory[^1], ct);
                     state = preReturnState;
                     if (challenged)
@@ -405,10 +402,28 @@ public sealed class HarnessLoop(
         // The finalisation call is the likeliest in the run to be truncated — it was just instructed to
         // produce a complete answer in one shot — so name that in the reason rather than handing back a
         // silently clipped answer under a status that only mentions the budget.
-        if (response.StopReason == StopReason.MaxTokens)
-            reason += " The finalisation response was itself truncated at the provider's output-token limit.";
+        if (CutShortReason(response.StopReason) is { } cutShort)
+            reason += $" The finalisation response was also cut short: {cutShort}";
         return PartialOutcome(finalState, response.Text, reason);
     }
+
+    // Null when the response ended normally; otherwise the FailureReason to report, naming the remedy. The
+    // default arm is what makes this an allowlist: a member added later, or a reason an adapter maps to
+    // Other, is cut short until someone decides otherwise.
+    private static string? CutShortReason(StopReason stopReason) => stopReason switch
+    {
+        StopReason.EndTurn or StopReason.StopSequence or StopReason.ToolUse => null,
+        StopReason.MaxTokens =>
+            "Response truncated at the provider's output-token limit — raise the adapter's MaxOutputTokens, or narrow the task.",
+        StopReason.ContextWindowExceeded =>
+            "Response truncated at the model's context window — the prompt plus MaxOutputTokens exceeded it; lower CompactionOptions.WindowTokens or MaxOutputTokens.",
+        StopReason.Refusal =>
+            "The model declined to respond — consider retrying on a fallback model, or rephrasing the task.",
+        StopReason.ContentFilter =>
+            "The provider's content filter withheld or cut the response.",
+        _ =>
+            $"Response ended with an unrecognised stop reason ({stopReason}), so it was not treated as a final answer."
+    };
 
     // Terminal PartialResult for a run whose best available answer is already in hand. Unlike
     // FinaliseOnBudgetAsync it spends no extra model call — the caller has the text it is going to get.

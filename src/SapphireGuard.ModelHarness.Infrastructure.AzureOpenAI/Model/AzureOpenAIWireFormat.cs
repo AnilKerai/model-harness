@@ -1,5 +1,7 @@
+using System.Text.Json;
 using OpenAI.Chat;
 using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI.Model;
 
@@ -126,5 +128,37 @@ internal static class AzureOpenAIWireFormat
         }
 
         return (callId, resultText);
+    }
+
+    // Every reason the provider reports maps explicitly; anything else is Other, never EndTurn, so the loop's
+    // allowlist keeps it out of Done. FunctionCall is obsolete (this adapter only declares tools) and falls to Other.
+    public static StopReason MapStopReason(ChatFinishReason? reason) => reason switch
+    {
+        ChatFinishReason.Stop => StopReason.EndTurn,
+        ChatFinishReason.ToolCalls => StopReason.ToolUse,
+        ChatFinishReason.Length => StopReason.MaxTokens,
+        ChatFinishReason.ContentFilter => StopReason.ContentFilter,
+        _ => StopReason.Other
+    };
+
+    // A response cut short at Length or by the content filter can carry tool-call arguments that are truncated
+    // JSON. The loop never dispatches calls from such a response, so an unparseable one is dropped rather than
+    // failing the run with a parser error before the loop can report why the response stopped. On any other
+    // response a malformed argument is a provider fault, and still throws.
+    public static List<ToolCall> ParseToolCalls(IEnumerable<ChatToolCall> toolCalls, StopReason stopReason)
+    {
+        var parsed = new List<ToolCall>();
+        foreach (var call in toolCalls)
+        {
+            try
+            {
+                parsed.Add(new ToolCall(call.Id, call.FunctionName, JsonDocument.Parse(call.FunctionArguments).RootElement));
+            }
+            catch (JsonException) when (stopReason is StopReason.MaxTokens or StopReason.ContentFilter)
+            {
+                // Dropped: a partial call from a response the loop will report as cut short.
+            }
+        }
+        return parsed;
     }
 }

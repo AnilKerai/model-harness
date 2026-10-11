@@ -15,4 +15,8 @@
     <PackageReference Include="Anthropic" Version="12.42.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SapphireGuard.ModelHarness.Framework.Tests.Unit" />
+  </ItemGroup>
+
 </Project>

@@ -37,7 +37,7 @@ bugs:
 
 ## Decision
 
-One two-clause shape, everywhere:
+One two-clause shape, wherever the loop or a runner catches a collaborator's exception:
 
 ```csharp
 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -59,11 +59,11 @@ takes the path it already had for a fault:
 | `DefaultSensorRunner` | `SensorResult.Failed(reason)` — flagged `IsError`, **not** an intervention; the batch survives and the model keeps its turn |
 | `DefaultGuideRunner` (supporting guides) | Guide skipped, contribution lost for that turn, logged via `LogGuideError` |
 | `HeadEvictionTrajectoryGuide` (the fold call) | Fallback omission note carrying `CompactionResult.Error` |
-| `HarnessLoop.ExecuteToolAsync` | Recoverable `IsError` `ToolResult` — the model replans |
+| `HarnessLoop.ExecuteToolAsync` | Recoverable `IsError` `ToolResult` — the model replans. **Not the two-clause shape:** see below |
 | `TaintTrackingSensor` (fail-**closed**) | `Intervene` — blocks the privileged action |
 | Polly breakers (`ResilientModelClientDecorator`, `ResilientTool`) | Counted as a failure, so the circuit can open |
 
-Two components invert or narrow the rule, deliberately:
+Three components invert, narrow or route around the rule, deliberately:
 
 - **`TaintTrackingSensor` fails closed.** Fail-open would let a privileged action through
   while tainted content sits in context — the one outcome it exists to prevent. Its catch
@@ -71,6 +71,12 @@ Two components invert or narrow the rule, deliberately:
   returns `Intervene`.
 - **`ResilientTool` counts its own timeout but does not retry it.** The call may already
   have run its side effect, and each retry would wait out the full timeout again.
+- **`ExecuteToolAsync` has no genuine-cancellation clause at all.** Its only special case is
+  the harness's own per-tool deadline, which gets the deadline message; every other
+  exception — including an `OperationCanceledException` raised because the run itself was
+  cancelled — becomes an `IsError` result. The run still ends as "cancelled", one step later:
+  the next `ct.ThrowIfCancellationRequested()` in the loop catches it. The outcome is the same;
+  the route is not, and a tool-path change that assumed the two-clause shape would be wrong.
 
 ## Consequences
 

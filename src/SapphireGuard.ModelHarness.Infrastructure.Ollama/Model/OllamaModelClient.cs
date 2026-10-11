@@ -227,15 +227,15 @@ public sealed class OllamaModelClient : IModelClient
         }
 
         int inputTokens = 0, outputTokens = 0;
+        string? doneReason = null;
         if (response is ChatDoneResponseStream done)
         {
             inputTokens = done.PromptEvalCount;
             outputTokens = done.EvalCount;
+            doneReason = done.DoneReason;
         }
 
-        var stopReason = toolCalls.Count > 0
-            ? FrameworkStopReason.ToolUse
-            : FrameworkStopReason.EndTurn;
+        var stopReason = OllamaWireFormat.MapStopReason(doneReason, hasToolCalls: toolCalls.Count > 0);
 
         return new ModelResponse
         {

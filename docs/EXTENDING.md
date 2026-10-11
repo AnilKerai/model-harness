@@ -802,6 +802,8 @@ builder.WithAzureOpenAIModel(new AzureOpenAIClientOptions
 
 For a custom transport, implement `IModelClient` and register it with the generic `builder.WithModel(_ => new MyModelClient(...))`.
 
+Map the provider's stop reason with care: the loop treats `EndTurn`, `StopSequence` and `ToolUse` as the only normal endings, so a reason you do not recognise must become `StopReason.Other`, **never** `EndTurn` — otherwise a truncated or refused response reaches the caller as `Done`. Map truncation to `MaxTokens` (or `ContextWindowExceeded`), and a safety stop to `Refusal` or `ContentFilter`, so the run's `FailureReason` names the right remedy. Put the mapping in a pure function and unit-test it, as the built-in adapters' `*WireFormat` classes do. → [ADR-004](decisions/004-response-is-final-only-when-it-ended-normally.md)
+
 **Production resilience (opt-in).** `builder.WithResilientModel(...)` (from `Infrastructure.Resilience`) wraps any model client in a Polly **circuit breaker** — after a run of failures it fast-fails for a cooldown instead of hammering a down provider, which matters under high throughput or across a fleet. It deliberately adds *no* retry or timeout (the provider SDKs already own those — a stacked second retry caused compounding back-off), so a single agent run rarely needs it. Every failure counts except the caller cancelling the run — including the client's own request timeout, which is the form a hung provider takes — and each wrapped client gets its own breaker, so one provider's outage never fast-fails another's calls (a sub-agent's client included):
 
 ```csharp

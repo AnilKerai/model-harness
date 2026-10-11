@@ -44,6 +44,15 @@ public sealed class AiCompactionStrategy(IModelClient modelClient) : ICompaction
                     Cost = response.Cost
                 };
 
+            // A fold is permanent — the steps it covers survive only as this text — so a truncated or refused
+            // summary must not become the record. No tools were offered, so ToolUse is not a normal ending here.
+            if (response.StopReason is not (StopReason.EndTurn or StopReason.StopSequence))
+                return FailOpen(request, $"the compaction model's response was cut short ({response.StopReason})") with
+                {
+                    Usage = response.Usage,
+                    Cost = response.Cost
+                };
+
             var text = $"[Summary of {foldedCount} earlier step(s)] {response.Text.Trim()}";
             return new CompactionResult
             {
