@@ -1,6 +1,5 @@
 using System.ClientModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using OpenAI.Chat;
@@ -10,8 +9,6 @@ using SapphireGuard.ModelHarness.Framework.Tools;
 
 using FrameworkMessage = SapphireGuard.ModelHarness.Framework.State.Message;
 using FrameworkUsage = SapphireGuard.ModelHarness.Framework.State.Usage;
-using FrameworkStopReason = SapphireGuard.ModelHarness.Framework.State.StopReason;
-using FrameworkToolCall = SapphireGuard.ModelHarness.Framework.Tools.ToolCall;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI.Model;
 
@@ -68,12 +65,8 @@ public sealed class AzureOpenAIModelClient : IModelClient
             .Select(p => p.Text)
             .ToList();
 
-        var toolCalls = completion.ToolCalls
-            .Select(tc => new FrameworkToolCall(
-                tc.Id,
-                tc.FunctionName,
-                JsonDocument.Parse(tc.FunctionArguments).RootElement))
-            .ToList();
+        var stopReason = AzureOpenAIWireFormat.MapStopReason(completion.FinishReason);
+        var toolCalls = AzureOpenAIWireFormat.ParseToolCalls(completion.ToolCalls, stopReason);
 
         var usage = new FrameworkUsage(
             InputTokens: completion.Usage.InputTokenCount,
@@ -83,7 +76,7 @@ public sealed class AzureOpenAIModelClient : IModelClient
         {
             Text = textParts.Count > 0 ? string.Join("\n", textParts) : null,
             ToolCalls = toolCalls,
-            StopReason = MapStopReason(completion.FinishReason),
+            StopReason = stopReason,
             Usage = usage,
             Cost = CalculateCost(_deploymentName, usage),
             Model = _deploymentName,
@@ -93,13 +86,6 @@ public sealed class AzureOpenAIModelClient : IModelClient
             CachedInputTokens = completion.Usage.InputTokenDetails?.CachedTokenCount ?? 0
         };
     }
-
-    private static FrameworkStopReason MapStopReason(ChatFinishReason? reason) => reason switch
-    {
-        ChatFinishReason r when r == ChatFinishReason.ToolCalls => FrameworkStopReason.ToolUse,
-        ChatFinishReason r when r == ChatFinishReason.Length    => FrameworkStopReason.MaxTokens,
-        _                                                       => FrameworkStopReason.EndTurn
-    };
 
     // Approximate cost based on Azure AI Foundry published pricing (June 2026).
     // Inferred from deployment name — update from https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/ when stale.

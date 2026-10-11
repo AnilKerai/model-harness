@@ -1,8 +1,10 @@
+using SapphireGuard.ModelHarness.Framework.State;
+
 namespace SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 
-// Pure parsers for the wire format the harness stores tool calls/results in (mirrors
-// ClaudeModelClient's format). Kept out of the I/O client so the parsing — the highest-risk
-// string-handling in the adapter — is unit-testable and counts toward coverage.
+// Pure mapping between the harness and Ollama's wire format: parsers for the format the harness
+// stores tool calls/results in (mirrors ClaudeModelClient's), and the done_reason mapping. Kept out
+// of the I/O client so the branching logic is unit-testable and counts toward coverage.
 internal static class OllamaWireFormat
 {
     // Format: "[tool_call name={name} id={callId}] {argsJson}"
@@ -55,4 +57,18 @@ internal static class OllamaWireFormat
 
         return (callId, isError, resultText);
     }
+
+    // On the wire done_reason is api.ChatResponse.DoneReason (omitempty), filled from llm.DoneReason.String() —
+    // "stop" or "length" — plus "load"/"unload" for model-lifecycle requests this adapter never sends. Ollama
+    // reports "stop" even on a response carrying tool calls, so ToolUse is inferred from their presence.
+    // A missing value is ambiguous: servers before v0.1.35 never send the field, and String() renders the
+    // declared-but-unassigned DoneReasonConnectionClosed as "", which omitempty drops. It falls back to the
+    // tool-call inference so those servers keep working; a strict mapping would make every answer from one
+    // PartialResult. Any other value is Other, never EndTurn, so the loop's allowlist keeps it out of Done.
+    public static StopReason MapStopReason(string? doneReason, bool hasToolCalls) => doneReason switch
+    {
+        null or "" or "stop" => hasToolCalls ? StopReason.ToolUse : StopReason.EndTurn,
+        "length" => StopReason.MaxTokens,
+        _ => StopReason.Other
+    };
 }

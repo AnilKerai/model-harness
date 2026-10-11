@@ -235,7 +235,7 @@ public sealed class HarnessLoopTests
         Assert.Equal(1, client.CallCount); // one forced-finalise call
     }
 
-    // ── Response truncation (provider output-token cap) ───────────────────────
+    // ── Response cut short (allowlisted stop reasons) ─────────────────────────
 
     [Fact]
     public async Task RunAsync_ResponseTruncatedAtMaxTokens_ReturnsPartialResultNotDone()
@@ -284,10 +284,10 @@ public sealed class HarnessLoopTests
     }
 
     [Fact]
-    public async Task RunAsync_TruncatedResponseCarryingToolCalls_StillDispatchesThem()
+    public async Task RunAsync_CutShortResponseCarryingToolCalls_DoesNotDispatchThem()
     {
-        // Truncation mid-tool_use is the provider's problem to report, not a reason to drop a call
-        // the model did manage to emit: the loop keeps its normal tool path.
+        // A response cut off mid-tool_use carries a call whose arguments may be partial. Dispatching it
+        // runs a real tool on guessed input, so the loop stops before dispatch and reports the cause.
         var truncatedWithCall = new ModelResponse
         {
             Text = null,
@@ -296,13 +296,100 @@ public sealed class HarnessLoopTests
             Usage = Usage.Zero,
             Cost = 0m
         };
-        var client = new ScriptedModelClient(truncatedWithCall, EndTurnResponse("done"));
+        var registry = new StubToolRegistry();
+        var client = new ScriptedModelClient(truncatedWithCall);
+        var harness = BuildHarness(client, toolRegistry: registry);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.PartialResult, outcome.Status);
+        Assert.Contains("output-token limit", outcome.FailureReason);
+        Assert.Equal(0, registry.DispatchCount);
+        Assert.Empty(outcome.FinalState.Trajectory.OfType<ToolCallStep>());
+    }
+
+    [Theory]
+    [InlineData(StopReason.MaxTokens, "output-token limit")]
+    [InlineData(StopReason.ContextWindowExceeded, "context window")]
+    [InlineData(StopReason.Refusal, "declined")]
+    [InlineData(StopReason.ContentFilter, "content filter")]
+    [InlineData(StopReason.Other, "unrecognised stop reason")]
+    public async Task RunAsync_ResponseCutShort_ReturnsPartialResultNamingTheCause(StopReason stopReason, string expectedCause)
+    {
+        var client = new ScriptedModelClient(new ModelResponse
+        {
+            Text = "partial",
+            ToolCalls = [],
+            StopReason = stopReason,
+            Usage = Usage.Zero,
+            Cost = 0m
+        });
+        var harness = BuildHarness(client);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.PartialResult, outcome.Status);
+        Assert.Equal("partial", outcome.FinalAnswer);
+        Assert.Contains(expectedCause, outcome.FailureReason);
+    }
+
+    [Theory]
+    [InlineData(StopReason.EndTurn)]
+    [InlineData(StopReason.StopSequence)]
+    public async Task RunAsync_ResponseEndedNormally_ReturnsDone(StopReason stopReason)
+    {
+        var client = new ScriptedModelClient(new ModelResponse
+        {
+            Text = "complete",
+            ToolCalls = [],
+            StopReason = stopReason,
+            Usage = Usage.Zero,
+            Cost = 0m
+        });
         var harness = BuildHarness(client);
 
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
 
         Assert.Equal(AgentStatus.Done, outcome.Status);
-        Assert.Single(outcome.FinalState.Trajectory.OfType<ToolCallStep>());
+        Assert.Null(outcome.FailureReason);
+    }
+
+    [Fact]
+    public async Task RunAsync_StopReasonValueTheLoopDoesNotKnow_IsCutShortNotDone()
+    {
+        // The allowlist's default arm: a member added to StopReason later, or an out-of-range value read
+        // back from a checkpoint, must not be mistaken for a finished answer.
+        var client = new ScriptedModelClient(new ModelResponse
+        {
+            Text = "?",
+            ToolCalls = [],
+            StopReason = (StopReason)99,
+            Usage = Usage.Zero,
+            Cost = 0m
+        });
+        var harness = BuildHarness(client);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.PartialResult, outcome.Status);
+        Assert.Contains("unrecognised stop reason", outcome.FailureReason);
+    }
+
+    [Fact]
+    public async Task RunAsync_CutShortResponse_PostModelCallSensorsStillRunFirst()
+    {
+        // A content gate (PII redaction) must hold for cut-short responses too: PostModelCall runs before
+        // the cut-short return, so a rejection still suppresses the response and gives the model a turn.
+        var client = new ScriptedModelClient(TruncatedResponse("contains a secret"), EndTurnResponse("clean"));
+        var harness = BuildHarness(client, sensors: [new CountdownSensor(HookPoint.PostModelCall, blockCount: 1)]);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal("clean", outcome.FinalAnswer);
+        Assert.Equal(2, client.CallCount);
+        Assert.Single(outcome.FinalState.Trajectory.OfType<SensorInterventionStep>(),
+            s => s.HookPoint == HookPoint.PostModelCall);
     }
 
     // ── PreModelCall sensor ───────────────────────────────────────────────────

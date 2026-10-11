@@ -9,11 +9,12 @@ and the reason is a property of this loop that other frameworks' loops do not ha
 
 Every framework surveyed — `Microsoft.Extensions.AI`, Semantic Kernel,
 `Microsoft.Agents.AI`, Pydantic AI, the OpenAI Agents SDK, LangChain `create_agent`, the
-Vercel AI SDK — broadcasts its output schema on **every** model call in the tool loop. They
-have to: a *generator* must be constrained before the call, and none of them knows which
-turn will be the last one. That exposes all of them to a turn-1 short-circuit, where the
-model satisfies the schema immediately and never touches its tools (vercel/ai#8354:
-*"anthropic models wouldn't call the tools"*). None detects, prevents, or documents it.
+Vercel AI SDK — *constrains generation* to its output schema on **every** model call in the
+tool loop (`response_format`, or a required final-answer tool). They have to: a *generator*
+must be constrained before the call, and none of them knows which turn will be the last one.
+That exposes all of them to a turn-1 short-circuit, where the model satisfies the schema
+immediately and never touches its tools (vercel/ai#8354: *"anthropic models wouldn't call the
+tools"*). None detects, prevents, or documents it.
 
 A *validator* only needs to know **after** the call. And this loop reaches `PreReturn`
 only on a turn with no tool calls — which is *the final turn, known with certainty*.
@@ -39,8 +40,10 @@ needs no pin. `ToolResult.Pins` exist to bridge *trajectory-borne* content (a `s
 result) into the persistent region; a guide's contribution is already there. Pins are for
 content the model discovered; guides are for content you declared.
 
-**`StructuredOutputSensor<T>` binds at `PreReturn`.** Exactly-final-turn enforcement, no
-broadcasting, intermediate reasoning turns left entirely unconstrained.
+**`StructuredOutputSensor<T>` binds at `PreReturn`.** Enforcement happens only on the final
+turn. The schema *is* stated every turn — the model has to know the contract — but as text in
+the system prompt, never as a constraint on generation, so intermediate reasoning and
+tool-calling turns stay free.
 
 **Repair, not throw.** A non-binding answer is `InterveneWithToolSuppression`d: the
 binder's own error — which names the missing or malformed member — goes back as a
@@ -48,29 +51,32 @@ binder's own error — which names the missing or malformed member — goes back
 reformat, and the loop's existing consecutive-intervention cap bounds it to `PartialResult`
 rather than an exception. No new counter was needed.
 
+**Lenient about transport, strict about shape.** Weak models wrap JSON in markdown fences and
+surround it with prose regardless of instruction — Instructor treats this as a first-class
+transport (`Mode.MD_JSON`) — so `TryBind` strips fences and extracts balanced JSON values,
+trying each candidate in turn. Betting on the first match was tried and cost a needless repair
+turn whenever a brace group in the preamble (`Result {see below}: {...}`) came first. Shape, by
+contrast, is strict: without `RespectRequiredConstructorParameters`, System.Text.Json treats
+every constructor parameter as optional and `Deserialize<Triage>("{}")` succeeds as
+`Triage { Category = null, Priority = 0 }` — the validator would be a rubber stamp.
+
 ## Consequences
 
-- **`RespectRequiredConstructorParameters = true` is the whole reason this is a validator
-  and not a no-op.** Without it, System.Text.Json treats every constructor parameter as
-  optional: `Deserialize<Triage>("{}")` yields `Triage { Category = null, Priority = 0 }`
-  and does not throw, so the validation silently becomes a rubber stamp. Paired with
-  `RespectNullableAnnotations`, per the .NET guidance for new code. A unit test guards it —
-  do not remove that test.
-- **Binding is lenient where leniency is safe and strict where it is not.** `TryBind`
-  strips markdown code fences and extracts balanced JSON values from surrounding prose,
-  **trying each in order until one deserializes** — a brace group in the preamble
-  (`Result {see below}: {...}`) is not the payload, and betting the bind on the first match
-  cost a needless repair turn. Weak models emit fences and prose regardless of instruction;
-  Instructor treats this as a first-class transport (`Mode.MD_JSON`). Base options inherit
-  `JsonSerializerOptions.Web` for case-insensitive matching and numbers-from-strings.
-- `[Description]` on the type and its members flows into the schema as `description`
-  keywords, so the contract documents itself to the model.
-- Non-object roots (`List<int>`, an enum) need no wrapper — the text channel carries any
-  JSON value, unlike a tool-input schema, which must be an object.
-- A truncated final answer is **not** a binding failure and must not be treated as one. A
-  response cut off at the provider's output-token cap is caught before the `PreReturn`
-  sensors run, precisely so this sensor does not challenge a remnant it cannot repair. See
-  `CLAUDE.md`, HarnessLoop invariants.
+The invariants this decision imposes are stated in `CLAUDE.md` (Structured output) and not
+repeated here. What the decision costs:
+
+- **The schema rides in every prompt.** It is validated once, on the final turn, but stated on
+  every call — prompt tokens each turn (a cache read on Anthropic once the prefix is warm).
+- **Conformance rests on obedience.** A text instruction is not a grammar. A model that cannot
+  follow the schema burns repair turns up to the intervention cap; the native-output upgrade path
+  that would help it is documented, not built.
+- **Repair can only reformat.** Tools are suppressed on the repair turn, so an answer that is
+  wrong because data is *missing* cannot be fixed by repair — only one that is badly shaped.
+- **Strictness is only as good as the type.** `RespectRequiredConstructorParameters` makes
+  constructor parameters required; a type built from `init` properties without `required` still
+  binds `{}`. The guarantee depends on how `T` is declared.
+- **Each repair is a paid model call.** The intervention cap allows two repairs; a third
+  challenge triggers one forced finalisation call and returns `PartialResult`.
 
 ## Alternatives rejected
 

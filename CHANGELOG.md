@@ -14,57 +14,127 @@ public API even though most consumers only implement a few of them.
 
 ## [Unreleased]
 
-### Fixed
+A response that did not end normally is no longer reported as a finished answer. `HarnessLoop` never
+read `StopReason`, and every adapter mapped a reason it did not recognise to `EndTurn`, so a truncated,
+refused or filtered response came back as `Done` — the cause was visible only by digging the last
+`ModelCallStep.Response.StopReason` out of the trajectory. Behavioural, and `StopReason` gains members;
+every break below carries its migration. The reasoning is in
+[ADR-004](docs/decisions/004-response-is-final-only-when-it-ended-normally.md).
 
-- **A response the provider truncated at its output-token cap was reported as a successful `Done`.**
-  `HarnessLoop` read "no tool calls" as "the model is finished", so a response carrying
-  `StopReason.MaxTokens` — the provider cutting generation at the adapter's `MaxOutputTokens`
-  (default 8096 in `ClaudeModelClient`) — came back as `AgentOutcome { Status = Done,
-  FailureReason = null }` with a `FinalAnswer` ending mid-sentence. Nothing in the loop read
-  `StopReason`; only the tracers did. A caller had no way to tell a complete answer from a clipped
-  one.
+### Breaking
 
-  This is **not** the budget path, which was correct and is unchanged: budget exhaustion is *our*
-  counter hitting *our* limit, and still gets its one tool-free finalisation call before returning
-  `PartialResult`. Truncation is the provider cutting a single response while the run's budget may
-  be barely touched — a different cause needing a different reason.
+- **Only a response that ended normally is `Done`.** `EndTurn`, `StopSequence` and `ToolUse` are the
+  normal endings. Every other `StopReason` now returns `PartialResult`, keeping the response text (if
+  any) as `FinalAnswer`, with a `FailureReason` naming the cause and the remedy:
 
-  A truncated response with no tool calls now returns `PartialResult`, keeping the partial text as
-  `FinalAnswer` and naming the cap in `FailureReason`. Three details, each deliberate:
+  | Stop reason (provider value) | 2.5.0 | Now — `FailureReason` says |
+  |---|---|---|
+  | `MaxTokens` (Anthropic `max_tokens`, Azure `length`, Ollama `length`) | `Done`, answer ending mid-sentence | output-token limit — raise the adapter's `MaxOutputTokens`, or narrow the task |
+  | `ContextWindowExceeded` (Anthropic `model_context_window_exceeded`) | `Done` | context window — shrink the prompt: lower `CompactionOptions.WindowTokens`, or narrow the task |
+  | `Refusal` (Anthropic `refusal`) | `Done` | the model declined — retry on a fallback model, or rephrase |
+  | `ContentFilter` (Azure `content_filter`) | `Done` | the provider's content filter withheld or cut the response |
+  | `Other` (anything unrecognised — e.g. Anthropic `pause_turn`, an empty Ollama stream) | `Done` | unrecognised stop reason |
 
-  - **Checked before the `PreReturn` sensors.** A validating sensor (the `WithStructuredOutput<T>`
-    repair loop) would challenge the truncated remnant, the retry would hit the same cap, and the
-    run would burn to the consecutive-intervention limit and report *that* — hiding the real cause
-    behind a misleading one.
-  - **No extra model call.** Re-asking under the same cap only truncates again, so unlike
-    `FinaliseOnBudgetAsync` this path spends nothing; the caller already has the text it is going
-    to get.
-  - **Tool calls still dispatch.** A truncated response that nonetheless carries tool calls keeps
-    the normal tool path — the model managed to emit them.
-
-  `FinaliseOnBudgetAsync` now appends the same note to its reason when the finalisation response is
-  itself truncated. It is the likeliest call in any run to be, having just been instructed to
-  produce a complete answer in one shot; the status was already honest, but the clipping was silent.
-
-  **Behavioural change.** A run that previously returned `Done` on a truncated response now returns
-  `PartialResult` with a non-null `FailureReason`. Callers branching on status see the new value:
+  The check runs after the `PostModelCall` sensors, so content gates still apply, and before the
+  `PreReturn` sensors, so a `WithStructuredOutput<T>` validator never tries to repair a remnant. It
+  spends no extra model call. Budget exhaustion is unchanged — it still gets one tool-free finalisation
+  call — but when that finalisation response is itself cut short, its reason now says so.
 
   ```csharp
-  // Before — a truncated answer was indistinguishable from a complete one
+  // Before — a truncated or refused answer was indistinguishable from a complete one
   if (outcome.Status == AgentStatus.Done)
-      Publish(outcome.FinalAnswer);        // could be a mid-sentence fragment
+      Publish(outcome.FinalAnswer);        // could be a mid-sentence fragment, or a refusal
 
-  // After — truncation is visible, and the partial text is still available
+  // After — the partial text is still available, and the reason says why it is partial
   if (outcome.Status == AgentStatus.Done)
       Publish(outcome.FinalAnswer);
   else if (outcome.Status == AgentStatus.PartialResult)
-      Review(outcome.FinalAnswer, outcome.FailureReason);   // names the output-token cap
+      Review(outcome.FinalAnswer, outcome.FailureReason);
   ```
 
-  If the truncation reason names the output-token limit, the fix is to raise the adapter's
-  `MaxOutputTokens` (`ClaudeClientOptions`, `AzureOpenAIClientOptions`, `OllamaClientOptions`) or to
-  narrow the task. `AgentOutcome.FailureReason`'s XML doc was corrected to match what the type has
-  always done — it is set for `PartialResult`, not only `Failed`.
+- **Tool calls from a cut-short response are not dispatched.** In 2.5.0 a response truncated mid-call
+  ran the tool on whatever arguments had arrived: the Anthropic adapter passed the partial input through,
+  and the Azure adapter threw parsing the truncated JSON, so the run ended `Failed` with a parser message.
+  The run now returns `PartialResult` before any dispatch. On Azure, unparseable arguments on a cut-short
+  response are kept as their raw text: not thrown, so the truncation is what gets reported, and not
+  dropped, so the call stays visible in the trajectory and traces. Malformed arguments on a response that
+  ended normally still throw. If a tool call is being cut off, raise `MaxOutputTokens`.
+
+- **`StopReason` gained `Refusal`, `ContentFilter` and `ContextWindowExceeded`, and every member now has
+  an explicit value.** The existing values are unchanged (`EndTurn = 0` … `Other = 4`), so a checkpoint
+  written by 2.5.0 reads back the same; the new members are appended, and members only ever will be. A
+  `switch` over `StopReason` with no discard arm no longer covers every value (CS8509 at compile time,
+  `SwitchExpressionException` at run time). One with a discard sends the new values to it — check that
+  arm does not treat them as success:
+
+  ```csharp
+  // Before — covered all five 2.5.0 members
+  string Label(StopReason r) => r switch
+  {
+      StopReason.EndTurn or StopReason.StopSequence => "ok",
+      StopReason.ToolUse => "tool",
+      StopReason.MaxTokens => "truncated",
+      StopReason.Other => "unknown",
+  };
+
+  // After — name the new members, and make the discard mean "not ok"
+  string Label(StopReason r) => r switch
+  {
+      StopReason.EndTurn or StopReason.StopSequence => "ok",
+      StopReason.ToolUse => "tool",
+      StopReason.MaxTokens or StopReason.ContextWindowExceeded => "truncated",
+      StopReason.Refusal or StopReason.ContentFilter => "declined",
+      _ => "unknown",
+  };
+  ```
+
+  **Custom `IModelClient` authors:** map a provider reason you do not recognise to `StopReason.Other`,
+  never `EndTurn` — `EndTurn` is how a response claims to be a finished answer, and the loop believes it.
+  See `docs/EXTENDING.md`.
+
+- **`AgentTool` no longer hands a parent agent an unfinished sub-agent run as a clean result.** In 2.5.0
+  it returned `FinalAnswer ?? FailureReason` and set `IsError` only for `Failed`: a sub-agent that ran out
+  of budget handed back its best-effort answer as a normal result with the reason dropped, and one that
+  stopped to ask a human returned `"(no result)"` as a success. Now:
+
+  | Sub-agent outcome | Parent receives |
+  |---|---|
+  | `Done` | the answer — unchanged |
+  | `PartialResult` with an answer | the answer, then `[INCOMPLETE — sub-agent '<name>' stopped early: <reason>]`; not an error, since a partial answer is still usable |
+  | `PartialResult` with no answer | an error naming the reason |
+  | `AwaitingHuman` | an error carrying the sub-agent's question, which cannot be relayed through a delegated call |
+  | `Failed` | an error carrying the reason — unchanged |
+
+  A parent prompt or sensor that matches on the sub-agent's result text should allow for the suffix.
+
+### Changed
+
+- **Every adapter maps the stop reasons it knows, and an unrecognised one to `Other`, never `EndTurn`.**
+  - **Anthropic:** `refusal` → `Refusal`, `model_context_window_exceeded` → `ContextWindowExceeded`,
+    anything else (including `pause_turn`, which only follows server-tool loops) → `Other`. The mapping
+    moved into an internal, unit-tested `ClaudeWireFormat`.
+  - **Azure OpenAI:** `content_filter` → `ContentFilter`; an unrecognised or missing finish reason → `Other`.
+  - **Ollama:** now reads `done_reason`. `length` → `MaxTokens` — the adapter never reported truncation
+    before, although it sends `MaxOutputTokens` as `num_predict`. `stop` → `EndTurn`, or `ToolUse` when
+    the response carries tool calls; any other value → `Other`. A response with no `done_reason` — every
+    server before v0.1.35 — keeps the previous inference from the tool calls; ADR-004 says why it is not
+    treated as abnormal.
+- **OpenTelemetry `gen_ai.response.finish_reasons`** gains `content_filter`, `refusal` and
+  `model_context_window_exceeded`.
+
+### Fixed
+
+- **`AiCompactionStrategy` persisted a truncated or refused summary as the run's permanent record.** It
+  rejected only an empty response, so a summary cut off at the output-token limit — or a refusal — became
+  the `RollingSummary`, the watermark advanced past the steps it claimed to cover, and those steps were
+  never rendered again. A response that did not end normally now fails open like any other compaction
+  fault: the prior summary is kept, the slice is retried next turn, the call's spend is still charged,
+  and `CompactionResult.Error` names the stop reason.
+- `AgentOutcome.FailureReason`'s XML doc said it was set only for `Failed`; it is set for `PartialResult`
+  too, and always has been.
+- `CompactionRequest.EvictedSteps`' XML doc, and this file's 1.0.0 migration for `CompactAsync`, omitted
+  `UserMessageStep` from the step types a strategy receives. It is the first step evicted from every
+  trajectory, so a strategy that switched over only the listed types silently dropped user turns.
 
 ## [2.5.0] — 2026-10-10
 
@@ -696,8 +766,10 @@ for the full reasoning.*
 
   The old parameters map as: `evictedStepCount` → `request.EvictedSteps.Count`,
   `remainingTokenBudget` → `request.RemainingTokenBudget`, and `evictedContent` → `request.EvictedSteps`,
-  which are now typed `Step`s (`ModelCallStep`, `ToolCallStep`, `SensorInterventionStep`) rather than
-  strings — render them yourself, or inspect them to compact structurally.
+  which are now typed `Step`s (`UserMessageStep`, `ModelCallStep`, `ToolCallStep`, `SensorInterventionStep`)
+  rather than strings — render them yourself, or inspect them to compact structurally. Every trajectory
+  opens with a `UserMessageStep`, so it is the first step evicted: a `switch` over the other three
+  silently drops user turns from the summary.
 
   **Migration — a fold (recommended for long runs).** Summarise only `request.EvictedSteps` on top of
   `request.PriorSummary` and return a non-null `UpdatedSummary` whose `FoldedStepCount` is the new

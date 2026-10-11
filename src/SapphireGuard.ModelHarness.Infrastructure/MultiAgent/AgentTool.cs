@@ -11,6 +11,13 @@ namespace SapphireGuard.ModelHarness.Infrastructure.MultiAgent;
 /// <paramref name="budget"/> bounds each delegated run; when <see langword="null"/> the
 /// sub-agent uses the agent's default budget.
 /// </summary>
+/// <remarks>
+/// A sub-agent that does not finish is never reported as a clean result. A
+/// <see cref="AgentStatus.PartialResult"/> with an answer comes back as a normal result with
+/// the reason appended — a partial answer is still usable, and the parent model can act on it
+/// or delegate a narrower task. One with no answer, a failure, and a sub-agent that suspended
+/// to ask a human (which cannot be relayed through a tool call) all come back as errors.
+/// </remarks>
 public sealed class AgentTool(string agentName, AgentFactory factory, Budget? budget = null) : ITool
 {
     public string Name => agentName;
@@ -38,12 +45,28 @@ public sealed class AgentTool(string agentName, AgentFactory factory, Budget? bu
         // compacts, or delegates onward spends where model-call steps can't see it, and reporting
         // low here silently under-charges the parent's budget — compounding with delegation depth.
         var (_, usage, cost) = outcome.FinalState.TotalSpend();
+        var (content, isError) = Describe(outcome);
 
         return new ToolResult(
             call.CallId,
-            outcome.FinalAnswer ?? outcome.FailureReason ?? "(no result)",
-            IsError: outcome.Status == AgentStatus.Failed,
+            content,
+            IsError: isError,
             Cost: cost > 0 ? cost : null,
             Usage: usage.TotalTokens > 0 ? usage : null);
     }
+
+    private (string Content, bool IsError) Describe(AgentOutcome outcome) => outcome.Status switch
+    {
+        AgentStatus.Done =>
+            (outcome.FinalAnswer ?? "(no result)", false),
+        AgentStatus.PartialResult when !string.IsNullOrWhiteSpace(outcome.FinalAnswer) =>
+            ($"{outcome.FinalAnswer}\n\n[INCOMPLETE — sub-agent '{agentName}' stopped early: {outcome.FailureReason}]", false),
+        AgentStatus.PartialResult =>
+            ($"Sub-agent '{agentName}' stopped early without an answer: {outcome.FailureReason}", true),
+        AgentStatus.AwaitingHuman =>
+            ($"Sub-agent '{agentName}' stopped to ask a human, which cannot be relayed through a delegated call, " +
+             $"so it produced no answer. Its question was: {outcome.PendingHumanInput?.Question}", true),
+        _ =>
+            (outcome.FailureReason ?? $"Sub-agent '{agentName}' failed without a reason.", true)
+    };
 }

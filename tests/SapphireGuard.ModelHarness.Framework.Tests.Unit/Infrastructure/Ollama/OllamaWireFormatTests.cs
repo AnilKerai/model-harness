@@ -1,3 +1,4 @@
+using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 using Xunit;
 
@@ -66,4 +67,22 @@ public sealed class OllamaWireFormatTests
         Assert.False(isError);
         Assert.Equal("plain content", text);
     }
+
+    [Theory]
+    [InlineData("stop", false, StopReason.EndTurn)]
+    [InlineData("stop", true, StopReason.ToolUse)]       // Ollama reports "stop" even when tools were called
+    [InlineData("length", false, StopReason.MaxTokens)]  // num_predict reached
+    [InlineData("length", true, StopReason.MaxTokens)]   // truncated mid-call: must not read as ToolUse
+    [InlineData(null, false, StopReason.EndTurn)]        // server predating done_reason: prior inference
+    [InlineData(null, true, StopReason.ToolUse)]
+    [InlineData("", false, StopReason.EndTurn)]
+    public void MapStopReason_KnownAndMissingValues(string? doneReason, bool hasToolCalls, StopReason expected) =>
+        Assert.Equal(expected, OllamaWireFormat.MapStopReason(doneReason, hasToolCalls));
+
+    [Theory]
+    [InlineData("load")]                 // lifecycle responses: an empty-messages load, or keep_alive 0
+    [InlineData("unload")]
+    [InlineData("a_reason_added_later")]
+    public void MapStopReason_AnythingElse_IsOtherNeverEndTurn(string doneReason) =>
+        Assert.Equal(StopReason.Other, OllamaWireFormat.MapStopReason(doneReason, hasToolCalls: false));
 }

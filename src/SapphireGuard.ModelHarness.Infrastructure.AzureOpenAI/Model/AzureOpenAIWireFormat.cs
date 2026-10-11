@@ -1,5 +1,7 @@
+using System.Text.Json;
 using OpenAI.Chat;
 using SapphireGuard.ModelHarness.Framework.State;
+using SapphireGuard.ModelHarness.Framework.Tools;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.AzureOpenAI.Model;
 
@@ -126,5 +128,40 @@ internal static class AzureOpenAIWireFormat
         }
 
         return (callId, resultText);
+    }
+
+    // Every reason the provider reports maps explicitly; anything else is Other, never EndTurn, so the loop's
+    // allowlist keeps it out of Done. FunctionCall is obsolete (this adapter only declares tools) and falls to Other.
+    public static StopReason MapStopReason(ChatFinishReason? reason) => reason switch
+    {
+        ChatFinishReason.Stop => StopReason.EndTurn,
+        ChatFinishReason.ToolCalls => StopReason.ToolUse,
+        ChatFinishReason.Length => StopReason.MaxTokens,
+        ChatFinishReason.ContentFilter => StopReason.ContentFilter,
+        _ => StopReason.Other
+    };
+
+    // A response cut short at Length or by the content filter can carry tool-call arguments that are truncated
+    // JSON. Throwing would fail the run with a parser error before the loop can report why the response stopped,
+    // and dropping the call would hide it from the trajectory and every tracer. So the call is kept, its raw
+    // argument text carried as a JSON string. The loop never dispatches a call from such a response, so no tool
+    // receives it. On any other response a malformed argument is a provider fault, and still throws.
+    public static List<ToolCall> ParseToolCalls(IEnumerable<ChatToolCall> toolCalls, StopReason stopReason)
+    {
+        var parsed = new List<ToolCall>();
+        foreach (var call in toolCalls)
+        {
+            JsonElement arguments;
+            try
+            {
+                arguments = JsonDocument.Parse(call.FunctionArguments).RootElement;
+            }
+            catch (JsonException) when (stopReason is StopReason.MaxTokens or StopReason.ContentFilter)
+            {
+                arguments = JsonSerializer.SerializeToElement(call.FunctionArguments.ToString());
+            }
+            parsed.Add(new ToolCall(call.Id, call.FunctionName, arguments));
+        }
+        return parsed;
     }
 }

@@ -16,8 +16,11 @@ public sealed record CompactionRequest
 
     /// <summary>
     /// The trajectory steps being evicted from the live context this turn, in order. Inspect the
-    /// concrete step types (<see cref="ModelCallStep"/>, <see cref="ToolCallStep"/>,
-    /// <see cref="SensorInterventionStep"/>) to compact structurally rather than as opaque text.
+    /// concrete step types (<see cref="UserMessageStep"/>, <see cref="ModelCallStep"/>,
+    /// <see cref="ToolCallStep"/>, <see cref="SensorInterventionStep"/>) to compact structurally rather
+    /// than as opaque text. Every trajectory opens with a <see cref="UserMessageStep"/> — the task — so the
+    /// first slice evicted begins with one, and in multi-turn chat every user turn is one: a strategy that
+    /// switches over the types must handle it, or it silently drops the user's turns.
     /// </summary>
     public required IReadOnlyList<Step> EvictedSteps { get; init; }
 

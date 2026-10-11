@@ -147,4 +147,56 @@ public sealed class AzureOpenAIWireFormatTests
         Assert.Empty(assistant.Content);
         Assert.Equal("c1", Assert.Single(assistant.ToolCalls).Id);
     }
+
+    [Theory]
+    [InlineData(ChatFinishReason.Stop, StopReason.EndTurn)]
+    [InlineData(ChatFinishReason.ToolCalls, StopReason.ToolUse)]
+    [InlineData(ChatFinishReason.Length, StopReason.MaxTokens)]
+    [InlineData(ChatFinishReason.ContentFilter, StopReason.ContentFilter)]
+    public void MapStopReason_ProviderReasons(ChatFinishReason reason, StopReason expected) =>
+        Assert.Equal(expected, AzureOpenAIWireFormat.MapStopReason(reason));
+
+    [Fact]
+    public void MapStopReason_Unrecognised_IsOtherNeverEndTurn()
+    {
+        Assert.Equal(StopReason.Other, AzureOpenAIWireFormat.MapStopReason(null));
+        Assert.Equal(StopReason.Other, AzureOpenAIWireFormat.MapStopReason((ChatFinishReason)99));
+    }
+
+    private static ChatToolCall Call(string id, string argsJson) =>
+        ChatToolCall.CreateFunctionToolCall(id, "lookup", BinaryData.FromString(argsJson));
+
+    [Fact]
+    public void ParseToolCalls_WellFormed_ParsesEveryCall()
+    {
+        var calls = AzureOpenAIWireFormat.ParseToolCalls(
+            [Call("a", """{"q":"x"}"""), Call("b", "{}")], StopReason.ToolUse);
+
+        Assert.Equal(["a", "b"], calls.Select(c => c.CallId));
+        Assert.Equal("x", calls[0].Arguments.GetProperty("q").GetString());
+    }
+
+    [Theory]
+    [InlineData(StopReason.MaxTokens)]
+    [InlineData(StopReason.ContentFilter)]
+    public void ParseToolCalls_TruncatedArgumentsOnACutShortResponse_AreKeptAsRawTextNotThrown(StopReason stopReason)
+    {
+        // Throwing here would fail the run with a parser message before the loop could report the real cause;
+        // dropping the call would hide it from the trajectory and traces. It is kept, raw text intact.
+        var calls = AzureOpenAIWireFormat.ParseToolCalls(
+            [Call("whole", """{"q":"x"}"""), Call("cut", """{"q":"x""")], stopReason);
+
+        Assert.Equal(["whole", "cut"], calls.Select(c => c.CallId));
+        Assert.Equal(JsonValueKind.Object, calls[0].Arguments.ValueKind);
+        Assert.Equal(JsonValueKind.String, calls[1].Arguments.ValueKind);
+        Assert.Equal("""{"q":"x""", calls[1].Arguments.GetString());
+    }
+
+    [Fact]
+    public void ParseToolCalls_MalformedArgumentsOnANormalResponse_StillThrow()
+    {
+        // Malformed JSON on a response that ended normally is a provider fault, not truncation — stay loud.
+        Assert.ThrowsAny<JsonException>(() =>
+            AzureOpenAIWireFormat.ParseToolCalls([Call("bad", """{"q":""")], StopReason.ToolUse));
+    }
 }

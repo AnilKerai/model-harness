@@ -3,7 +3,7 @@ namespace SapphireGuard.ModelHarness.Framework.State;
 /// <summary>
 /// The terminal result of a harness run. <see cref="Status"/> distinguishes successful
 /// completion from partial results (budget exhaustion, a sensor-intervention limit, or a
-/// provider-truncated response) and failures.
+/// response that did not end normally — truncated, refused, or filtered) and failures.
 /// </summary>
 public sealed record AgentOutcome
 {
@@ -22,7 +22,7 @@ public sealed record AgentOutcome
     /// <summary>
     /// Human-readable reason the run did not complete normally. Set for
     /// <see cref="AgentStatus.Failed"/> and for <see cref="AgentStatus.PartialResult"/> (which
-    /// carries why the run was cut short — budget, intervention limit, or truncation);
+    /// carries why the run was cut short and, where there is one, the remedy);
     /// <see langword="null"/> otherwise.
     /// </summary>
     public string? FailureReason { get; init; }

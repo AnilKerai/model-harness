@@ -311,6 +311,11 @@ Budget exhaustion is not an exception — `IBudgetEnforcer.Check` returns
 returning `AgentOutcome { Status = PartialResult }`. `BudgetExceededException`
 is reserved for tools or sub-agents that violate budget from underneath the loop.
 
+A response the provider cut short — truncated at the output-token limit or the context
+window, refused, or content-filtered — also returns `PartialResult`, without the extra
+call, and its tool calls are not dispatched. Only a response that ended normally
+(`EndTurn`, `StopSequence`) is `Done`; `FailureReason` says which case you got.
+
 ---
 
 ## Budget enforcement
@@ -341,7 +346,9 @@ var outcome = await agent.RunAsync(task, budget: new Budget
 });
 
 if (outcome.Status == AgentStatus.PartialResult)
-    // The agent hit a limit — outcome.FinalAnswer is its best-effort response.
+    // A limit was hit, or the model's response was cut short — FailureReason says which.
+    // FinalAnswer is the best-effort answer, when there is one.
+    Console.WriteLine($"Incomplete ({outcome.FailureReason}): {outcome.FinalAnswer}");
 ```
 
 Implement `IBudgetEnforcer` and register via `builder.WithBudgetEnforcer<T>()` to replace

@@ -11,7 +11,6 @@ using SdkMessage = Anthropic.Models.Messages.Message;
 using SdkRole = Anthropic.Models.Messages.Role;
 using FrameworkMessage = SapphireGuard.ModelHarness.Framework.State.Message;
 using FrameworkUsage = SapphireGuard.ModelHarness.Framework.State.Usage;
-using FrameworkStopReason = SapphireGuard.ModelHarness.Framework.State.StopReason;
 using FrameworkToolCall = SapphireGuard.ModelHarness.Framework.Tools.ToolCall;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
@@ -247,7 +246,7 @@ public sealed class ClaudeModelClient : IModelClient
         // cannot arrive through this client; revisit if a Bedrock/Vertex backend is ever added.
         var rateLimitedInput = (int)(uncachedInput + cacheWriteTokens);
 
-        var stopReason = MapStopReason(response.StopReason?.Raw());
+        var stopReason = ClaudeWireFormat.MapStopReason(response.StopReason?.Raw());
         var cost = CalculateCost(
             ExtractModelFamily(response.Model), uncachedInput, cacheReadTokens, cacheWriteTokens, outputTokens);
 
@@ -265,14 +264,6 @@ public sealed class ClaudeModelClient : IModelClient
             InputTokensTowardRateLimit = rateLimitedInput
         };
     }
-
-    private static FrameworkStopReason MapStopReason(string? raw) => raw switch
-    {
-        "tool_use" => FrameworkStopReason.ToolUse,
-        "max_tokens" => FrameworkStopReason.MaxTokens,
-        "stop_sequence" => FrameworkStopReason.StopSequence,
-        _ => FrameworkStopReason.EndTurn
-    };
 
     // Approximate cost based on published pricing (May 2026).
     // Prices change — update from https://www.anthropic.com/pricing when stale.

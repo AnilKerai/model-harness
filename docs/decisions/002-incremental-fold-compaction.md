@@ -1,8 +1,10 @@
 # ADR-002 — Trajectory compaction is an incremental fold, executed in the guide
 
-**Status:** Accepted. Port shape (`CompactAsync`/`CompactionRequest`/`CompactionResult`)
-replaced `SummariseAsync` — a breaking change for `ICompactionStrategy` implementers.
-Structural invariants and the fail-open contract were tightened in 2.4.0 and 2.5.0.
+**Status:** Accepted. The port shape (`CompactAsync`/`CompactionRequest`/`CompactionResult`)
+replaced `SummariseAsync` in 1.0.0 — a breaking change for `ICompactionStrategy` implementers.
+The structural invariants were each forced by a later bug: 2.0.0 (System-message folding),
+2.2.0 (charging before trimming), 2.5.0 (fail-open reporting and rendering behind the prior
+summary).
 
 ## Context
 
@@ -23,6 +25,16 @@ was a **view**: re-summarise the entire evicted head from scratch every turn. Tw
 A third question had no obvious answer: **where** does the fold execute? The natural
 instinct is a step in `HarnessLoop`, since the result must land on `AgentState` and guides
 are otherwise pure `ContextDraft` shapers.
+
+Two bugs after the fold shipped explain why two of its invariants are a pair. In 2.0.0 the
+rolling summary and `[ORIGINAL GOAL]` anchor turned out never to reach the model at all: they
+were emitted as extra System messages, and every adapter forwards only the first, so a fold paid
+for a summary that was thrown away. Folding them into the single system message fixed that — and
+immediately exposed the second bug, fixed in 2.2.0: neither had ever been charged to the eviction
+budget, so every compacted turn now overshot `WindowTokens` by their size. The overshoot had been
+inert only because the text it counted was being discarded. Counting one string and emitting
+another is the general failure, which is why `OriginalGoal(...)` is now a single definition shared
+by the charge and the render.
 
 ## Decision
 
@@ -65,43 +77,23 @@ Both opt-in methods (`WithAiCompaction(model, options)`, `WithCompactionStrategy
 
 ## Consequences
 
-Four invariants a maintainer must preserve.
+The invariants this decision imposes are stated in `CLAUDE.md` (Guide pattern → compaction) and
+not repeated here. What the decision costs:
 
-1. **System-role trajectory messages are folded into the single system message.** The
-   rolling summary and the `[ORIGINAL GOAL]` anchor are emitted as `MessageRole.System`
-   trajectory messages, and `DefaultContextBuilder` folds every System-role trajectory
-   message into the one system message. Each adapter forwards only the first System message
-   and drops the rest, so a summary left inline in the conversation would silently never
-   reach the model.
-
-2. **Everything rendered into the window is charged before trimming.** The anchor by its
-   rendered length, the new summary via the prior summary's size as a stand-in. Omitting
-   them overshoots `WindowTokens` by their size on every compacted turn. This invariant and
-   (1) are a **pair**: the overshoot was inert while adapters dropped the extra System
-   messages, and became real the moment (1) made them reach the model. `OriginalGoal(...)`
-   is one definition shared by the charge and the render, so the two cannot diverge —
-   counting one string and emitting another is how the overshoot arose.
-
-3. **Eviction never removes the most recent group.** `ComputeTrimCount` is capped at
-   `liveGroups.Count - 1`, with a fallback that renders the last group even when the
-   watermark already covers everything. A fully-evicted turn would produce an empty
-   `messages` array, which the Anthropic and Azure APIs reject with a 400. An over-budget
-   message beats a hard failure.
-
-4. **Fail-open, and never silently.** The fold call is wrapped (genuine cancellation
-   excepted — see [ADR-001](001-collaborator-timeout-is-not-a-cancelled-run.md)) so a
-   third-party strategy cannot take down the run. `AiCompactionStrategy` fails open the same
-   way internally, leaving the watermark where it was so the slice is retried next turn. The
-   reason always travels: `CompactionResult.Error` → `CompactionTrace.Error` →
-   `error.type=compaction_error` on the OTel `compact_context` event, `error` on
-   `ConsoleTracer`'s compaction line, a "Compaction fell back" line on the dashboard. A pass
-   carrying an `Error` never reports `Folded`, even when the strategy handed the prior
-   summary back.
-
-A corollary of (4): any result that persists nothing — a view, or a fallback — describes
-only the **newly evicted slice**, so the guide renders it *behind* the prior summary rather
-than in place of it. The folded steps are no longer rendered anywhere else; the summary is
-the only trace of them left.
+- **The guide is no longer a pure shaper.** Compaction is the one channel by which a guide's
+  output reaches `AgentState`. It is loop-owned and explicit, but it is a precedent — the next
+  guide that wants to persist something should be refused, not given a second channel.
+- **A fold is lossy, and permanently so.** Steps behind the watermark survive only as prose. A
+  poor summary cannot be recovered within the run: the watermark never moves back, and the
+  original steps are no longer rendered.
+- **State carries a second, derived field.** `RollingSummary` is checkpointed and rehydrated
+  verbatim on resume — trusted, not recomputed — so a summary written by one strategy is folded
+  onward by whatever strategy is wired after a resume.
+- **Strategy authors carry a subtle contract.** A fold's `InjectedText` is the complete
+  replacement summary; a view's describes only the newly evicted slice. Mixing them up
+  duplicates or drops history, and nothing type-checks it.
+- **Compaction spends the run's budget.** A long run can exhaust `MaxCost` on summarisation
+  rather than on the task.
 
 ## Alternatives rejected
 

@@ -276,6 +276,9 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
         StopReason.EndTurn => "stop",
         StopReason.ToolUse => "tool_calls",
         StopReason.MaxTokens => "length",
+        StopReason.ContentFilter => "content_filter",
+        StopReason.Refusal => "refusal",
+        StopReason.ContextWindowExceeded => "model_context_window_exceeded",
         _ => stop.ToString().ToLowerInvariant()
     };
 

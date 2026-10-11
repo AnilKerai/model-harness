@@ -97,7 +97,7 @@ while (true)
 
     Console.WriteLine($"agent> {outcome.FinalAnswer ?? "(no answer)"}");
     if (outcome.Status != AgentStatus.Done)
-        Console.WriteLine($"       [status: {outcome.Status}]");
+        Console.WriteLine($"       [status: {outcome.Status}{(outcome.FailureReason is { } why ? $" — {why}" : "")}]");
     Console.WriteLine();
 }
 

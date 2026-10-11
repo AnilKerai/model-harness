@@ -26,9 +26,9 @@ public sealed class AiCompactionStrategyTests
         RemainingTokenBudget = 1_000
     };
 
-    private static ModelResponse Summary(string? text) => new()
+    private static ModelResponse Summary(string? text, StopReason stopReason = StopReason.EndTurn) => new()
     {
-        Text = text, ToolCalls = [], StopReason = StopReason.EndTurn, Usage = new Usage(40, 12), Cost = 0.002m
+        Text = text, ToolCalls = [], StopReason = stopReason, Usage = new Usage(40, 12), Cost = 0.002m
     };
 
     private sealed class ThrowingModel(Exception exception) : IModelClient
@@ -108,5 +108,38 @@ public sealed class AiCompactionStrategyTests
 
         Assert.Equal(new Usage(40, 12), result.Usage);
         Assert.Equal(0.002m, result.Cost);
+    }
+
+    [Theory]
+    [InlineData(StopReason.MaxTokens)]
+    [InlineData(StopReason.ContextWindowExceeded)]
+    [InlineData(StopReason.Refusal)]
+    [InlineData(StopReason.ContentFilter)]
+    [InlineData(StopReason.Other)]
+    public async Task CutShortSummary_IsNotPersisted_FailsOpenAndKeepsItsSpend(StopReason stopReason)
+    {
+        // A fold is permanent: the steps behind the watermark survive only as the summary. A truncated or
+        // refused "summary" must not become that record — keep the prior one, retry the slice next turn.
+        var sut = new AiCompactionStrategy(new ScriptedModelClient(Summary("I can't help with th", stopReason)));
+
+        var result = await sut.CompactAsync(Request(Prior), CancellationToken.None);
+
+        Assert.Equal(Prior, result.UpdatedSummary);
+        Assert.DoesNotContain("I can't help", result.InjectedText);
+        Assert.Contains("cut short", result.Error);
+        Assert.Contains(stopReason.ToString(), result.Error);
+        Assert.Equal(new Usage(40, 12), result.Usage);
+        Assert.Equal(0.002m, result.Cost);
+    }
+
+    [Fact]
+    public async Task SummaryEndedOnAStopSequence_IsPersisted()
+    {
+        var sut = new AiCompactionStrategy(new ScriptedModelClient(Summary("looked up both accounts", StopReason.StopSequence)));
+
+        var result = await sut.CompactAsync(Request(Prior), CancellationToken.None);
+
+        Assert.Null(result.Error);
+        Assert.Equal(4, result.UpdatedSummary!.FoldedStepCount);
     }
 }
