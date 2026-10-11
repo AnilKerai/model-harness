@@ -418,6 +418,12 @@ builder
 Implement `ITracer` and register via `WithTracer<T>()` or `WithTracer(factory)` for a
 custom backend.
 
+`WithOtelTracer` is the one exception to "additive": a harness has a single `OpenTelemetryTracer`. The
+standard entry points (`AddStandardModelHarness`, `AddStandardChatHarness`, `AgentFactory.AddStandardAgent`)
+already add it, so calling `WithOtelTracer(...)` on them **reconfigures** that tracer (last call wins) rather
+than adding a second one — two would emit every span twice, and a backend would sum every token and cost
+figure twice.
+
 `WithLiveDashboardTracer()` adds a `LiveDashboardTracer` — a zero-dependency in-process feed
 for a **live agent console** with no OTLP, collector, or Docker. It turns each loop event into a
 `DashboardEvent` (kind, `taskId`, nullable `turn`, a summary, and a structured `detail` bag),
@@ -434,7 +440,11 @@ which reveals a run bar and maps `POST {prefix}/run`). `samples/LiveDashboard` i
 see [FEATURES.md](FEATURES.md#live-dashboard).
 
 A tracer is notified at each loop milestone. Task start/completion and every sensor evaluation —
-pass, intervention, or error alike — are one-shot events (`StartTrace`, `Complete`, `LogSensorResult`). **Model and tool calls are
+pass, intervention, or error alike — are one-shot events (`StartTrace`, `Complete`, `LogSensorResult`).
+Immediately before `Complete`, on every exit path, `LogOutcome(AgentOutcome)` hands the tracer the outcome the
+caller is about to receive — the final (or partial) answer and the final state, whose latest
+`UserMessageStep` is the input that started the run (in a chat, the current turn). It is a default-interface
+no-op; `OpenTelemetryTracer` uses it to put the run's input and output on the root span. **Model and tool calls are
 scopes, not events**: the loop calls `BeginModelCall`/`BeginToolCall` *before* the operation and
 gets back an `IModelCallScope`/`IToolCallScope`; when the call returns it calls `Complete(response)`
 /`Complete(result)` on the scope, then disposes it. A scope disposed *without* `Complete` means
@@ -526,8 +536,11 @@ Two things to know once the traces arrive:
 
 - **`enableSensitiveData`** (default `false`) — capture conversation *content*: `gen_ai.input.messages`
   / `gen_ai.output.messages` (prompt and response bodies) on each `chat` span, `gen_ai.tool.call.arguments`
-  / `gen_ai.tool.call.result` on each `execute_tool` span, the task text on the root, and sensor-reason
-  text on evaluation events. **Off by default** — no user or model content leaves the process unless you
+  / `gen_ai.tool.call.result` on each `execute_tool` span, the run's input (the user message that started it)
+  and final answer as `gen_ai.input.messages` / `gen_ai.output.messages` on the `invoke_agent` root, the task
+  text on the root, and sensor-reason text on evaluation events. The message attributes follow the GenAI
+  input/output messages JSON schema — role plus typed `text` / `tool_call` / `tool_call_response` parts — so
+  a GenAI-aware backend renders tool calls as tool calls. **Off by default** — no user or model content leaves the process unless you
   opt in. Turn it on in development to read the exchange; leave it off in production (and note that content
   attributes make spans larger, so ingestion cost rises when it's on). Error-path diagnostics — span
   status, the `exception` event, `harness.failure.reason`, and the error reason
@@ -543,6 +556,72 @@ Two things to know once the traces arrive:
 // enableSensitiveData off in production; a host env flag is a natural switch for it
 builder.WithOtelTracer(enableSensitiveData: isDevelopment, agentName: "triage-agent");
 ```
+
+Every span also carries **`gen_ai.conversation.id`** — the task id, which stays the same across chat turns
+and HITL resumes. Each `RunAsync` is its own trace, so this is what lets a backend group a conversation's
+turns into one session. A sub-agent run nested under a parent's `execute_tool` span inherits the parent's id,
+so a trace never carries two competing values. It is an identifier, not content, so it is emitted regardless
+of `enableSensitiveData`.
+
+### Exporting to Langfuse
+
+[Langfuse](https://langfuse.com) ingests OTLP and maps the GenAI attributes above onto its own data model, so
+it needs no Langfuse SDK and no harness changes — only an exporter. `samples/Langfuse` is the runnable
+version (see [RUNNING.md](RUNNING.md#langfuse)):
+
+```csharp
+using System.Text;
+using OpenTelemetry;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using SapphireGuard.ModelHarness.Infrastructure.Tracing;
+
+var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{publicKey}:{secretKey}"));
+
+using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+    .ConfigureResource(r => r
+        .AddService("my-agent")
+        .AddAttributes([new("deployment.environment.name", "development")]))
+    .AddSource(OpenTelemetryTracer.ActivitySourceName)
+    .AddOtlpExporter(o =>
+    {
+        o.Endpoint = new Uri("https://cloud.langfuse.com/api/public/otel/v1/traces"); // EU; us.cloud.langfuse.com for US
+        o.Protocol = OtlpExportProtocol.HttpProtobuf;                                  // HTTP only — no gRPC
+        o.Headers = $"Authorization=Basic {auth},x-langfuse-ingestion-version=4";
+    })
+    .Build();
+
+services.AddStandardChatHarness(b => b
+    .WithOtelTracer(enableSensitiveData: isDevelopment, agentName: "support-assistant")
+    /* model, tools … */);
+```
+
+- **The endpoint set in code is used as-is**, so it must name the traces path (`/api/public/otel/v1/traces`).
+  Only the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable gets `/v1/traces` appended for you.
+- **`x-langfuse-ingestion-version=4`** makes spans appear in real time; without it they can take up to ten
+  minutes.
+- **Skip the meter.** Langfuse's OTLP endpoint accepts traces only — it charts tokens and cost from the
+  spans.
+- **Flush before a console app exits** (`tracerProvider.ForceFlush()`, or dispose it) — see above.
+
+What you get in Langfuse:
+
+| Harness | Langfuse |
+|---|---|
+| `invoke_agent` root | `agent` observation; its name (`invoke_agent {agentName}`) is the trace name |
+| `chat {model}` span | `generation` with model, token usage (cache reads/writes priced separately) and cost |
+| `execute_tool {name}` span | `tool` observation, nested beside the generation that requested it |
+| `gen_ai.conversation.id` | session — one trace per turn, one session per conversation |
+| root `gen_ai.input/output.messages` | trace input (the user's message) and output (the answer) — needs `enableSensitiveData` |
+| `deployment.environment.name` resource attribute | trace environment |
+
+Langfuse prices generations itself from the model name and token counts. The harness's own figure stays on
+the span as `harness.cost` (in metadata), so you can compare the two.
+
+Without `enableSensitiveData` the tree, models, tokens, cost and sessions are all there, but traces have no
+input or output — which evaluators and dataset runs need. Langfuse recommends masking sensitive data before
+it leaves the process; with content capture on, everything in the conversation is exported.
 
 ## Checkpoint / resume and human-in-the-loop
 

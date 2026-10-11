@@ -196,9 +196,19 @@ public static class DependencyInjection
     /// Optional agent name stamped on the root span as <c>gen_ai.agent.name</c>, so several agents in one
     /// process are distinguishable in the backend. Leave null for a single-agent host.
     /// </param>
+    /// <remarks>
+    /// A harness has at most one <c>OpenTelemetryTracer</c>. <c>AddStandardModelHarness</c>,
+    /// <c>AddStandardChatHarness</c> and <c>AgentFactory.AddStandardAgent</c> already add it, so calling this on
+    /// them reconfigures that tracer (the last call's settings win) rather than adding a second one.
+    /// </remarks>
     public static ModelHarnessBuilder WithOtelTracer(
-        this ModelHarnessBuilder builder, bool enableSensitiveData = false, string? agentName = null) =>
-        builder.WithTracer(_ => new OpenTelemetryTracer(enableSensitiveData, agentName));
+        this ModelHarnessBuilder builder, bool enableSensitiveData = false, string? agentName = null)
+    {
+        var config = GetOrAddOtelTracerConfig(builder);
+        config.EnableSensitiveData = enableSensitiveData;
+        config.AgentName = agentName;
+        return builder;
+    }
 
     /// <summary>
     /// Adds a <see cref="LiveDashboardTracer"/> — a zero-dependency in-process feed for a live agent
@@ -321,6 +331,21 @@ public static class DependencyInjection
         builder.WithTool(_ => new AgentTool(agentName, factory, budget));
 
     // ── Internal helpers ─────────────────────────────────────────────────────
+
+    // Registers the tracer once per harness; later calls only change its settings. Every ITracer added via
+    // WithTracer is fanned out by CompositeTracer, so a second registration would emit a duplicate span tree.
+    private static OpenTelemetryTracerConfiguration GetOrAddOtelTracerConfig(ModelHarnessBuilder builder)
+    {
+        var existing = builder.Services
+            .FirstOrDefault(d => d.ServiceType == typeof(OpenTelemetryTracerConfiguration))
+            ?.ImplementationInstance as OpenTelemetryTracerConfiguration;
+        if (existing is not null) return existing;
+
+        var config = new OpenTelemetryTracerConfiguration();
+        builder.Services.AddSingleton(config);
+        builder.WithTracer(sp => sp.GetRequiredService<OpenTelemetryTracerConfiguration>().Build());
+        return config;
+    }
 
     private static SkillStoreConfiguration GetOrAddSkillConfig(ModelHarnessBuilder builder)
     {

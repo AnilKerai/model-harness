@@ -29,6 +29,7 @@
     <Project Path="samples/AzureOpenAI/SapphireGuard.ModelHarness.Samples.AzureOpenAI.csproj" />
     <Project Path="samples/SubAgent/SapphireGuard.ModelHarness.Samples.SubAgent.csproj" />
     <Project Path="samples/ChatSubAgent/SapphireGuard.ModelHarness.Samples.ChatSubAgent.csproj" />
+    <Project Path="samples/Langfuse/SapphireGuard.ModelHarness.Samples.Langfuse.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/SapphireGuard.ModelHarness.Framework.Tests.Unit.csproj" />

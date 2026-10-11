@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -30,6 +31,12 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tracing;
 /// <c>gen_ai.agent.name</c> and into its display name, so multiple agents in one process are
 /// distinguishable in a backend. Leave null for a single-agent host (use <c>service.name</c> to
 /// identify the deployment).</para>
+/// <para>Every span carries <c>gen_ai.conversation.id</c> — the task id, which stays the same across chat
+/// turns and HITL resumes, so a backend can group a conversation's runs (one trace per <c>RunAsync</c>) into
+/// a session. A sub-agent run nested under a parent's tool span inherits the parent's conversation id.
+/// With content capture on, the root span also carries the run's input (the user message that started it)
+/// and final answer as <c>gen_ai.input.messages</c> / <c>gen_ai.output.messages</c>, and every message
+/// attribute follows the GenAI input/output messages JSON schema (role + typed parts).</para>
 /// </summary>
 /// <param name="enableSensitiveData">Capture conversation content (see remarks). Default <see langword="false"/>.</param>
 /// <param name="agentName">Optional agent name for <c>gen_ai.agent.name</c> on the root span.</param>
@@ -61,10 +68,19 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
 
     private readonly ConcurrentDictionary<string, Activity?> _activities = new();
 
+    private const string ConversationIdTag = "gen_ai.conversation.id";
+
+    private static readonly JsonSerializerOptions SemconvJson = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+
     public void StartTrace(string taskId, string taskText)
     {
+        // Read before StartActivity replaces Activity.Current: a sub-agent run starts inside its parent's
+        // execute_tool span and joins that conversation, so a backend that keys sessions off this
+        // attribute sees one value per trace rather than the parent's and the sub-agent's competing.
+        var conversationId = Activity.Current?.GetTagItem(ConversationIdTag) as string ?? taskId;
         var activity = Source.StartActivity("invoke_agent", ActivityKind.Internal);
         activity?.SetTag("gen_ai.operation.name", "invoke_agent");
+        activity?.SetTag(ConversationIdTag, conversationId);
         if (agentName is not null && activity is not null)
         {
             activity.SetTag("gen_ai.agent.name", agentName);
@@ -82,6 +98,7 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
         if (activity is not null)
         {
             activity.SetTag("gen_ai.operation.name", "chat");
+            activity.SetTag(ConversationIdTag, ConversationId(taskId));
             activity.SetTag("harness.turn", turn);
             activity.SetTag("harness.prompt.messages", prompt.Count);
             activity.SetTag("harness.request.tools", tools.Count);
@@ -97,6 +114,7 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
         if (activity is not null)
         {
             activity.SetTag("gen_ai.operation.name", "execute_tool");
+            activity.SetTag(ConversationIdTag, ConversationId(taskId));
             activity.SetTag("gen_ai.tool.name", call.ToolName);
             activity.SetTag("gen_ai.tool.call.id", call.CallId);
             activity.SetTag("harness.turn", turn);
@@ -244,6 +262,26 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
         }));
     }
 
+    public void LogOutcome(AgentOutcome outcome)
+    {
+        if (!enableSensitiveData || !_activities.TryGetValue(outcome.TaskId, out var activity) || activity is null) return;
+
+        // The run's input is the user message that started it — in a chat, the current turn, not the opener
+        // the frozen TaskText holds — so a backend's trace view reads as one exchange per run.
+        if (outcome.FinalState.Trajectory.OfType<UserMessageStep>().LastOrDefault() is { } input)
+            activity.SetTag("gen_ai.input.messages", JsonSerializer.Serialize(
+                new[] { new ChatMessage("user", [new TextPart(input.Content)]) }, SemconvJson));
+
+        if (outcome.FinalAnswer is { } answer)
+        {
+            // The answer is the last response's text, so its stop reason is the answer's finish reason.
+            var stop = outcome.FinalState.Trajectory.OfType<ModelCallStep>().LastOrDefault()?.Response.StopReason;
+            activity.SetTag("gen_ai.output.messages", JsonSerializer.Serialize(
+                new[] { new OutputMessage("assistant", [new TextPart(answer)], MessageFinishReason(stop ?? StopReason.EndTurn)) },
+                SemconvJson));
+        }
+    }
+
     public void Complete(string taskId, AgentStatus status, string? failureReason)
     {
         if (!_activities.TryRemove(taskId, out var activity) || activity is null) return;
@@ -271,6 +309,9 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
     private ActivityContext ParentContext(string taskId) =>
         _activities.TryGetValue(taskId, out var root) && root is not null ? root.Context : default;
 
+    private string ConversationId(string taskId) =>
+        _activities.TryGetValue(taskId, out var root) && root?.GetTagItem(ConversationIdTag) is string id ? id : taskId;
+
     private static string FinishReason(StopReason stop) => stop switch
     {
         StopReason.EndTurn => "stop",
@@ -282,19 +323,94 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
         _ => stop.ToString().ToLowerInvariant()
     };
 
-    // ponytail: a readable {role, content} projection, not the full GenAI `parts` schema
-    // (typed text/tool_call/tool_call_response parts). Enough to read the exchange in a backend;
-    // upgrade to parts if a strict semconv consumer needs to parse it structurally.
-    private static string SerializeMessages(IReadOnlyList<Message> messages) =>
-        JsonSerializer.Serialize(messages.Select(m => new { role = m.Role.ToString().ToLowerInvariant(), content = m.Content }));
+    // gen_ai.output.messages restricts finish_reason to this enum; gen_ai.response.finish_reasons (above) is
+    // free-form and keeps its existing values.
+    private static string MessageFinishReason(StopReason stop) => stop switch
+    {
+        StopReason.EndTurn or StopReason.StopSequence => "stop",
+        StopReason.ToolUse => "tool_call",
+        StopReason.MaxTokens or StopReason.ContextWindowExceeded => "length",
+        StopReason.ContentFilter or StopReason.Refusal => "content_filter",
+        _ => "error"
+    };
 
-    private static string SerializeResponse(ModelResponse response) =>
-        JsonSerializer.Serialize(new
+    // gen_ai.input.messages per the GenAI input-messages JSON schema. Tool calls and results arrive as the text
+    // HeadEvictionTrajectoryGuide renders, so they are parsed back into typed parts (a backend then shows them as
+    // tool calls, not prose), and adjacent messages with the same role merge into one — as the adapters send them.
+    private static string SerializeMessages(IReadOnlyList<Message> messages)
+    {
+        var result = new List<ChatMessage>();
+        foreach (var message in messages)
         {
-            role = "assistant",
-            content = response.Text,
-            tool_calls = response.ToolCalls.Select(tc => new { id = tc.CallId, name = tc.ToolName, arguments = tc.Arguments }),
-        });
+            var (role, part) = ToPart(message);
+            if (result.Count > 0 && result[^1].Role == role)
+                result[^1].Parts.Add(part);
+            else
+                result.Add(new ChatMessage(role, [part]));
+        }
+        return JsonSerializer.Serialize(result, SemconvJson);
+    }
+
+    private static string SerializeResponse(ModelResponse response)
+    {
+        var parts = new List<object>();
+        if (!string.IsNullOrEmpty(response.Text))
+            parts.Add(new TextPart(response.Text));
+        parts.AddRange(response.ToolCalls.Select(tc => new ToolCallPart(tc.CallId, tc.ToolName, tc.Arguments)));
+        return JsonSerializer.Serialize(
+            new[] { new OutputMessage("assistant", parts, MessageFinishReason(response.StopReason)) }, SemconvJson);
+    }
+
+    private static (string Role, object Part) ToPart(Message message) => message.Role switch
+    {
+        MessageRole.ToolUse => ("assistant", ParseToolCall(message.Content)),
+        MessageRole.Tool => ("tool", ParseToolResult(message.Content)),
+        _ => (message.Role.ToString().ToLowerInvariant(), new TextPart(message.Content))
+    };
+
+    // "[tool_call name={name} id={callId}] {argsJson}" — the format HeadEvictionTrajectoryGuide writes.
+    private static object ParseToolCall(string content)
+    {
+        if (!TrySplitHeader(content, "[tool_call ", out var meta, out var body))
+            return new TextPart(content);
+        object? arguments;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            arguments = doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            arguments = body;
+        }
+        return new ToolCallPart(meta.GetValueOrDefault("id"), meta.GetValueOrDefault("name") ?? "", arguments);
+    }
+
+    // "[tool_result id={callId} error={bool}] {resultText}" — the format HeadEvictionTrajectoryGuide writes.
+    private static object ParseToolResult(string content) =>
+        TrySplitHeader(content, "[tool_result ", out var meta, out var body)
+            ? new ToolCallResponsePart(meta.GetValueOrDefault("id"), body)
+            : new TextPart(content);
+
+    private static bool TrySplitHeader(string content, string prefix, out Dictionary<string, string> meta, out string body)
+    {
+        meta = [];
+        body = content;
+        var close = content.IndexOf(']');
+        if (!content.StartsWith(prefix, StringComparison.Ordinal) || close < 0)
+            return false;
+        foreach (var pair in content[prefix.Length..close].Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            if (pair.Split('=', 2) is [var key, var value])
+                meta[key] = value;
+        body = content[(close + 1)..].TrimStart();
+        return true;
+    }
+
+    private sealed record ChatMessage(string Role, List<object> Parts);
+    private sealed record OutputMessage(string Role, List<object> Parts, string FinishReason);
+    private sealed record TextPart(string Content) { [JsonPropertyOrder(-1)] public string Type => "text"; }
+    private sealed record ToolCallPart(string? Id, string Name, object? Arguments) { [JsonPropertyOrder(-1)] public string Type => "tool_call"; }
+    private sealed record ToolCallResponsePart(string? Id, string Response) { [JsonPropertyOrder(-1)] public string Type => "tool_call_response"; }
 
     private sealed class ModelCallScope(Activity? activity, bool enableSensitiveData) : IModelCallScope
     {

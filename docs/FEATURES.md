@@ -34,7 +34,7 @@ flowchart LR
 | **Hosting is a thin, separate package** | `LiveDashboardTracer` ships in `Infrastructure` (no web deps); the ASP.NET Core hosting — page, assets, and SSE feed — ships as `SapphireGuard.ModelHarness.Dashboard`, added with one line: `app.MapHarnessDashboard()`. Only that package references ASP.NET Core, so a non-web consumer never pays for it, and the UI is embedded (nothing to copy). |
 | **Content is opt-in** | Metadata and short summaries by default; response text only when `enableSensitiveData` is set. Full prompt/tool-result bodies remain `OpenTelemetryTracer`'s job. |
 
-> The dashboard is the **local operator console**; for durable multi-run history and cross-service correlation, point `WithOtelTracer()` at an OTLP backend (Aspire, Grafana/Tempo, Honeycomb, Datadog). The two compose. See `samples/LiveDashboard` and [RUNNING.md](RUNNING.md#live-dashboard) to run it, and [EXTENDING.md](EXTENDING.md#tracers) for wiring.
+> The dashboard is the **local operator console**; for durable multi-run history and cross-service correlation, point `WithOtelTracer()` at an OTLP backend (Aspire, Grafana/Tempo, Honeycomb, Datadog, [Langfuse](EXTENDING.md#exporting-to-langfuse)). The two compose. See `samples/LiveDashboard` and [RUNNING.md](RUNNING.md#live-dashboard) to run it, and [EXTENDING.md](EXTENDING.md#tracers) for wiring.
 
 ---
 

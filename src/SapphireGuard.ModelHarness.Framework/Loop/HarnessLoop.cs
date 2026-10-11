@@ -136,14 +136,13 @@ public sealed class HarnessLoop(
 
                     consecutiveInterventions = 0;
                     var done = state with { Status = AgentStatus.Done };
-                    tracer.Complete(done.TaskId, AgentStatus.Done, failureReason: null);
-                    return new AgentOutcome
+                    return Finish(new AgentOutcome
                     {
                         TaskId = done.TaskId,
                         Status = AgentStatus.Done,
                         FinalAnswer = response.Text,
                         FinalState = done
-                    };
+                    }, traceReason: null);
                 }
 
                 consecutiveInterventions = 0;
@@ -176,17 +175,23 @@ public sealed class HarnessLoop(
         }
     }
 
-    private AgentOutcome FailOutcome(AgentState state, string failureReason, string traceReason)
-    {
-        tracer.Complete(state.TaskId, AgentStatus.Failed, traceReason);
-        return new AgentOutcome
+    private AgentOutcome FailOutcome(AgentState state, string failureReason, string traceReason) =>
+        Finish(new AgentOutcome
         {
             TaskId = state.TaskId,
             Status = AgentStatus.Failed,
             FinalAnswer = null,
             FinalState = state with { Status = AgentStatus.Failed },
             FailureReason = failureReason
-        };
+        }, traceReason);
+
+    // Every exit path goes through here so the tracer always sees the outcome before the terminal status.
+    // traceReason is passed separately because it can differ from the caller-facing FailureReason.
+    private AgentOutcome Finish(AgentOutcome outcome, string? traceReason)
+    {
+        tracer.LogOutcome(outcome);
+        tracer.Complete(outcome.TaskId, outcome.Status, traceReason);
+        return outcome;
     }
 
     // Suspends the run for human input when the last tool returned a pending result; returns the
@@ -214,15 +219,14 @@ public sealed class HarnessLoop(
             State = suspended
         }, ct);
         tracer.LogCheckpoint(suspended.TaskId, turn, checkpointId, _time.GetElapsedTime(checkpointStart));
-        tracer.Complete(suspended.TaskId, AgentStatus.AwaitingHuman, failureReason: null);
-        return new AgentOutcome
+        return Finish(new AgentOutcome
         {
             TaskId = suspended.TaskId,
             Status = AgentStatus.AwaitingHuman,
             FinalAnswer = null,
             FinalState = suspended,
             PendingHumanInput = pending
-        };
+        }, traceReason: null);
     }
 
     private async Task<(AgentState State, bool Intervened, bool SuppressTools)> RunSensorsAsync(AgentState state, int turn, HookPoint hookPoint, Step? triggeringStep, CancellationToken ct)
@@ -430,14 +434,13 @@ public sealed class HarnessLoop(
     private AgentOutcome PartialOutcome(AgentState state, string? finalAnswer, string reason)
     {
         var partial = state with { Status = AgentStatus.PartialResult };
-        tracer.Complete(partial.TaskId, AgentStatus.PartialResult, reason);
-        return new AgentOutcome
+        return Finish(new AgentOutcome
         {
             TaskId = partial.TaskId,
             Status = AgentStatus.PartialResult,
             FinalAnswer = finalAnswer,
             FinalState = partial,
             FailureReason = reason
-        };
+        }, reason);
     }
 }

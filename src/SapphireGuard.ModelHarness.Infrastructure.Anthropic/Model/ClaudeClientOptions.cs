@@ -24,11 +24,11 @@ public sealed record ClaudeClientOptions
 
     /// <summary>
     /// Enables Anthropic prompt caching. Marks each request so its stable prefix — tool schemas,
-    /// system prompt, and the prior-turn trajectory — is cached and re-read at ~0.1× input cost on
-    /// later turns instead of re-billed in full. This is a win for the harness's turn-by-turn loop,
-    /// where every turn shares a large prefix; the one-off cache-write premium (1.25×) is recovered
-    /// by the second turn. Has no effect below the model's minimum cacheable prefix (~1K–4K tokens,
-    /// model-dependent). Defaults to <see langword="true"/>; set <see langword="false"/> for
+    /// system prompt, and the prior-turn trajectory — is cached and re-read at 0.1× input cost or less
+    /// (0.05× on Opus 5.5 and Sonnet 5.5, 0.025× on Fable 5.1) on later turns instead of re-billed in full. This is a
+    /// win for the harness's turn-by-turn loop, where every turn shares a large prefix; the one-off
+    /// cache-write premium (1.25×) is recovered by the second turn. Has no effect below the model's
+    /// minimum cacheable prefix (512–4K tokens, model-dependent). Defaults to <see langword="true"/>; set <see langword="false"/> for
     /// single-shot calls that never reuse a prefix.
     /// </summary>
     public bool EnablePromptCaching { get; init; } = true;

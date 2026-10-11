@@ -12,6 +12,103 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+A minor release (3.1.0). Two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI
+attributes — the library still has no OpenTelemetry SDK or vendor dependency, so the same spans read correctly
+in any GenAI-aware backend, and the new `samples/Langfuse` exports a two-turn chat to Langfuse over OTLP — and
+Claude pricing brought up to date. Nothing is removed and nothing stops compiling. The behavioural changes are
+corrections, each marked below with what to re-check: `ModelResponse.Cost` for Claude models now matches the
+first-party price list, the content-capture JSON follows the GenAI schema (opt-in), and a double-registered
+tracer emits one span tree instead of two.
+
+### Added
+
+- **`ITracer.LogOutcome(AgentOutcome)`** — called once per run, immediately before `Complete`, on every exit
+  path (`Done`, `Failed`, `PartialResult`, `AwaitingHuman`), with the outcome the caller is about to receive. A
+  default-interface no-op, so existing tracers compile unchanged; `CompositeTracer` forwards it.
+- **`OpenTelemetryTracer` records the run's input and output on the `invoke_agent` root** — with
+  `enableSensitiveData`, `gen_ai.input.messages` is the user message that started the run (in a chat, the
+  current turn, not the opener `TaskText` holds) and `gen_ai.output.messages` is the final or partial answer.
+  Backends that show a trace's input/output (Langfuse's trace table, evaluators, dataset runs) read it from the
+  root, which had neither.
+- **`gen_ai.conversation.id` on every span** — the task id, which stays the same across chat turns and HITL
+  resumes, so a backend groups a conversation's runs (one trace per `RunAsync`) into a session. A sub-agent run
+  nested under a parent's tool span inherits the parent's id. Not content, so it is emitted regardless of
+  `enableSensitiveData`.
+- **`samples/Langfuse`** — OTLP export to Langfuse (endpoint, Basic auth, `x-langfuse-ingestion-version: 4`,
+  `deployment.environment.name`, flush on exit). Keys come from `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` /
+  `LANGFUSE_BASE_URL` or `appsettings.local.json`. See [EXTENDING.md](docs/EXTENDING.md#exporting-to-langfuse).
+
+### Changed
+
+- **`gen_ai.input.messages` / `gen_ai.output.messages` follow the GenAI messages JSON schema.** They were a
+  `{role, content}` projection of the harness's internal messages; they are now role + typed `parts` as the
+  semantic conventions require. Tool calls and results become `tool_call` / `tool_call_response` parts instead
+  of `[tool_call …]` text, adjacent messages with the same role merge (as the adapters send them), and
+  `gen_ai.output.messages` is an array carrying a `finish_reason`. Only emitted with `enableSensitiveData`.
+
+  **Behavioural change** — if you parse these attributes yourself, read the new shape:
+
+  ```jsonc
+  // Before — gen_ai.output.messages
+  {"role":"assistant","content":"Let me check.","tool_calls":[{"id":"c1","name":"calculator","arguments":{"op":"mul"}}]}
+
+  // After
+  [{"role":"assistant","parts":[{"type":"text","content":"Let me check."},
+    {"type":"tool_call","id":"c1","name":"calculator","arguments":{"op":"mul"}}],"finish_reason":"tool_call"}]
+  ```
+
+  `gen_ai.response.finish_reasons` is unchanged.
+
+### Fixed
+
+- **`ClaudeModelClient` priced Claude from a stale three-family table.** It matched only `haiku` / `opus` /
+  everything-else, at May 2026 rates: every Haiku at $0.80 / $4, every Opus at $15 / $75, and everything
+  else (Sonnet, Fable, unknown ids) at $3 / $15 per million input / output tokens, with cache reads at 0.1×
+  input for all. Current first-party prices differ on almost every model, and a family cannot tell Opus 4.x
+  from Opus 5.5, Sonnet 4.6 from Sonnet 5.x, or Haiku 4.5 from Haiku 5.5. Pricing now lives in an internal
+  `ClaudePricing` table matched by the longest model-id prefix (so dated ids such as
+  `claude-haiku-4-5-20251001` resolve), checked against the pricing page on 2026-10-11:
+
+  | Model | Input | Output | Cache read |
+  |---|---:|---:|---:|
+  | Fable 5.1 / Mythos 5.1 | $10 | $50 | $0.25 (0.025×) |
+  | Fable 5 / Mythos 5 | $10 | $50 | $1.00 |
+  | Opus 5.5 | $4 | $20 | $0.20 (0.05×) |
+  | Opus 5, 4.8, 4.7, 4.6, 4.5 | $5 | $25 | $0.50 |
+  | Sonnet 5.5 | $2 | $10 | $0.10 (0.05×) |
+  | Sonnet 5 | $2 | $10 | $0.20 |
+  | Sonnet 4.6, 4.5 | $3 | $15 | $0.30 |
+  | Haiku 5.5, prompt up to 100K tokens | $0.10 | $0.50 | $0.01 |
+  | Haiku 5.5, prompt over 100K tokens | $0.50 | $2.50 | $0.05 |
+  | Haiku 4.5 | $1 | $5 | $0.10 |
+
+  5-minute cache writes stay at 1.25× input. Haiku 5.5 is priced per request by prompt length: a prompt over
+  100,000 tokens — counting cache reads and writes — moves the whole request, output included, to the higher
+  row. An id missing from the table is now priced at the top tier ($10 / $50) rather than at Sonnet's rate, so
+  a stale table over-reports and stops a `MaxCost` budget early instead of letting a run overspend unnoticed.
+
+  **Behavioural change:** `ModelResponse.Cost` changes for every Claude model, and with it everything summed
+  from it — `AgentState.TotalSpend()`, `Budget.MaxCost` enforcement, sub-agent spend rolled up by
+  `AgentTool`, the `harness.cost` telemetry and the live dashboard. A Haiku 4.5 run now reports 25% more
+  than before and a Fable 5.x run 3⅓× as much, so they reach a `MaxCost` cap sooner; Opus 4.x reports a
+  third, Sonnet 5.x two thirds and Haiku 5.5 an eighth (five eighths on long prompts) of before, so they reach
+  it later. No code change is needed. Re-check any `MaxCost` set against the old figures, and drop any
+  downstream repricing written to work around this (for example re-deriving Haiku 4.5 cost from token usage).
+  For Haiku 4.5, `harness.cost` now matches the figure Langfuse computes from the same tokens.
+
+- **`WithOtelTracer(...)` on a standard harness emitted every span twice.** `AddStandardModelHarness`,
+  `AddStandardChatHarness` and `AgentFactory.AddStandardAgent` already add an `OpenTelemetryTracer`, and
+  `WithOtelTracer` — the documented way to turn on content capture or set an agent name — added a second, so
+  each run produced two nested `invoke_agent` trees and a backend summed every token and cost figure twice. A
+  harness now has one `OpenTelemetryTracer`; calling `WithOtelTracer` again reconfigures it (the last call's
+  settings win).
+
+  **Behavioural change:** if you call `WithOtelTracer` on a standard harness, you now get one span tree with
+  the settings you passed. Before, you got two: one with defaults (no content, no agent name) and yours nested
+  inside it.
+
 ## [3.0.0] — 2026-10-11
 
 A response that did not end normally is no longer reported as a finished answer. `HarnessLoop` never

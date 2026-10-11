@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "Langfuse": {
+      "commandName": "Project"
+    }
+  }
+}
