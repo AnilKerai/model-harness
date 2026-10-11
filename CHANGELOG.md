@@ -12,7 +12,7 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
-## [Unreleased]
+## [3.0.0] — 2026-10-11
 
 A response that did not end normally is no longer reported as a finished answer. `HarnessLoop` never
 read `StopReason`, and every adapter mapped a reason it did not recognise to `EndTurn`, so a truncated,
