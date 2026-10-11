@@ -12,9 +12,9 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
-## [Unreleased]
+## [3.1.0] — 2026-10-11
 
-A minor release (3.1.0). Two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI
+A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI
 attributes — the library still has no OpenTelemetry SDK or vendor dependency, so the same spans read correctly
 in any GenAI-aware backend, and the new `samples/Langfuse` exports a two-turn chat to Langfuse over OTLP — and
 Claude pricing brought up to date. Nothing is removed and nothing stops compiling. The behavioural changes are
