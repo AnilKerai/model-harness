@@ -416,7 +416,7 @@ public sealed class HarnessLoop(
         StopReason.MaxTokens =>
             "Response truncated at the provider's output-token limit — raise the adapter's MaxOutputTokens, or narrow the task.",
         StopReason.ContextWindowExceeded =>
-            "Response truncated at the model's context window — the prompt plus MaxOutputTokens exceeded it; lower CompactionOptions.WindowTokens or MaxOutputTokens.",
+            "Response truncated at the model's context window — the prompt left too little room for the answer. Shrink the prompt: lower CompactionOptions.WindowTokens so less history is kept, or narrow the task. Lowering MaxOutputTokens would only truncate it sooner.",
         StopReason.Refusal =>
             "The model declined to respond — consider retrying on a fallback model, or rephrasing the task.",
         StopReason.ContentFilter =>

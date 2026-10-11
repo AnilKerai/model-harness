@@ -179,13 +179,17 @@ public sealed class AzureOpenAIWireFormatTests
     [Theory]
     [InlineData(StopReason.MaxTokens)]
     [InlineData(StopReason.ContentFilter)]
-    public void ParseToolCalls_TruncatedArgumentsOnACutShortResponse_AreDroppedNotThrown(StopReason stopReason)
+    public void ParseToolCalls_TruncatedArgumentsOnACutShortResponse_AreKeptAsRawTextNotThrown(StopReason stopReason)
     {
-        // Throwing here would fail the run with a parser message before the loop could report the real cause.
+        // Throwing here would fail the run with a parser message before the loop could report the real cause;
+        // dropping the call would hide it from the trajectory and traces. It is kept, raw text intact.
         var calls = AzureOpenAIWireFormat.ParseToolCalls(
             [Call("whole", """{"q":"x"}"""), Call("cut", """{"q":"x""")], stopReason);
 
-        Assert.Equal("whole", Assert.Single(calls).CallId);
+        Assert.Equal(["whole", "cut"], calls.Select(c => c.CallId));
+        Assert.Equal(JsonValueKind.Object, calls[0].Arguments.ValueKind);
+        Assert.Equal(JsonValueKind.String, calls[1].Arguments.ValueKind);
+        Assert.Equal("""{"q":"x""", calls[1].Arguments.GetString());
     }
 
     [Fact]

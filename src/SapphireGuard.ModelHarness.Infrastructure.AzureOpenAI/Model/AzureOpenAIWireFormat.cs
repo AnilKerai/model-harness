@@ -142,22 +142,25 @@ internal static class AzureOpenAIWireFormat
     };
 
     // A response cut short at Length or by the content filter can carry tool-call arguments that are truncated
-    // JSON. The loop never dispatches calls from such a response, so an unparseable one is dropped rather than
-    // failing the run with a parser error before the loop can report why the response stopped. On any other
-    // response a malformed argument is a provider fault, and still throws.
+    // JSON. Throwing would fail the run with a parser error before the loop can report why the response stopped,
+    // and dropping the call would hide it from the trajectory and every tracer. So the call is kept, its raw
+    // argument text carried as a JSON string. The loop never dispatches a call from such a response, so no tool
+    // receives it. On any other response a malformed argument is a provider fault, and still throws.
     public static List<ToolCall> ParseToolCalls(IEnumerable<ChatToolCall> toolCalls, StopReason stopReason)
     {
         var parsed = new List<ToolCall>();
         foreach (var call in toolCalls)
         {
+            JsonElement arguments;
             try
             {
-                parsed.Add(new ToolCall(call.Id, call.FunctionName, JsonDocument.Parse(call.FunctionArguments).RootElement));
+                arguments = JsonDocument.Parse(call.FunctionArguments).RootElement;
             }
             catch (JsonException) when (stopReason is StopReason.MaxTokens or StopReason.ContentFilter)
             {
-                // Dropped: a partial call from a response the loop will report as cut short.
+                arguments = JsonSerializer.SerializeToElement(call.FunctionArguments.ToString());
             }
+            parsed.Add(new ToolCall(call.Id, call.FunctionName, arguments));
         }
         return parsed;
     }

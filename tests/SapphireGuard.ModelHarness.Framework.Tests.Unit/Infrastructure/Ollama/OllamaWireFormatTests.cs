@@ -80,8 +80,7 @@ public sealed class OllamaWireFormatTests
         Assert.Equal(expected, OllamaWireFormat.MapStopReason(doneReason, hasToolCalls));
 
     [Theory]
-    [InlineData("connection_closed")]
-    [InlineData("load")]
+    [InlineData("load")]                 // lifecycle responses: an empty-messages load, or keep_alive 0
     [InlineData("unload")]
     [InlineData("a_reason_added_later")]
     public void MapStopReason_AnythingElse_IsOtherNeverEndTurn(string doneReason) =>

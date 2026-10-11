@@ -39,9 +39,14 @@ public sealed class OllamaModelClient : IModelClient
     private readonly string _model;
     private readonly int? _maxOutputTokens;
 
-    public OllamaModelClient(OllamaClientOptions options)
+    public OllamaModelClient(OllamaClientOptions options) : this(options, handler: null) { }
+
+    // Test seam: lets a test serve a recorded Ollama response body, so the path from the wire JSON to the
+    // mapped StopReason — not only the mapping function — is covered without a live server.
+    internal OllamaModelClient(OllamaClientOptions options, HttpMessageHandler? handler)
     {
-        var http = new HttpClient { BaseAddress = new Uri(options.BaseUrl) };
+        var http = handler is null ? new HttpClient() : new HttpClient(handler);
+        http.BaseAddress = new Uri(options.BaseUrl);
         options.ConfigureHttpClient?.Invoke(http);
         _client = new OllamaApiClient(http);
         _model = options.ModelId;

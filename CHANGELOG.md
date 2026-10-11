@@ -30,10 +30,10 @@ every break below carries its migration. The reasoning is in
   | Stop reason (provider value) | 2.5.0 | Now — `FailureReason` says |
   |---|---|---|
   | `MaxTokens` (Anthropic `max_tokens`, Azure `length`, Ollama `length`) | `Done`, answer ending mid-sentence | output-token limit — raise the adapter's `MaxOutputTokens`, or narrow the task |
-  | `ContextWindowExceeded` (Anthropic `model_context_window_exceeded`) | `Done` | context window — lower `CompactionOptions.WindowTokens` or `MaxOutputTokens` |
+  | `ContextWindowExceeded` (Anthropic `model_context_window_exceeded`) | `Done` | context window — shrink the prompt: lower `CompactionOptions.WindowTokens`, or narrow the task |
   | `Refusal` (Anthropic `refusal`) | `Done` | the model declined — retry on a fallback model, or rephrase |
   | `ContentFilter` (Azure `content_filter`) | `Done` | the provider's content filter withheld or cut the response |
-  | `Other` (anything unrecognised — Anthropic `pause_turn`, Ollama `connection_closed`, an empty Ollama stream) | `Done` | unrecognised stop reason |
+  | `Other` (anything unrecognised — e.g. Anthropic `pause_turn`, an empty Ollama stream) | `Done` | unrecognised stop reason |
 
   The check runs after the `PostModelCall` sensors, so content gates still apply, and before the
   `PreReturn` sensors, so a `WithStructuredOutput<T>` validator never tries to repair a remnant. It
@@ -56,8 +56,9 @@ every break below carries its migration. The reasoning is in
   ran the tool on whatever arguments had arrived: the Anthropic adapter passed the partial input through,
   and the Azure adapter threw parsing the truncated JSON, so the run ended `Failed` with a parser message.
   The run now returns `PartialResult` before any dispatch. On Azure, unparseable arguments on a cut-short
-  response are dropped so that the truncation is what gets reported; malformed arguments on a response
-  that ended normally still throw. If a tool call is being cut off, raise `MaxOutputTokens`.
+  response are kept as their raw text: not thrown, so the truncation is what gets reported, and not
+  dropped, so the call stays visible in the trajectory and traces. Malformed arguments on a response that
+  ended normally still throw. If a tool call is being cut off, raise `MaxOutputTokens`.
 
 - **`StopReason` gained `Refusal`, `ContentFilter` and `ContextWindowExceeded`, and every member now has
   an explicit value.** The existing values are unchanged (`EndTurn = 0` … `Other = 4`), so a checkpoint
@@ -108,15 +109,16 @@ every break below carries its migration. The reasoning is in
 
 ### Changed
 
-- **Every adapter maps the stop reasons it knows, and nothing else to `EndTurn`.**
+- **Every adapter maps the stop reasons it knows, and an unrecognised one to `Other`, never `EndTurn`.**
   - **Anthropic:** `refusal` → `Refusal`, `model_context_window_exceeded` → `ContextWindowExceeded`,
     anything else (including `pause_turn`, which only follows server-tool loops) → `Other`. The mapping
     moved into an internal, unit-tested `ClaudeWireFormat`.
   - **Azure OpenAI:** `content_filter` → `ContentFilter`; an unrecognised or missing finish reason → `Other`.
   - **Ollama:** now reads `done_reason`. `length` → `MaxTokens` — the adapter never reported truncation
     before, although it sends `MaxOutputTokens` as `num_predict`. `stop` → `EndTurn`, or `ToolUse` when
-    the response carries tool calls; any other value → `Other`. A server that omits `done_reason` keeps
-    the previous inference from the tool calls.
+    the response carries tool calls; any other value → `Other`. A response with no `done_reason` — every
+    server before v0.1.35 — keeps the previous inference from the tool calls; ADR-004 says why it is not
+    treated as abnormal.
 - **OpenTelemetry `gen_ai.response.finish_reasons`** gains `content_filter`, `refusal` and
   `model_context_window_exceeded`.
 

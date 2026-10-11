@@ -14,9 +14,10 @@ The first fix special-cased `MaxTokens`: a denylist of one. Review found it inco
 ways, and all three had the same cause.
 
 1. **Unrecognised reasons still meant "finished".** Every adapter mapped any reason it did not
-   enumerate to `EndTurn`. Anthropic's `refusal` and `model_context_window_exceeded` — which
-   [Anthropic's docs](https://docs.claude.com/en/api/handling-stop-reasons) say to "treat as
-   truncated" — and Azure's `content_filter` all still returned `Done`. A refusal came back as a
+   enumerate to `EndTurn`. Anthropic's `model_context_window_exceeded` — which
+   [Anthropic's docs](https://docs.claude.com/en/api/handling-stop-reasons) handle alongside
+   `max_tokens` as a truncated response — and `refusal`, for which they suggest a different model,
+   both still returned `Done`, as did Azure's `content_filter`. A refusal came back as a
    successful answer.
 2. **Ollama never reported truncation at all.** Its adapter inferred the stop reason from the
    presence of tool calls and ignored `done_reason`, though it sends the cap as `num_predict`.
@@ -56,6 +57,9 @@ cut is complete.
 `*WireFormat` class and is unit-tested. `Refusal`, `ContentFilter` and `ContextWindowExceeded`
 were added to `StopReason` because each needs a different remedy; they are **appended**, because
 checkpoints persist the enum as an integer and reordering would silently remap stored responses.
+An adapter that cannot parse a cut-short call's arguments keeps the call with its raw text, so
+the run reports the truncation rather than a parser error, and the trajectory and traces still
+show every call the model emitted.
 
 ## Consequences
 
@@ -69,8 +73,14 @@ What this costs, and what it makes harder:
   on `PartialResult`, but a caller that only reads it on `Done` loses those answers.
 - **Exhaustive switches over `StopReason` break** for any consumer that matched every member
   without a discard: CS8509 at compile time, `SwitchExpressionException` at run time.
-- **Ollama servers that predate `done_reason`** keep the old tool-call inference, so truncation
-  on them stays invisible. A missing value is treated as "the server did not say", not as abnormal.
+- **A missing Ollama `done_reason` is read as normal, though it is ambiguous.** Servers before
+  v0.1.35 never send the field, and Ollama renders its declared closed-connection reason as an
+  empty string, which its JSON omits. Both fall back to the old tool-call inference, so truncation
+  on a pre-0.1.35 server stays invisible — as would a closed connection, if Ollama ever assigned
+  that reason (nothing does today). Mapping a missing value to `Other` instead would make every
+  answer from an old server `PartialResult`.
+- **One truncated tool call ends the run.** With the Anthropic default of 8096 output tokens, a
+  single oversized call late in a long run returns `PartialResult`, discarding the turn.
 - **`pause_turn` maps to `Other`.** Correct — the response is incomplete — but the harness has no
   continuation for it. It is unreachable today because the Anthropic adapter declares client tools
   only, and `pause_turn` follows server-tool loops.
@@ -86,6 +96,14 @@ What this costs, and what it makes harder:
 - **A continuation turn** — append the partial text and ask the model to continue. The real fix for
   long outputs, but it needs its own cap and interacts with the consecutive-intervention counter.
   Deferred until long single-response output is a real workload.
+- **Answer each undispatched call with an error and give the model another turn** — the idiom a
+  `PreToolCall` block already uses: record an `IsError` result per call ("cut off at the
+  output-token limit — retry with smaller arguments, or split the work") and let the model replan.
+  Deferred, not rejected; it would remove the "one truncated tool call ends the run" cost. It helps
+  only `MaxTokens` — a refusal, a
+  filter stop or a full context window would recur — and it needs its own bound: a `PreToolCall`
+  block does not count toward the consecutive-intervention cap, so a model that re-emits the same
+  oversized call would retry until the budget ran out.
 - **Automatic fallback to another model on refusal.** Which model, at what cost, under what policy
   are deployment decisions. The reason names the remedy and the caller decides.
 - **Collapse every abnormal ending to `Other`.** Loses the remedy. "Raise `MaxOutputTokens`",

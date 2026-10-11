@@ -58,11 +58,13 @@ internal static class OllamaWireFormat
         return (callId, isError, resultText);
     }
 
-    // done_reason values from Ollama's llm/server.go: "stop", "length", "connection_closed", plus "load"/"unload"
-    // for model-lifecycle requests. Ollama reports "stop" even on a response carrying tool calls, so ToolUse is
-    // inferred from their presence. A missing value — a server that predates the field — falls back to that same
-    // inference, which is what this adapter did before it read the field. Any other value is Other, never EndTurn,
-    // so the loop's allowlist keeps it out of Done.
+    // On the wire done_reason is api.ChatResponse.DoneReason (omitempty), filled from llm.DoneReason.String() —
+    // "stop" or "length" — plus "load"/"unload" for model-lifecycle requests this adapter never sends. Ollama
+    // reports "stop" even on a response carrying tool calls, so ToolUse is inferred from their presence.
+    // A missing value is ambiguous: servers before v0.1.35 never send the field, and String() renders the
+    // declared-but-unassigned DoneReasonConnectionClosed as "", which omitempty drops. It falls back to the
+    // tool-call inference so those servers keep working; a strict mapping would make every answer from one
+    // PartialResult. Any other value is Other, never EndTurn, so the loop's allowlist keeps it out of Done.
     public static StopReason MapStopReason(string? doneReason, bool hasToolCalls) => doneReason switch
     {
         null or "" or "stop" => hasToolCalls ? StopReason.ToolUse : StopReason.EndTurn,
