@@ -655,6 +655,69 @@ First stable release. A .NET agent framework built as *model + harness*: the loo
 compaction, and checkpoint/resume. Adapters for Anthropic, Azure OpenAI / AI Foundry, and Ollama.
 OpenTelemetry `gen_ai.*` tracing. Published as seven NuGet packages.
 
+### Breaking
+
+*Recorded retrospectively — this change shipped in 1.0.0 but was only ever written up in
+`docs/ROADMAP.md`, not here. See [ADR-002](docs/decisions/002-incremental-fold-compaction.md)
+for the full reasoning.*
+
+- **`ICompactionStrategy` became a fold: `SummariseAsync` → `CompactAsync`.** The 0.1.0 port was a
+  stateless *view* — it received pre-rendered text for the whole evicted head and re-summarised it
+  from scratch every turn, so compaction cost grew with the run and was attributed to no budget. The
+  replacement passes a request record carrying the **typed** evicted steps, the full `AgentState`, and
+  the summary accumulated so far, and returns a result that can persist an updated summary.
+
+  ```diff
+  - Task<string> SummariseAsync(
+  -     int evictedStepCount,
+  -     IReadOnlyList<string> evictedContent,
+  -     int remainingTokenBudget,
+  -     CancellationToken ct);
+  + Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct);
+  ```
+
+  **Migration — a view (same behaviour as 0.1.0).** Return `UpdatedSummary = null` and nothing is
+  persisted; the harness renders any prior summary in front of your text, so do not repeat it:
+
+  ```csharp
+  // Before
+  public Task<string> SummariseAsync(
+      int evictedStepCount, IReadOnlyList<string> evictedContent, int remainingTokenBudget, CancellationToken ct)
+      => Task.FromResult($"[{evictedStepCount} steps omitted]");
+
+  // After
+  public Task<CompactionResult> CompactAsync(CompactionRequest request, CancellationToken ct)
+      => Task.FromResult(new CompactionResult
+      {
+          InjectedText = $"[{request.EvictedSteps.Count} steps omitted]"
+          // UpdatedSummary stays null — stateless view
+      });
+  ```
+
+  The old parameters map as: `evictedStepCount` → `request.EvictedSteps.Count`,
+  `remainingTokenBudget` → `request.RemainingTokenBudget`, and `evictedContent` → `request.EvictedSteps`,
+  which are now typed `Step`s (`ModelCallStep`, `ToolCallStep`, `SensorInterventionStep`) rather than
+  strings — render them yourself, or inspect them to compact structurally.
+
+  **Migration — a fold (recommended for long runs).** Summarise only `request.EvictedSteps` on top of
+  `request.PriorSummary` and return a non-null `UpdatedSummary` whose `FoldedStepCount` is the new
+  watermark. `InjectedText` must then be the *complete* replacement summary, not a delta. Report
+  `Usage`/`Cost` if you call a model, so the spend reaches the budget enforcers.
+
+  **Also required:** the opt-in methods now take `CompactionOptions`, so a strategy can never be wired
+  without stating its eviction trigger:
+
+  ```diff
+  - builder.WithAiCompaction(modelClient);
+  + builder.WithAiCompaction(modelClient, new CompactionOptions { WindowTokens = 100_000 });
+  ```
+
+  `Budget.MaxContextTokens` was renamed `Budget.MaxTotalTokens` in a sibling commit in this same
+  release. It had meant both
+  "size of one context window" (what eviction needs) and "cumulative tokens for the run" (what the
+  enforcer checks); since cumulative is always ≥ one window, sharing the field hard-stopped compacted
+  runs at roughly one window. The window size now lives in `CompactionOptions.WindowTokens`.
+
 ## [0.1.0] — 2026-06-05
 
 Initial packaging release: multi-targeted `net8.0` + `net10.0`, MIT licence, SourceLink, and shared package
