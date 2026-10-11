@@ -29,6 +29,11 @@ public sealed class CompositeTracer(params ITracer[] tracers) : ITracer
         foreach (var t in tracers) t.Complete(taskId, status, failureReason);
     }
 
+    public void LogOutcome(AgentOutcome outcome)
+    {
+        foreach (var t in tracers) t.LogOutcome(outcome);
+    }
+
     public void LogGuideContribution(string taskId, int turn, string guideName, GuideContribution contribution)
     {
         foreach (var t in tracers) t.LogGuideContribution(taskId, turn, guideName, contribution);

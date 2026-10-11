@@ -794,6 +794,56 @@ public sealed class HarnessLoopTests
     }
 
     [Fact]
+    public async Task RunAsync_Done_LogsTheReturnedOutcomeBeforeComplete()
+    {
+        var tracer = new RecordingTracer();
+        var harness = BuildHarness(new ScriptedModelClient(EndTurnResponse("42")), tracer: tracer);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Same(outcome, Assert.Single(tracer.Outcomes));
+        Assert.Equal(["outcome:Done", "complete:Done"], tracer.TerminalCalls);
+    }
+
+    [Fact]
+    public async Task RunAsync_Failed_LogsTheOutcomeBeforeComplete()
+    {
+        var tracer = new RecordingTracer();
+        var harness = BuildHarness(new ScriptedModelClient(), tracer: tracer); // no responses → throws
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Same(outcome, Assert.Single(tracer.Outcomes));
+        Assert.Equal(["outcome:Failed", "complete:Failed"], tracer.TerminalCalls);
+    }
+
+    [Fact]
+    public async Task RunAsync_CutShort_LogsThePartialAnswerBeforeComplete()
+    {
+        var tracer = new RecordingTracer();
+        var harness = BuildHarness(new ScriptedModelClient(TruncatedResponse("half an answ")), tracer: tracer);
+
+        await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal("half an answ", Assert.Single(tracer.Outcomes).FinalAnswer);
+        Assert.Equal(["outcome:PartialResult", "complete:PartialResult"], tracer.TerminalCalls);
+    }
+
+    [Fact]
+    public async Task RunAsync_SuspendedForHuman_LogsThePendingOutcomeBeforeComplete()
+    {
+        var tracer = new RecordingTracer();
+        var call = MakeToolCall("ask_human");
+        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "Which region?", IsPending: true));
+        var harness = BuildHarness(new ScriptedModelClient(ToolUseResponse(call)), toolRegistry: registry, tracer: tracer);
+
+        await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal("Which region?", Assert.Single(tracer.Outcomes).PendingHumanInput?.Question);
+        Assert.Equal(["outcome:AwaitingHuman", "complete:AwaitingHuman"], tracer.TerminalCalls);
+    }
+
+    [Fact]
     public async Task RunAsync_EachTurn_LogsCheckpointAndBudgetSnapshot()
     {
         // Every turn opens with a checkpoint save and a budget snapshot — both must reach the tracer.
@@ -995,6 +1045,9 @@ file sealed class RecordingTracer : Tracing.ITracer
     public List<int> BudgetSnapshotTurns { get; } = [];
     public List<BudgetSnapshot> BudgetSnapshots { get; } = [];
     public List<TimeSpan> RateLimitDelays { get; } = [];
+    public List<AgentOutcome> Outcomes { get; } = [];
+    // "outcome:{status}" / "complete:{status}" in call order, so a test can assert LogOutcome precedes Complete.
+    public List<string> TerminalCalls { get; } = [];
 
     public void StartTrace(string taskId, string taskText) { }
     public Tracing.IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools)
@@ -1004,7 +1057,12 @@ file sealed class RecordingTracer : Tracing.ITracer
     }
     public Tracing.IToolCallScope BeginToolCall(string taskId, int turn, ToolCall call) => new ToolScope(this);
     public void LogSensorResult(string taskId, int turn, HookPoint hookPoint, string sensorName, SensorResult result) { }
-    public void Complete(string taskId, AgentStatus status, string? failureReason) { }
+    public void Complete(string taskId, AgentStatus status, string? failureReason) => TerminalCalls.Add($"complete:{status}");
+    public void LogOutcome(AgentOutcome outcome)
+    {
+        Outcomes.Add(outcome);
+        TerminalCalls.Add($"outcome:{outcome.Status}");
+    }
     public void LogCheckpoint(string taskId, int turn, string checkpointId, TimeSpan elapsed) => CheckpointTurns.Add(turn);
     public void LogBudgetSnapshot(string taskId, int turn, BudgetSnapshot snapshot) { BudgetSnapshotTurns.Add(turn); BudgetSnapshots.Add(snapshot); }
     public void LogRateLimit(string taskId, int turn, TimeSpan delay) => RateLimitDelays.Add(delay);

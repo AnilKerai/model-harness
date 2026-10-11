@@ -32,6 +32,15 @@ public interface ITracer
     void Complete(string taskId, AgentStatus status, string? failureReason);
 
     /// <summary>
+    /// Called once per run, immediately before <see cref="Complete"/>, with the outcome the caller is about to
+    /// receive — the final (or partial) answer and the final state, whose latest <see cref="UserMessageStep"/>
+    /// is the input that started this run (the current chat turn, not the conversation opener). Default no-op
+    /// so existing <see cref="ITracer"/> implementations compile unchanged — override it to record the run's
+    /// input and output on the trace.
+    /// </summary>
+    void LogOutcome(AgentOutcome outcome) { }
+
+    /// <summary>
     /// Called after each guide contributes to the context draft, with the structural delta
     /// it produced. <paramref name="turn"/> is the zero-based turn index the contribution
     /// belongs to. Default no-op so existing <see cref="ITracer"/> implementations compile
