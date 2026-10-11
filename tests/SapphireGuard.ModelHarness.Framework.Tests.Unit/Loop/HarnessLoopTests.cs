@@ -63,6 +63,16 @@ public sealed class HarnessLoopTests
         Cost = 0m
     };
 
+    /// <summary>A response the provider cut off at its output-token cap: no tool calls, partial text.</summary>
+    private static ModelResponse TruncatedResponse(string partialText) => new()
+    {
+        Text = partialText,
+        ToolCalls = [],
+        StopReason = StopReason.MaxTokens,
+        Usage = Usage.Zero,
+        Cost = 0m
+    };
+
     private static ToolCall MakeToolCall(string name = "test-tool") =>
         new(Guid.NewGuid().ToString("n"), name, JsonDocument.Parse("{}").RootElement);
 
@@ -223,6 +233,76 @@ public sealed class HarnessLoopTests
         Assert.Equal(AgentStatus.PartialResult, outcome.Status);
         Assert.Equal("test budget exhausted", outcome.FailureReason);
         Assert.Equal(1, client.CallCount); // one forced-finalise call
+    }
+
+    // ── Response truncation (provider output-token cap) ───────────────────────
+
+    [Fact]
+    public async Task RunAsync_ResponseTruncatedAtMaxTokens_ReturnsPartialResultNotDone()
+    {
+        var client = new ScriptedModelClient(TruncatedResponse("the first finding is that the"));
+        var harness = BuildHarness(client);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.PartialResult, outcome.Status);
+        Assert.Equal("the first finding is that the", outcome.FinalAnswer);
+        Assert.Contains("truncated", outcome.FailureReason);
+        Assert.Equal(1, client.CallCount); // no second call — the same cap would truncate again
+    }
+
+    [Fact]
+    public async Task RunAsync_ResponseTruncatedAtMaxTokens_PreReturnSensorIsNotConsulted()
+    {
+        // A PreReturn validator would challenge the truncated remnant, the retry would hit the same
+        // cap, and the run would report the intervention limit instead of the truncation. The sensor
+        // blocks 99 times, so had it been consulted the loop would have looped and the scripted
+        // client (one response) would have thrown.
+        var client = new ScriptedModelClient(TruncatedResponse("clipped"));
+        var harness = BuildHarness(client, sensors: [new CountdownSensor(HookPoint.PreReturn, blockCount: 99)]);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.PartialResult, outcome.Status);
+        Assert.Contains("output-token limit", outcome.FailureReason);
+        Assert.DoesNotContain("intervention limit", outcome.FailureReason);
+        Assert.Equal(1, client.CallCount);
+        Assert.Empty(outcome.FinalState.Trajectory.OfType<SensorInterventionStep>());
+    }
+
+    [Fact]
+    public async Task RunAsync_BudgetFinalisationItselfTruncated_ReasonNamesBudgetAndTruncation()
+    {
+        var client = new ScriptedModelClient(TruncatedResponse("best I can do, cut off mid-"));
+        var harness = BuildHarness(client, budgetEnforcer: new AlwaysExhaustedBudgetEnforcer());
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.PartialResult, outcome.Status);
+        Assert.Contains("test budget exhausted", outcome.FailureReason);
+        Assert.Contains("truncated", outcome.FailureReason);
+    }
+
+    [Fact]
+    public async Task RunAsync_TruncatedResponseCarryingToolCalls_StillDispatchesThem()
+    {
+        // Truncation mid-tool_use is the provider's problem to report, not a reason to drop a call
+        // the model did manage to emit: the loop keeps its normal tool path.
+        var truncatedWithCall = new ModelResponse
+        {
+            Text = null,
+            ToolCalls = [MakeToolCall()],
+            StopReason = StopReason.MaxTokens,
+            Usage = Usage.Zero,
+            Cost = 0m
+        };
+        var client = new ScriptedModelClient(truncatedWithCall, EndTurnResponse("done"));
+        var harness = BuildHarness(client);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Single(outcome.FinalState.Trajectory.OfType<ToolCallStep>());
     }
 
     // ── PreModelCall sensor ───────────────────────────────────────────────────

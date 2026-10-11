@@ -12,6 +12,60 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Fixed
+
+- **A response the provider truncated at its output-token cap was reported as a successful `Done`.**
+  `HarnessLoop` read "no tool calls" as "the model is finished", so a response carrying
+  `StopReason.MaxTokens` — the provider cutting generation at the adapter's `MaxOutputTokens`
+  (default 8096 in `ClaudeModelClient`) — came back as `AgentOutcome { Status = Done,
+  FailureReason = null }` with a `FinalAnswer` ending mid-sentence. Nothing in the loop read
+  `StopReason`; only the tracers did. A caller had no way to tell a complete answer from a clipped
+  one.
+
+  This is **not** the budget path, which was correct and is unchanged: budget exhaustion is *our*
+  counter hitting *our* limit, and still gets its one tool-free finalisation call before returning
+  `PartialResult`. Truncation is the provider cutting a single response while the run's budget may
+  be barely touched — a different cause needing a different reason.
+
+  A truncated response with no tool calls now returns `PartialResult`, keeping the partial text as
+  `FinalAnswer` and naming the cap in `FailureReason`. Three details, each deliberate:
+
+  - **Checked before the `PreReturn` sensors.** A validating sensor (the `WithStructuredOutput<T>`
+    repair loop) would challenge the truncated remnant, the retry would hit the same cap, and the
+    run would burn to the consecutive-intervention limit and report *that* — hiding the real cause
+    behind a misleading one.
+  - **No extra model call.** Re-asking under the same cap only truncates again, so unlike
+    `FinaliseOnBudgetAsync` this path spends nothing; the caller already has the text it is going
+    to get.
+  - **Tool calls still dispatch.** A truncated response that nonetheless carries tool calls keeps
+    the normal tool path — the model managed to emit them.
+
+  `FinaliseOnBudgetAsync` now appends the same note to its reason when the finalisation response is
+  itself truncated. It is the likeliest call in any run to be, having just been instructed to
+  produce a complete answer in one shot; the status was already honest, but the clipping was silent.
+
+  **Behavioural change.** A run that previously returned `Done` on a truncated response now returns
+  `PartialResult` with a non-null `FailureReason`. Callers branching on status see the new value:
+
+  ```csharp
+  // Before — a truncated answer was indistinguishable from a complete one
+  if (outcome.Status == AgentStatus.Done)
+      Publish(outcome.FinalAnswer);        // could be a mid-sentence fragment
+
+  // After — truncation is visible, and the partial text is still available
+  if (outcome.Status == AgentStatus.Done)
+      Publish(outcome.FinalAnswer);
+  else if (outcome.Status == AgentStatus.PartialResult)
+      Review(outcome.FinalAnswer, outcome.FailureReason);   // names the output-token cap
+  ```
+
+  If the truncation reason names the output-token limit, the fix is to raise the adapter's
+  `MaxOutputTokens` (`ClaudeClientOptions`, `AzureOpenAIClientOptions`, `OllamaClientOptions`) or to
+  narrow the task. `AgentOutcome.FailureReason`'s XML doc was corrected to match what the type has
+  always done — it is set for `PartialResult`, not only `Failed`.
+
 ## [2.5.0] — 2026-10-10
 
 A reliability release, started from a repo audit. The common thread: a component's own timeout — an

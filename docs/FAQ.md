@@ -4,7 +4,7 @@
 
 Three reasons, each independent:
 
-**1. Different outcome semantics.** Budget exhaustion returns `AgentOutcome { Status = PartialResult }`, signalling the agent was cut off before it could finish. A sensor block at `PreModelCall` returns `Done`, signalling the agent reached a stopping point. Those mean different things to a caller — `PartialResult` is "we ran out of resources", `Done` is "a policy said stop here and the model wrapped up cleanly". If budget enforcement went through the sensor path, both cases would return `Done` and callers would lose the ability to distinguish them.
+**1. Different outcome semantics.** Budget exhaustion returns `AgentOutcome { Status = PartialResult }`, signalling the agent was cut off before it could finish. A sensor block at `PreModelCall` returns `Done`, signalling the agent reached a stopping point. Those mean different things to a caller — `PartialResult` is "we ran out of resources" (or, with a different reason, "the provider truncated the response"), `Done` is "a policy said stop here and the model wrapped up cleanly". If budget enforcement went through the sensor path, both cases would return `Done` and callers would lose the ability to distinguish them.
 
 **2. Ordering — budget is checked before sensors run.** The loop does `budget check → sensors`, in that order. If budget enforcement were a sensor it would run in parallel with other sensors, which could do work (memory queries, validation calls) before the budget check fires. When the budget is already gone, running sensors at all is wasteful. The explicit check short-circuits everything before any sensor touches the state.
 

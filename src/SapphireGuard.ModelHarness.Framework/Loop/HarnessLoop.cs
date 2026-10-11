@@ -115,6 +115,17 @@ public sealed class HarnessLoop(
 
                 if (response.ToolCalls.Count == 0)
                 {
+                    // A response the provider truncated at its output-token cap is not a final answer,
+                    // even though it carries no tool calls. Checked *before* the PreReturn sensors on
+                    // purpose: a validating sensor (the WithStructuredOutput<T> repair loop) would
+                    // challenge the malformed remnant, the retry would hit the same cap, and the run
+                    // would burn to the intervention limit and report *that* as the reason instead of
+                    // the truncation. No second model call either — re-asking under the same cap only
+                    // truncates again.
+                    if (response.StopReason == StopReason.MaxTokens)
+                        return PartialOutcome(state, response.Text,
+                            "Response truncated at the provider's output-token limit — raise the adapter's MaxOutputTokens, or narrow the task.");
+
                     var (preReturnState, challenged, suppressToolsOnChallenge) = await RunSensorsAsync(state, turnIndex, HookPoint.PreReturn, state.Trajectory[^1], ct);
                     state = preReturnState;
                     if (challenged)
@@ -391,13 +402,25 @@ public sealed class HarnessLoop(
     private async Task<AgentOutcome> FinaliseOnBudgetAsync(AgentState state, int turn, string reason, CancellationToken ct)
     {
         var (finalState, response) = await CallModelAsync(state, turn, forceFinalise: true, ct);
-        var partial = finalState with { Status = AgentStatus.PartialResult };
+        // The finalisation call is the likeliest in the run to be truncated — it was just instructed to
+        // produce a complete answer in one shot — so name that in the reason rather than handing back a
+        // silently clipped answer under a status that only mentions the budget.
+        if (response.StopReason == StopReason.MaxTokens)
+            reason += " The finalisation response was itself truncated at the provider's output-token limit.";
+        return PartialOutcome(finalState, response.Text, reason);
+    }
+
+    // Terminal PartialResult for a run whose best available answer is already in hand. Unlike
+    // FinaliseOnBudgetAsync it spends no extra model call — the caller has the text it is going to get.
+    private AgentOutcome PartialOutcome(AgentState state, string? finalAnswer, string reason)
+    {
+        var partial = state with { Status = AgentStatus.PartialResult };
         tracer.Complete(partial.TaskId, AgentStatus.PartialResult, reason);
         return new AgentOutcome
         {
             TaskId = partial.TaskId,
             Status = AgentStatus.PartialResult,
-            FinalAnswer = response.Text,
+            FinalAnswer = finalAnswer,
             FinalState = partial,
             FailureReason = reason
         };
