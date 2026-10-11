@@ -12,6 +12,66 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+Langfuse-ready traces, using only the standard OpenTelemetry GenAI attributes — the library still has no
+OpenTelemetry SDK or vendor dependency, so the same spans read correctly in any GenAI-aware backend. The new
+`samples/Langfuse` exports a two-turn chat to Langfuse over OTLP. Nothing is removed and nothing stops
+compiling; the content-capture JSON shape changes (opt-in, see below), and a double-registered tracer now
+emits one span tree instead of two.
+
+### Added
+
+- **`ITracer.LogOutcome(AgentOutcome)`** — called once per run, immediately before `Complete`, on every exit
+  path (`Done`, `Failed`, `PartialResult`, `AwaitingHuman`), with the outcome the caller is about to receive. A
+  default-interface no-op, so existing tracers compile unchanged; `CompositeTracer` forwards it.
+- **`OpenTelemetryTracer` records the run's input and output on the `invoke_agent` root** — with
+  `enableSensitiveData`, `gen_ai.input.messages` is the user message that started the run (in a chat, the
+  current turn, not the opener `TaskText` holds) and `gen_ai.output.messages` is the final or partial answer.
+  Backends that show a trace's input/output (Langfuse's trace table, evaluators, dataset runs) read it from the
+  root, which had neither.
+- **`gen_ai.conversation.id` on every span** — the task id, which stays the same across chat turns and HITL
+  resumes, so a backend groups a conversation's runs (one trace per `RunAsync`) into a session. A sub-agent run
+  nested under a parent's tool span inherits the parent's id. Not content, so it is emitted regardless of
+  `enableSensitiveData`.
+- **`samples/Langfuse`** — OTLP export to Langfuse (endpoint, Basic auth, `x-langfuse-ingestion-version: 4`,
+  `deployment.environment.name`, flush on exit). Keys come from `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` /
+  `LANGFUSE_BASE_URL` or `appsettings.local.json`. See [EXTENDING.md](docs/EXTENDING.md#exporting-to-langfuse).
+
+### Changed
+
+- **`gen_ai.input.messages` / `gen_ai.output.messages` follow the GenAI messages JSON schema.** They were a
+  `{role, content}` projection of the harness's internal messages; they are now role + typed `parts` as the
+  semantic conventions require. Tool calls and results become `tool_call` / `tool_call_response` parts instead
+  of `[tool_call …]` text, adjacent messages with the same role merge (as the adapters send them), and
+  `gen_ai.output.messages` is an array carrying a `finish_reason`. Only emitted with `enableSensitiveData`.
+
+  **Behavioural change** — if you parse these attributes yourself, read the new shape:
+
+  ```jsonc
+  // Before — gen_ai.output.messages
+  {"role":"assistant","content":"Let me check.","tool_calls":[{"id":"c1","name":"calculator","arguments":{"op":"mul"}}]}
+
+  // After
+  [{"role":"assistant","parts":[{"type":"text","content":"Let me check."},
+    {"type":"tool_call","id":"c1","name":"calculator","arguments":{"op":"mul"}}],"finish_reason":"tool_call"}]
+  ```
+
+  `gen_ai.response.finish_reasons` is unchanged.
+
+### Fixed
+
+- **`WithOtelTracer(...)` on a standard harness emitted every span twice.** `AddStandardModelHarness`,
+  `AddStandardChatHarness` and `AgentFactory.AddStandardAgent` already add an `OpenTelemetryTracer`, and
+  `WithOtelTracer` — the documented way to turn on content capture or set an agent name — added a second, so
+  each run produced two nested `invoke_agent` trees and a backend summed every token and cost figure twice. A
+  harness now has one `OpenTelemetryTracer`; calling `WithOtelTracer` again reconfigures it (the last call's
+  settings win).
+
+  **Behavioural change:** if you call `WithOtelTracer` on a standard harness, you now get one span tree with
+  the settings you passed. Before, you got two: one with defaults (no content, no agent name) and yours nested
+  inside it.
+
 ## [3.0.0] — 2026-10-11
 
 A response that did not end normally is no longer reported as a finished answer. `HarnessLoop` never

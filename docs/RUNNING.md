@@ -84,6 +84,25 @@ dotnet run --project samples/LiveDashboard
 
 The launch profile binds it to `http://localhost:5137` (override with `--urls`). Open that address: a task runs on startup, and the **Run** button fires more. Because the feed keeps a ring buffer, a browser opened after a run still replays its history. This is the local operator console; for durable, multi-run history point `WithOtelTracer()` at an OTLP backend (the two compose) — see [EXTENDING.md](EXTENDING.md).
 
+## Langfuse
+
+`samples/Langfuse` exports a two-turn chat to [Langfuse](https://langfuse.com) over OTLP. Each turn is one
+trace — an `agent` with its `generation`s and `tool` calls, the user's message as input and the answer as
+output — and both turns land in one Langfuse **session**. Create an API key pair under your Langfuse
+project's **Settings → API Keys**, then pass the keys as environment variables (or put them under
+`Langfuse:PublicKey` / `Langfuse:SecretKey` in `samples/Langfuse/appsettings.local.json`):
+
+```bash
+export LANGFUSE_PUBLIC_KEY=pk-lf-...
+export LANGFUSE_SECRET_KEY=sk-lf-...
+export LANGFUSE_BASE_URL=https://cloud.langfuse.com   # EU; https://us.cloud.langfuse.com for US, or self-hosted
+dotnet run --project samples/Langfuse
+```
+
+Without an Anthropic key it runs on the scripted client; without Langfuse keys it runs but exports nothing.
+The run prints its session id — open **Sessions** in Langfuse to find it. The wiring is explained in
+[EXTENDING.md](EXTENDING.md#exporting-to-langfuse).
+
 ## What you'll see
 
 Two things stream to stdout: JSON trace events as they happen, then a formatted summary once the run completes.
