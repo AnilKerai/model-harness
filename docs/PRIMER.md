@@ -40,14 +40,18 @@ A "research agent" is control flow + tools + memory. An "orchestrated pipeline" 
 
 Context engineering — as I understand it — is the practice of shaping model perception: deciding what information goes into the context window at each step, what gets left out, and how it's structured. The guide pattern in this framework is a concrete implementation of that idea.
 
+It is also about **how much**. The window is a finite budget: every token is resent on every call, so context size drives cost and latency, and more context can dilute the model's attention rather than help it. Anthropic's framing is to find ["the smallest possible set of high-signal tokens that maximize the likelihood of some desired outcome"](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents).
+
 The four standard operations — **Write, Select, Compress, Isolate** — were named by [LangChain (Lance Martin)](https://www.langchain.com/blog/context-engineering-for-agents); each has a named home here:
 
 | CE operation | What it means | Port |
 |---|---|---|
-| **Write** | Externalise information outside the window for later retrieval | `ICheckpointStore`, `ISkillStore` |
+| **Write** | Save information outside the window so the agent can use it later (scratchpads, notes, memories) | `ISkillStore` (written by the model via `skill_manage`) |
 | **Select** | Pull relevant information into the window when needed | `IMemoryStore`, `IToolSelector`, `ISkillStore` |
 | **Compress** | Reduce token count while preserving signal | `ITrajectoryGuide`, `ICompactionStrategy` |
 | **Isolate** | Partition context so sub-agents don't pollute each other | `AgentFactory` |
+
+`ICheckpointStore` is not Write in this sense: it persists run state so the *host* can resume after a crash or a human pause, but the model never reads it back.
 
 Each port is listed in the [extension points](../README.md#extension-points) section of the README.
 
@@ -68,21 +72,25 @@ Loop engineering stacks feedback loops from the single run outward; each layer w
 | Loop | What it does | In this harness |
 |---|---|---|
 | **1. Agent loop** | Model calls tools in a loop until the task is done | ✅ `HarnessLoop` — the turn-by-turn state machine |
-| **2. Verification loop** | Check each result; feed failures back so the agent self-corrects | ◐ inline as **sensors** (`PreReturn` challenge, `PostToolCall` flag); offline as **evals**, which live above the harness |
+| **2. Verification loop** | Check each result; feed failures back so the agent self-corrects | ◐ inline as **sensors** — a `PreReturn` sensor is a grader that challenges the answer with feedback (`CriticSensor` is LLM-as-judge; `StructuredOutputSensor` is deterministic); `PostToolCall` only flags. Offline evals are *not* this loop: they score runs without feeding back into them, so their scores feed the hill-climbing loop |
 | **3. Event-driven loop** | Start runs from cron / webhooks / events, not by hand | ⛔ above the harness — the host composes a scheduler around `Agent` |
 | **4. Hill-climbing loop** | Read traces + outcomes, then update the agent's own config to do better next time | ⛔ above the harness — the harness only *emits* the traces (`ITracer`) it would consume; see [ROADMAP](ROADMAP.md) |
 
 The kit a loop assembles from — skills, sub-agents, connectors, persistence, a human gate — is built from the [agentic primitives](#agentic-primitives) above, all provided by the framework as in-run features. The two a loop adds on top are robust **termination** and **verification**. The harness even ships the *mutation primitive* a hill-climbing loop would use — `skill_manage` lets the agent persist reusable skills ([Agent Learning](FEATURES.md#agent-learning-experimental)) — but in-episode and model-driven; the outcome-scored controller that decides *when* to write is the part left above.
 
+Every loop also has a natural place for a **human**, and the same LangChain article treats that as part of the design rather than a fallback: approve sensitive tool calls in the agent loop (here, `AskHumanTool` + `IHumanNotifier`), act as the grader in the verification loop, approve outputs before they reach the end user in the event-driven loop, and review harness changes before they ship in the hill-climbing loop.
+
 ### Termination is the part naive loops get wrong
 
-The signature bug of a hand-rolled loop is that it never stops — the failure the trend nicknamed *loopmaxxing* (assuming more iterations will eventually solve it). A robust loop carries several **independent** exits, and this is where the harness is deliberately strong:
+The signature bug of a hand-rolled loop is that it never stops — the failure the trend nicknamed *loopmaxxing* (assuming more iterations will eventually solve it). A robust loop carries several **independent** exits. Inside one run, this is where the harness is deliberately strong:
 
 - **Budget as control flow** — turns, tokens, cost, and wall-clock are hard limits checked at the top of every turn; exhaustion returns a `PartialResult`, never an exception. A loop without a budget has no stopping condition, only a failure mode.
 - **No-progress detection** — `StuckDetector` and the loop sensors (`MonologueLoopSensor`, `AlternatingToolLoopSensor`, `ToolErrorLoopSensor`) catch the subtle exit: turns being spent without advancing.
-- **Verification** — a `PreReturn` sensor can refuse an answer and hand the model a fresh turn to fix it.
+- **Verification** — a `PreReturn` sensor can refuse an answer and hand the model a fresh turn to fix it; the loop's consecutive-intervention cap bounds how many times.
 
-Deterministic exits beat asking a model "are we done?" — a budget can't be talked out of stopping.
+Those are the inner loop's exits; each outer loop needs its own. The verification loop needs a cap on grader retries. The event-driven loop needs a stop that actually halts the work already running — the stop signal has to reach the inner run as cancellation (here, the `CancellationToken` passed to `RunAsync`), because marking a task stopped in a queue does not stop a worker already executing it — plus a runtime or spend cap per task. The hill-climbing loop needs a gate before a change ships, such as a regression set or human review.
+
+A model can judge whether the work *passes* — that is what an LLM-as-judge grader is — but only a deterministic exit is guaranteed to *stop*: a budget can't be talked out of stopping. Pair every model judge with a hard cap.
 
 ### How it relates to harness and eval engineering
 
@@ -91,12 +99,12 @@ Three disciplines, three tiers, one stack — loop engineering *wraps* the other
 | Discipline | Owns | Period | Here |
 |---|---|---|---|
 | **Harness engineering** | one reliable run — loop, guides, sensors, budget | a single episode | this repo |
-| **Eval engineering** | measuring runs against criteria | offline, per release | above this repo (out of scope) |
+| **Eval engineering** | measuring runs against criteria | offline per release, and online over production traces | above this repo (out of scope) |
 | **Loop engineering** | driving the harness across runs; at the top, improving it | many episodes | composed above |
 
-The division of labour is clean: the harness **runs** an episode, the eval **measures** it, the loop **acts on the measurement**. The verification loop *consumes* eval engineering; the hill-climbing loop consumes both the harness's traces and the eval's verdicts to decide what to change. Only that outermost act — changing the agent based on measured outcomes — is out of scope here, by design.
+The division of labour is clean: the harness **runs** an episode, the eval **measures** it, the loop **acts on the measurement**. The verification loop *reuses* eval engineering's graders and rubrics inline; the hill-climbing loop consumes both the harness's traces and the eval's verdicts to decide what to change. Only that outermost act — changing the agent based on measured outcomes — is out of scope here, by design.
 
-This is why **verifier** is worth splitting across tiers: an **eval** runs offline over a fixed dataset and gates a release; a **runtime guardrail** runs inline during one run and feeds a failure back so the model self-corrects before returning. Same predicate, different time and consequence — offline it yields a score, inline it yields a retry.
+This is why **verifier** is worth splitting across tiers: an **eval** scores runs — offline over a fixed dataset to gate a release, or online over production traces to monitor quality — without changing them; a **runtime guardrail** runs inline during one run and feeds a failure back so the model self-corrects before returning. Same predicate, different consequence — an eval yields a score, a guardrail yields a retry.
 
 > The four-loop framing here follows [LangChain's "The Art of Loop Engineering"](https://www.langchain.com/blog/the-art-of-loop-engineering). The term crystallised around mid-2026, so treat it as the current influential framing rather than a settled standard.
 
