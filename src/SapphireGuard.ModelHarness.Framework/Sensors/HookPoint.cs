@@ -19,7 +19,8 @@ public enum HookPoint
 
     /// <summary>
     /// Before a tool is dispatched. Interventions block the call entirely; a
-    /// <see cref="State.ToolCallStep"/> with <c>IsError = true</c> is recorded so the
+    /// <see cref="State.ToolCallStep"/> with <c>IsError = true</c> (and
+    /// <see cref="State.ToolCallStep.HarnessAuthored"/>) is recorded so the
     /// model sees a clean error and can replan.
     /// </summary>
     PreToolCall,

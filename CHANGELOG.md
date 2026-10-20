@@ -14,6 +14,15 @@ public API even though most consumers only implement a few of them.
 
 ## [Unreleased]
 
+### Added
+
+- **`ToolCallStep.HarnessAuthored`** — an init-only `bool` (default `false`) that is `true` when the harness
+  wrote the step's `Result` itself rather than the tool: a call blocked at `PreToolCall`, or one that hit
+  `Budget.MaxToolCallDuration`. Only `HarnessLoop` sets it (a tool returns a `ToolResult`, never a step), and
+  `TaintTrackingSensor` reads it. The `ToolCallStep` constructor and deconstruction are unchanged, and a
+  checkpoint written before this release loads with `false`, which for taint purposes means "the tool's own
+  output".
+
 ### Fixed
 
 - **Tool calls that follow an `ask_human` call in the same response are no longer silently dropped when the run
@@ -113,6 +122,29 @@ public API even though most consumers only implement a few of them.
   `gen_ai.client.operation.duration` metric was already measured around the tool alone and is unchanged. No
   `ITracer` change: a custom tracer sees `IToolCallScope.Complete` then `Dispose` slightly earlier, before the
   sensors run.
+
+- **`TaintTrackingSensor` ignored error results from untrusted tools, so an attacker-controlled error body
+  bypassed the privileged-action gate.** Both hookpoints skipped any result with `IsError`, yet the error text
+  reaches the model verbatim (`[tool_result … error=True] {Content}`) and `ToolResult.Pins` is committed even on
+  an error. A hostile MCP server, or a fetch tool that reports a non-2xx body as an error, could therefore put
+  instructions into the prompt and still have `send_email` run, contrary to the documented "once a result from
+  an untrusted source enters the trajectory, all privileged actions are blocked". A result now taints the run
+  whenever the call was actually dispatched, whatever `IsError` says, and that includes the message of an
+  exception the tool threw. Only results the harness wrote itself are exempt: a call blocked at `PreToolCall`
+  (the tool never ran) and a tool-call deadline result.
+
+  **Behavioural change** — a run that relied on a failed untrusted call not tainting it will now block
+  privileged actions afterwards. For example, with `WithTaintTracking(["fetch_webpage"], ["send_email"])`:
+
+  ```text
+  // Before — fetch_webpage returns IsError, send_email still runs
+  // After  — fetch_webpage returns IsError, send_email is blocked by 'taint-tracking' for the rest of the run
+  ```
+
+  If a flaky untrusted tool now locks out privileged actions more often than you want, the remedy is the one
+  that already applied to successful calls: do the read and the privileged action in separate runs, or gate
+  the action behind `ask_human`. A custom `ISensor` that reproduces the old `!IsError` filter should test
+  `ToolCallStep.HarnessAuthored` instead.
 
 ## [3.1.0] — 2026-10-11
 
