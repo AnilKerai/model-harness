@@ -24,12 +24,25 @@ public sealed record DashboardEvent(long Seq, string Kind, string TaskId, int? T
 /// the dashboard is the local operator console, OTLP is the durable backend.
 /// <para>Surfaces <em>metadata and short summaries</em> by default — token counts, cost, tool names,
 /// sensor verdicts, budget burn-down — never full prompt bodies or tool-result content, which remain
-/// <see cref="OpenTelemetryTracer"/>'s job. Set <paramref name="enableSensitiveData"/> to also include
-/// each model response's <em>text</em> in its event detail, so a UI can show the run's result (the final
-/// answer is the last model response's text). Off by default so no model output leaves the process; the
-/// dashboard sample turns it on because it is a local operator console.</para>
+/// <see cref="OpenTelemetryTracer"/>'s job. Conversation content is gated behind
+/// <paramref name="enableSensitiveData"/>, matching <see cref="OpenTelemetryTracer"/>. With it off (the
+/// default) no conversation content leaves the process:</para>
+/// <list type="bullet">
+/// <item>the <c>run</c> event's summary is the task id, not the task text;</item>
+/// <item>a <c>sensor</c> intervention carries no <c>reason</c> — a reason can quote the content the sensor
+/// flagged (a PII match, a tool-error body, model text);</item>
+/// <item>a <c>model</c> event carries no response <c>text</c>.</item>
+/// </list>
+/// <para>With it on, the <c>run</c> summary is the first 300 characters of the task text, an intervention's
+/// <c>reason</c> is published, and each <c>model</c> event includes the response <em>text</em> (the final
+/// answer is the last model response's text, which a UI can show as the run's result). A sensor
+/// <em>error</em>'s reason is published either way: it describes the failure, not flagged content, so a
+/// failing sensor stays diagnosable without content capture (ADR-001). Failure messages (guide, compaction,
+/// model call, run) are likewise always published, as they are in <see cref="OpenTelemetryTracer"/>.
+/// Off by default; the dashboard sample turns it on because it is a local operator console.</para>
 /// </summary>
-/// <param name="enableSensitiveData">Include model response text in <c>model</c> event detail. Default <see langword="false"/>.</param>
+/// <param name="enableSensitiveData">Include the task text, intervention reasons and model response text in
+/// event summaries and detail. Default <see langword="false"/>.</param>
 public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITracer
 {
     private const int RingCapacity = 500;
@@ -81,9 +94,10 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
         }
     }
 
-    // Run-level events carry a null turn so the UI renders them outside any per-turn group.
+    // Run-level events carry a null turn so the UI renders them outside any per-turn group. The task text
+    // is conversation content, so without enableSensitiveData the run is labelled by its id alone.
     public void StartTrace(string taskId, string taskText) =>
-        Publish("run", taskId, null, Truncate(taskText, 300));
+        Publish("run", taskId, null, enableSensitiveData ? Truncate(taskText, 300) : taskId);
 
     public IModelCallScope BeginModelCall(string taskId, int turn, IReadOnlyList<Message> prompt, IReadOnlyList<ToolDefinition> tools)
     {
@@ -99,13 +113,17 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
         // Passes would drown the feed — only interventions and errors are worth an operator's eye.
         if (!result.IsIntervene && !result.IsError) return;
         var verdict = result.IsError ? "error" : "intervene";
+        // An intervention's reason can quote the content the sensor flagged (PII, a tool-error body, model
+        // text), so it is gated; an error's reason describes the failure and stays visible (ADR-001).
+        // Keep the reason out of the summary string too, which is never gated.
+        var reason = result.IsError || enableSensitiveData ? result.Reason : null;
         Publish("sensor", taskId, turn, $"{sensorName} @ {hookPoint}: {verdict}",
             new
             {
                 sensor = sensorName,
                 hookPoint = hookPoint.ToString(),
                 verdict,
-                reason = result.Reason,
+                reason,
                 inputTokens = result.Usage?.InputTokens ?? 0,
                 outputTokens = result.Usage?.OutputTokens ?? 0,
                 cost = result.Cost ?? 0m,

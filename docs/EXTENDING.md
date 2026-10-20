@@ -439,7 +439,10 @@ keeps a bounded ring buffer so a browser connecting mid-run replays the history,
 `Subscribe(ct)` for a host endpoint (e.g. Server-Sent Events) to stream. Run/turn aggregation is
 left to the consumer, so the tracer stays transport-neutral. Pass
 `new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to also
-include each model response's text — the run's result — off by default like `WithOtelTracer`'s flag.
+include conversation content — each model response's text (the run's result), the task text (otherwise a run
+is labelled by its id, which is all the dashboard's keyword filter can match) and sensor intervention reasons
+(which can quote the content they flagged; a sensor *error*'s reason is always shown) — off by default like
+`WithOtelTracer`'s flag.
 It composes with `WithOtelTracer()` (both run through `CompositeTracer`): local console *and* durable
 OTLP backend at once. To host the browser UI, add the `SapphireGuard.ModelHarness.Dashboard` package
 and call `app.MapHarnessDashboard(prefix = "/dashboard", onRun?)` — it serves the embedded page, assets,

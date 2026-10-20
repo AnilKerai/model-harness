@@ -65,6 +65,14 @@ public API even though most consumers only implement a few of them.
   `json.Contains("\"StopReason\": 5")`) must match the compact form (`"StopReason":5`) or, better, deserialise it.
   `CheckpointSerializer.Deserialize` reads both forms, so existing checkpoint files still load.
 
+- **What the live dashboard feed sends by default changes at runtime.** With `enableSensitiveData: false` (the
+  default): the `run` event's summary is the task id instead of the task text, so the dashboard's run list
+  shows task ids and its keyword filter matches ids only; and a `sensor` event's `detail.reason` is `null` for
+  an intervention (the sensor name, hook point and verdict are still sent). **Migration:** if you read those
+  fields from `LiveDashboardTracer.Subscribe` or the `{prefix}/feed` SSE endpoint, build the tracer with
+  `new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to restore them —
+  only on a feed that is safe to show conversation content. `samples/LiveDashboard` already does.
+
 ### Fixed
 
 - **Tool calls that follow an `ask_human` call in the same response are no longer silently dropped when the run
@@ -290,6 +298,14 @@ public API even though most consumers only implement a few of them.
   id written under a non-Gregorian-calendar culture holds that calendar's digits, which cannot be told apart
   from a Gregorian date, so it still parses to the wrong instant (or is skipped when the digits are not a
   valid date).
+
+- **`LiveDashboardTracer` no longer publishes conversation content unless `enableSensitiveData` is on.** Its
+  documentation promised this, but with the default `false` it still pushed two kinds of content over the
+  dashboard's SSE feed to every viewer: the first 300 characters of the task text (the `run` event's summary)
+  and every sensor intervention's `reason`. A reason can quote what the sensor flagged — `PiiRedactionSensor`
+  names the matched PII, `ToolResultSanityCheckSensor` copies the whole tool-error body, `CriticSensor` quotes
+  model text. Both are now gated, matching `OpenTelemetryTracer`. A sensor *error*'s reason stays ungated, as
+  in `OpenTelemetryTracer` (ADR-001), so a failing sensor is still diagnosable.
 
 ### Docs
 
