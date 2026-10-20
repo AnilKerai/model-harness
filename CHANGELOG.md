@@ -12,6 +12,27 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Fixed
+
+- **`FileSkillStore` lost version history when a skill was overwritten twice in the same second, and its
+  archive ids followed the process culture.** The archive id was a second-resolution timestamp, so two
+  overwrites in one second (a model can issue two `skill_manage` saves in one response) wrote the same
+  `.history/{name}/{id}.md` and the later replaced the earlier archived version. The id was also rendered
+  and parsed with the current culture: under a non-Gregorian-calendar locale (th-TH renders 2026 as 2569,
+  ar-SA as 1448) ids sorted out of order against ids written under another culture, a Gregorian id read
+  back under th-TH parsed as year 1483, and under ar-SA a Gregorian id failed to parse and the version
+  vanished from `ListVersionsAsync`. Archive ids are now UTC, invariant-culture and
+  millisecond-resolution (`yyyyMMddTHHmmssfffZ`); the id is claimed with `FileMode.CreateNew` and moves
+  forward one millisecond on a collision, so every overwrite keeps its own version; and
+  `ListVersionsAsync` orders by the parsed instant rather than the filename. **Re-check:** `SkillVersion.Id`
+  now has milliseconds; code that builds or pattern-matches ids by hand should read them from
+  `ListVersionsAsync`. Existing history keeps working — second-resolution ids still list and load. A legacy
+  id written under a non-Gregorian-calendar culture holds that calendar's digits, which cannot be told apart
+  from a Gregorian date, so it still parses to the wrong instant (or is skipped when the digits are not a
+  valid date).
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI

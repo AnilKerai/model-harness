@@ -1,3 +1,4 @@
+using System.Globalization;
 using SapphireGuard.ModelHarness.Framework.Skills;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Skills;
@@ -6,9 +7,18 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Skills;
 /// Persists skills as <c>SKILL.md</c> files under a directory, one file per skill
 /// keyed by a sanitised name. Parsing and serialisation are delegated to
 /// <see cref="SkillDocumentParser"/>; this class is responsible only for file I/O.
+/// Each overwrite archives the previous file as <c>.history/{name}/{id}.md</c>, where the id is a
+/// UTC millisecond timestamp (<see cref="ArchiveIdFormat"/>, invariant culture) — see
+/// <see cref="ArchiveAsync"/> for how same-millisecond saves stay distinct.
 /// </summary>
 public sealed class FileSkillStore : ISkillStore
 {
+    // Archive ids: millisecond resolution, so two overwrites a few milliseconds apart (a model can
+    // issue two skill_manage saves in one response) don't share an id. The legacy format is
+    // second-resolution and is parse-only, so history written before the change still lists.
+    private const string ArchiveIdFormat = "yyyyMMddTHHmmssfffZ";
+    private const string LegacyArchiveIdFormat = "yyyyMMddTHHmmssZ";
+
     private readonly string _dir;
     private readonly TimeProvider _time;
 
@@ -68,14 +78,21 @@ public sealed class FileSkillStore : ISkillStore
             return Task.FromResult<IReadOnlyList<SkillVersion>>([]);
 
         var versions = new List<SkillVersion>();
-        foreach (var file in Directory.EnumerateFiles(historyDir, "*.md").Order().Reverse())
+        foreach (var file in Directory.EnumerateFiles(historyDir, "*.md"))
         {
             ct.ThrowIfCancellationRequested();
             var id = Path.GetFileNameWithoutExtension(file);
             if (TryParseTimestamp(id, out var archivedAt))
                 versions.Add(new SkillVersion(id, archivedAt, SkillDocumentParser.Parse(File.ReadAllText(file))));
         }
-        return Task.FromResult<IReadOnlyList<SkillVersion>>(versions);
+
+        // Newest first by the parsed instant, not the filename: legacy (second-resolution) and
+        // current (millisecond) ids differ in length, so a filename sort misorders a mixed history.
+        // The id breaks a tie so the order is deterministic.
+        IReadOnlyList<SkillVersion> ordered = [.. versions
+            .OrderByDescending(v => v.ArchivedAt)
+            .ThenByDescending(v => v.Id, StringComparer.Ordinal)];
+        return Task.FromResult(ordered);
     }
 
     public async Task<Skill?> GetVersionAsync(string name, string versionId, CancellationToken ct)
@@ -88,13 +105,39 @@ public sealed class FileSkillStore : ISkillStore
         return SkillDocumentParser.Parse(text);
     }
 
+    /// <summary>
+    /// Copies the current file into the skill's history under a timestamp id. The id is claimed
+    /// atomically with <see cref="FileMode.CreateNew"/>: if the file already exists (two saves in
+    /// the same millisecond, a clock that doesn't advance, or another agent sharing this store) the
+    /// id moves forward one millisecond and tries again, so every overwrite keeps its own version
+    /// and ids stay chronologically sortable.
+    /// </summary>
     private async Task ArchiveAsync(string name, string currentPath, CancellationToken ct)
     {
         var historyDir = HistoryDir(name);
         Directory.CreateDirectory(historyDir);
-        var id = _time.GetUtcNow().ToString("yyyyMMddTHHmmssZ");
-        await File.WriteAllTextAsync(Path.Combine(historyDir, id + ".md"),
-            await File.ReadAllTextAsync(currentPath, ct), ct);
+        var content = await File.ReadAllBytesAsync(currentPath, ct);
+
+        var archivedAt = _time.GetUtcNow();
+        while (true)
+        {
+            var path = Path.Combine(historyDir, FormatArchiveId(archivedAt) + ".md");
+            FileStream stream;
+            try
+            {
+                stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read,
+                    bufferSize: 4096, useAsync: true);
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                archivedAt = archivedAt.AddMilliseconds(1);
+                continue;
+            }
+
+            await using (stream)
+                await stream.WriteAsync(content, ct);
+            return;
+        }
     }
 
     private string HistoryDir(string name) =>
@@ -110,9 +153,18 @@ public sealed class FileSkillStore : ISkillStore
         return safe;
     }
 
+    // Invariant culture, not the ambient one: under a non-Gregorian calendar locale (th-TH renders
+    // 2026 as 2569, ar-SA as 1448) the id's digits differ, which broke sorting and, for ar-SA, parsing.
+    // Same fix FileCheckpointStore made for its filename prefix.
+    private static string FormatArchiveId(DateTimeOffset archivedAt) =>
+        archivedAt.ToString(ArchiveIdFormat, CultureInfo.InvariantCulture);
+
+    // Legacy ids written under a non-Gregorian-calendar culture hold that calendar's digits (e.g. a
+    // th-TH id for 2026 reads 2569…). Nothing in the id says which calendar wrote it, so such ids
+    // parse to the wrong instant — or, when the digits are not a valid Gregorian date, are skipped.
     private static bool TryParseTimestamp(string id, out DateTimeOffset result) =>
-        DateTimeOffset.TryParseExact(id, "yyyyMMddTHHmmssZ",
-            null, System.Globalization.DateTimeStyles.AssumeUniversal, out result);
+        DateTimeOffset.TryParseExact(id, [ArchiveIdFormat, LegacyArchiveIdFormat],
+            CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out result);
 
     private static string Expand(string dir) =>
         dir.StartsWith('~')

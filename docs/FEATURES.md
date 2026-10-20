@@ -75,7 +75,8 @@ How it works, in one turn:
 
 Each skill is persisted as a `SKILL.md` file (YAML frontmatter + markdown body),
 so they survive between runs. Every time the model overwrites a skill, `FileSkillStore`
-archives the previous version to `.history/{name}/{timestamp}.md` before writing the new
+archives the previous version to `.history/{name}/{timestamp}.md` (a UTC millisecond timestamp; two saves
+in the same instant still get distinct ids) before writing the new
 one — giving operators a full point-in-time record they can inspect or restore via
 `ISkillStore.ListVersionsAsync` and `GetVersionAsync`. The model always sees only the
 current version; history is an operator safety net, not a model-visible capability.
