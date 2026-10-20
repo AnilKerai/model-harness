@@ -12,6 +12,17 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Fixed
+
+- **`ClaudeClientOptions.ModelId` defaulted to a non-existent model (`claude-sonnet-4-5-20251001`), so every
+  call failed with 404 unless `ModelId` was set.** The id was Haiku 4.5's date suffix on the Sonnet 4.5 name;
+  the Anthropic API answers it with `AnthropicNotFoundException`, and a `HarnessLoop` run ended `Failed` on its
+  first model call. **This changes the default value:** it is now `claude-sonnet-4-5-20250929`, a dated
+  Sonnet 4.5 snapshot (stable, unlike the `claude-sonnet-4-5` alias), priced as Sonnet 4.5 by `ClaudePricing`.
+  A host that sets `ModelId` is unaffected; one that relied on the default now gets a model that exists.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI
