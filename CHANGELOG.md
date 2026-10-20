@@ -24,12 +24,23 @@ public API even though most consumers only implement a few of them.
   and a checkpoint written before this release loads with `false`, which for taint purposes means "the tool's
   own output".
 
-- **`LiveDashboardTracer.Subscribe(CancellationToken, long afterSeq)`** — resumes a dropped connection:
-  backlog events with `Seq <= afterSeq` are skipped, so a reconnecting client is not sent events it has
-  already processed. An `afterSeq` beyond the newest seq (the process restarted and seq began again)
-  replays the whole backlog. `Subscribe(CancellationToken)` is unchanged and still replays everything.
+- **`LiveDashboardTracer.Subscribe(string? lastEventId, CancellationToken)`, `Epoch` and `EventId(DashboardEvent)`** —
+  resume a dropped connection without re-sending events the client has already processed. `Epoch` is a GUID fixed
+  per tracer instance, and `EventId` returns `{Epoch}-{Seq}`, the token to write as the SSE `id:`. `Subscribe`
+  takes the raw `Last-Event-ID` and skips backlog events up to that id only when its epoch is the tracer's own;
+  an id from another epoch (the process restarted, or a different instance served the earlier connection), a
+  missing id or an unparseable one replays the whole backlog. `Seq` restarts at 1 with every process, so a bare
+  seq cannot tell "resume after N" from "a restarted process that has already reached N" and would silently
+  skip the new process's first N events. `Subscribe(CancellationToken)` is unchanged and still replays everything.
+  `Subscribe(long afterSeq, CancellationToken)` resumes from a bare seq for in-process callers; it cannot detect a
+  restart, and treats an `afterSeq` beyond the newest seq as one only as a heuristic.
 
 ### Changed
+
+- **Dashboard SSE event ids are now `{epoch}-{seq}`** (for example `3f2a…c9-12`) rather than the bare seq, so
+  `/feed` can tell a reconnect to the same process from one to a restarted process. `DashboardEvent`'s JSON is
+  unchanged. A browser tab left open across the upgrade still holds a numeric id, so it gets a full replay on
+  its next reconnect and, because the page does not dedupe, counts that run's events once more.
 
 - **Checkpoints no longer persist `ModelCallStep.Prompt`, so their size grows with the trajectory instead of with
   every turn's whole context window.** Each `ModelCallStep` stores the full rendered prompt of its call — up to

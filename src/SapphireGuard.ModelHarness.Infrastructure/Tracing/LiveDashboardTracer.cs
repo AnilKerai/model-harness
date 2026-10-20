@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using SapphireGuard.ModelHarness.Framework.Sensors;
@@ -53,23 +54,54 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
     private long _seq;
 
     /// <summary>
+    /// Identifies this tracer instance (a new GUID per instance, so per process start, and distinct across
+    /// load-balanced instances). <see cref="DashboardEvent.Seq"/> only means something within one epoch: it
+    /// restarts at 1 with every new tracer, so a resume token must carry the epoch it was issued under —
+    /// see <see cref="EventId"/>.
+    /// </summary>
+    public string Epoch { get; } = Guid.NewGuid().ToString("n");
+
+    /// <summary>
+    /// The resume token for <paramref name="e"/>, <c>{Epoch}-{Seq}</c>: write it as the SSE <c>id:</c> field
+    /// and hand the <c>Last-Event-ID</c> a reconnecting client sends back to
+    /// <see cref="Subscribe(string?, CancellationToken)"/>.
+    /// </summary>
+    public string EventId(DashboardEvent e) => $"{Epoch}-{e.Seq}";
+
+    /// <summary>
     /// Streams every event to one subscriber: first the ring-buffer backlog (so a late-joining browser
     /// catches up), then every subsequent event live until <paramref name="ct"/> cancels. A slow
     /// reader never blocks the harness — its channel drops the oldest queued event instead.
     /// </summary>
-    public IAsyncEnumerable<DashboardEvent> Subscribe(CancellationToken ct) => Subscribe(ct, 0);
+    public IAsyncEnumerable<DashboardEvent> Subscribe(CancellationToken ct) => Subscribe(0, ct);
 
     /// <summary>
-    /// Like <see cref="Subscribe(CancellationToken)"/>, but resumes a dropped connection: backlog events
-    /// with <see cref="DashboardEvent.Seq"/> at or below <paramref name="afterSeq"/> (the last id the client
-    /// processed — an SSE <c>Last-Event-ID</c>) are skipped so it does not see them twice. Live events are
-    /// never filtered. An <paramref name="afterSeq"/> beyond the newest seq means this process restarted and
-    /// seq began again, so the whole backlog is new to the client and is replayed.
+    /// Like <see cref="Subscribe(CancellationToken)"/>, but resumes a dropped connection from the resume
+    /// token (<see cref="EventId"/>) the client last received, i.e. the SSE <c>Last-Event-ID</c> header.
+    /// Backlog events up to and including that one are skipped so the client does not see them twice. The
+    /// resume only applies when the token's epoch is this tracer's <see cref="Epoch"/>; a token from another
+    /// epoch (the process restarted, or a different instance served the earlier connection), a missing or
+    /// empty one, or one that cannot be parsed, replays the whole backlog. Live events are never filtered.
     /// </summary>
+    /// <param name="lastEventId">The raw <c>Last-Event-ID</c> value, or <see langword="null"/> if the client sent none.</param>
     /// <param name="ct">Cancels the stream.</param>
+    public IAsyncEnumerable<DashboardEvent> Subscribe(string? lastEventId, CancellationToken ct) =>
+        Subscribe(ResumeSeq(lastEventId), ct);
+
+    /// <summary>
+    /// Like <see cref="Subscribe(CancellationToken)"/>, but resumes after a seq: backlog events with
+    /// <see cref="DashboardEvent.Seq"/> at or below <paramref name="afterSeq"/> are skipped, and live events
+    /// are never filtered. A bare seq carries no epoch, so this overload <b>cannot detect a restart</b>: seq
+    /// began again at 1, and the process may already have published as many events as the old one, so a
+    /// stale <paramref name="afterSeq"/> silently skips new events. As a heuristic only, an
+    /// <paramref name="afterSeq"/> beyond the newest seq is taken to mean the process restarted and the whole
+    /// backlog is replayed. Prefer <see cref="Subscribe(string?, CancellationToken)"/> for a reconnecting
+    /// client; use this when the caller holds the seq from the same tracer instance (in-process).
+    /// </summary>
     /// <param name="afterSeq">Seq of the last event the client already has; <c>0</c> replays the whole backlog.</param>
+    /// <param name="ct">Cancels the stream.</param>
     public async IAsyncEnumerable<DashboardEvent> Subscribe(
-        [EnumeratorCancellation] CancellationToken ct, long afterSeq)
+        long afterSeq, [EnumeratorCancellation] CancellationToken ct)
     {
         var channel = Channel.CreateBounded<DashboardEvent>(
             new BoundedChannelOptions(RingCapacity) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -94,10 +126,23 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
         }
     }
 
+    // A resume token is "{epoch}-{seq}" (EventId). Only a token issued by this instance (epoch matches, seq a
+    // plain non-negative number) resumes; anything else — another epoch, no/empty id, garbage, a legacy
+    // seq-only id — is 0, i.e. replay the whole backlog. The epoch is a GUID in "n" format, so it has no '-'.
+    private long ResumeSeq(string? lastEventId)
+    {
+        var dash = lastEventId?.IndexOf('-') ?? -1;
+        return dash > 0
+            && lastEventId.AsSpan(0, dash).Equals(Epoch, StringComparison.Ordinal)
+            && long.TryParse(lastEventId.AsSpan(dash + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var seq)
+                ? seq
+                : 0;
+    }
+
     // ponytail: single lock guards the ring + subscriber list; a publish is a few non-blocking
     // TryWrites (DropOldest never blocks), so it can't stall the loop thread that called it.
     // Seq is assigned inside the lock so ring/delivery order is seq order — Subscribe's afterSeq
-    // resume and its "afterSeq beyond newest" restart check both rely on that.
+    // resume (and its "afterSeq beyond newest" heuristic) relies on that.
     private void Publish(string kind, string taskId, int? turn, string summary, object? detail = null)
     {
         lock (_gate)
