@@ -19,10 +19,10 @@ public API even though most consumers only implement a few of them.
 - **`ToolCallStep.HarnessAuthored`** — an init-only `bool` (default `false`) that is `true` when the harness
   wrote the step's `Result` itself rather than the tool: a call blocked at `PreToolCall`, one that hit
   `Budget.MaxToolCallDuration`, a call to a tool that was not offered on that turn, or a call not run
-  because the run suspended for human input. Only `HarnessLoop` sets it (a tool returns a `ToolResult`, never a step), and
-  `TaintTrackingSensor` reads it. The `ToolCallStep` constructor and deconstruction are unchanged, and a
-  checkpoint written before this release loads with `false`, which for taint purposes means "the tool's own
-  output".
+  because the run suspended for human input. Only `HarnessLoop` sets it (a tool returns a `ToolResult`, never a
+  step), and `TaintTrackingSensor` reads it. The `ToolCallStep` constructor and deconstruction are unchanged,
+  and a checkpoint written before this release loads with `false`, which for taint purposes means "the tool's
+  own output".
 
 ### Fixed
 

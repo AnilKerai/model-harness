@@ -210,7 +210,8 @@ public sealed class HarnessLoop(
             return null;
 
         var pending = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content);
-        // HarnessAuthored for the same reason: a skipped untrusted tool put nothing into the trajectory.
+        // HarnessAuthored: the harness wrote this result and nothing was dispatched, so a skipped untrusted
+        // tool must not taint the run.
         foreach (var call in notRun)
             state = state.AppendStep(new ToolCallStep(
                 Id: Guid.NewGuid(),
