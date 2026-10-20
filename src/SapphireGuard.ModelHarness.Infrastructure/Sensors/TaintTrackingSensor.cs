@@ -9,6 +9,11 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Sensors;
 /// enters the trajectory, subsequent calls to privileged actions are blocked until the
 /// agent run completes.
 ///
+/// A result taints the run whether or not it is an error: error text and the message of an
+/// exception the tool threw reach the model verbatim, so they are tool output like any other.
+/// Only results the harness wrote itself (<see cref="ToolCallStep.HarnessAuthored"/> — a call
+/// blocked before dispatch, or one cut off by the tool-call deadline) are exempt.
+///
 /// PostToolCall: advisory — warns the model that untrusted content has entered context.
 /// PreToolCall: blocking — prevents privileged actions while any tainted step is in the trajectory.
 ///
@@ -50,7 +55,7 @@ public sealed class TaintTrackingSensor(ITrustPolicy policy) : ISensor
 
             var taintedSource = state.Trajectory
                 .OfType<ToolCallStep>()
-                .Where(s => !s.Result.IsError)
+                .Where(s => !s.HarnessAuthored)
                 .Select(s => s.Call.ToolName)
                 .FirstOrDefault(policy.IsUntrustedSource);
 
@@ -80,10 +85,10 @@ public sealed class TaintTrackingSensor(ITrustPolicy policy) : ISensor
 
     private Task<SensorResult> CheckPostToolCallAsync(Step? triggeringStep)
     {
-        if (triggeringStep is not ToolCallStep { Call: var call, Result: var result })
+        if (triggeringStep is not ToolCallStep { Call: var call, HarnessAuthored: false })
             return Task.FromResult(SensorResult.Pass);
 
-        if (result.IsError || !policy.IsUntrustedSource(call.ToolName))
+        if (!policy.IsUntrustedSource(call.ToolName))
             return Task.FromResult(SensorResult.Pass);
 
         return Task.FromResult(SensorResult.Intervene(

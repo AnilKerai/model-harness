@@ -56,6 +56,41 @@ public sealed class StepJsonConverterTests
         Assert.Equal(step.Result.Content, result.Result.Content);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToolCallStep_HarnessAuthored_round_trips(bool harnessAuthored)
+    {
+        // A resumed run must keep telling a harness-written result from the tool's own, or taint
+        // tracking would change its mind about the trajectory across a checkpoint.
+        var step = new ToolCallStep(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            new ToolCall("call-1", "fetch_webpage", JsonDocument.Parse("{}").RootElement),
+            new ToolResult("call-1", "Blocked by sensor 'x': nope", IsError: true))
+        { HarnessAuthored = harnessAuthored };
+
+        var result = Assert.IsType<ToolCallStep>(RoundTrip(step));
+        Assert.Equal(harnessAuthored, result.HarnessAuthored);
+    }
+
+    [Fact]
+    public void ToolCallStep_without_HarnessAuthored_in_older_checkpoint_loads_as_tool_authored()
+    {
+        // Checkpoints written before the property existed must still load; the safe reading of
+        // "unknown" is the tool's own output, which taints.
+        var json = """
+            {"$type":"ToolCallStep","Id":"3f2b8c1e-5d4a-4e7b-9a1c-0d2e6f8a1b3c","Timestamp":"2026-01-02T03:04:05+00:00",
+             "Call":{"CallId":"call-1","ToolName":"fetch_webpage","Arguments":{}},
+             "Result":{"CallId":"call-1","Content":"boom","IsError":true,"IsPending":false,"Cost":null,"Usage":null,"Pins":null}}
+            """;
+
+        var result = Assert.IsType<ToolCallStep>(JsonSerializer.Deserialize<Step>(json, Options));
+
+        Assert.False(result.HarnessAuthored);
+        Assert.True(result.Result.IsError);
+    }
+
     [Fact]
     public void SensorInterventionStep_round_trips()
     {

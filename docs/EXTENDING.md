@@ -294,6 +294,8 @@ builder.WithTaintTracking(
 
 `privilegedActions` — tools that have real-world side effects and must not run while tainted content is in the trajectory. If a tool can send data somewhere, modify state outside the agent, or execute arbitrary logic, it belongs here.
 
+**What counts as an untrusted result.** Every result from an untrusted source that was actually dispatched taints the run — **including an error**. The `IsError` text a tool returns, and the message of an exception it throws (`Tool threw HttpRequestException: …`), reach the model verbatim, so they are tool output for taint purposes: an MCP adapter that passes a server's `isError` text through, or a fetch tool that returns a non-2xx body as an error, is as hostile as one that returns the same text as a success. Only results the harness wrote itself are exempt, and they are marked `ToolCallStep.HarnessAuthored`: a call a sensor blocked at `PreToolCall` (the tool never ran) and a `Budget.MaxToolCallDuration` deadline result (the tool never answered).
+
 > ⚠️ **This sensor fails closed.**
 >
 > Once a result from an untrusted source enters the trajectory, **all** privileged actions are blocked for the remainder of that agent run — regardless of how many turns have passed or how unrelated the subsequent reasoning appears to be. The sensor has no way to determine whether the model's reasoning has been influenced by the tainted content, so it assumes the worst.

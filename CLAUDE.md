@@ -81,7 +81,7 @@ Sensors may block actions but must never take turns away from the model — the 
 - **PreModelCall**: **annotates** — injects the note into the trajectory then proceeds with the model call on the same turn; use for conditional pre-reasoning guidance (e.g. goal-drift warnings, error-streak alerts)
 - **PostModelCall**: **rejects** — response is suppressed from trajectory so the model cannot re-see flagged content (e.g. PII); model gets a fresh turn to produce a clean response
 - **PreReturn**: **challenges** — answer is not accepted; model gets a fresh turn with its prior answer visible so it can self-correct
-- **PreToolCall**: **blocks** — tool is never dispatched; a `ToolCallStep` with `IsError = true` is recorded so the model sees a clean error and can replan
+- **PreToolCall**: **blocks** — tool is never dispatched; a `ToolCallStep` with `IsError = true` and `HarnessAuthored = true` is recorded so the model sees a clean error and can replan. `HarnessAuthored` marks a result the harness wrote itself (this block, or a `Budget.MaxToolCallDuration` deadline) as opposed to the tool's own output, error text and thrown-exception messages included; `TaintTrackingSensor` taints on every dispatched untrusted-source result whatever `IsError` says and exempts only `HarnessAuthored` ones
 - **PostToolCall**: **flags** — advisory only; the tool has already run and its result is in the trajectory; intervention annotates it but cannot prevent the model from reasoning on it
 
 ### Structured output

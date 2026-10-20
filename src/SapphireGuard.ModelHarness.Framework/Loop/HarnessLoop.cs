@@ -352,7 +352,8 @@ public sealed class HarnessLoop(
                 Call: call,
                 Result: new ToolResult(call.CallId,
                     $"Blocked by sensor '{lastIntervention.SensorName}': {lastIntervention.Reason}",
-                    IsError: true)));
+                    IsError: true))
+            { HarnessAuthored = true });
         }
 
         var ctx = new ToolContext(state.TaskId, call.CallId, state.Metadata);
@@ -364,6 +365,7 @@ public sealed class HarnessLoop(
             : CancellationTokenSource.CreateLinkedTokenSource(ct, deadlineCts.Token);
 
         ToolResult result;
+        var harnessAuthored = false;
         try
         {
             result = await toolRegistry.DispatchAsync(call, ctx, linkedCts?.Token ?? ct);
@@ -373,9 +375,12 @@ public sealed class HarnessLoop(
             result = new ToolResult(call.CallId,
                 $"Tool '{call.ToolName}' exceeded the {deadline!.Value.TotalSeconds:0}s tool-call deadline.",
                 IsError: true);
+            harnessAuthored = true;
         }
         catch (Exception ex)
         {
+            // Not harness-authored: the exception message is tool output (an HttpRequestException can
+            // carry a response body), so a taint sensor must still count it.
             result = new ToolResult(call.CallId, $"Tool threw {ex.GetType().Name}: {ex.Message}", IsError: true);
         }
         scope.Complete(result);
@@ -384,7 +389,8 @@ public sealed class HarnessLoop(
             Id: Guid.NewGuid(),
             Timestamp: _time.GetUtcNow(),
             Call: call,
-            Result: result);
+            Result: result)
+        { HarnessAuthored = harnessAuthored };
 
         var afterExec = afterPre.AppendStep(executed);
         if (result.Pins is { Count: > 0 } pins)
