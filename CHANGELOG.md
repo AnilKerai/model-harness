@@ -12,6 +12,35 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Fixed
+
+- **`TurnScopedBudgetEnforcer` charged every chat turn for the whole conversation's AI-sensor and compaction
+  spend.** It reset model-call and delegated tool spend at each `UserMessageStep`, then added
+  `AgentState.SensorCost` / `CompactionCost` and the matching token totals — which are cumulative for the whole
+  run. The old code comment treated that as ~0 because chat wires no AI sensors and defaults to the free view
+  compaction, but `WithAiCompaction(...)` and `WithCriticSensor(...)` are supported with `AddChatHarness`. Once
+  that cumulative spend alone crossed the per-turn `MaxCost` or `MaxTotalTokens`, every later turn was
+  exhausted at its first check and got only a tool-less finalisation call: a permanent, silent degradation of
+  the conversation. Each user turn is now charged only the sensor and compaction spend incurred since its own
+  `UserMessageStep`.
+
+  **Behavioural change:** a chat harness with AI compaction or an AI sensor no longer runs out of per-turn
+  budget because of earlier turns. Spend within the current turn still counts, so a turn that really does spend
+  `MaxCost` on compaction or critic calls is still stopped. No code change is needed. If you raised
+  `MaxCost` / `MaxTotalTokens` to work around this, you can lower them again.
+
+  **Record shape change:** `UserMessageStep` gains four init-only properties — `SensorUsageBaseline`,
+  `SensorCostBaseline`, `CompactionUsageBaseline` and `CompactionCostBaseline` — the run's cumulative sensor and
+  compaction spend when the message was appended. `AgentState.WithUserMessage` fills them in. The positional
+  constructor and `Deconstruct` are unchanged, and `NewTask`'s opening message keeps zero baselines (correct:
+  nothing was spent before it). Checkpoints are additive: `StepJsonConverter` writes the new fields, and a
+  checkpoint written before this release loads with zeros, which charges that conversation's whole-run
+  sensor/compaction total until its next `WithUserMessage` — today's behaviour, no worse. A `UserMessageStep`
+  you build by hand and `AppendStep` directly has zero baselines too; use `WithUserMessage` for a chat turn. A
+  custom `IBudgetEnforcer` is unaffected.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI

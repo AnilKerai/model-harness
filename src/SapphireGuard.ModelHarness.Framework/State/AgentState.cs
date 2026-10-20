@@ -156,7 +156,13 @@ public sealed record AgentState
     /// </summary>
     public AgentState WithUserMessage(string content, DateTimeOffset timestamp) =>
         (this with { Status = AgentStatus.Running })
-            .AppendStep(new UserMessageStep(Guid.NewGuid(), timestamp, content));
+            .AppendStep(new UserMessageStep(Guid.NewGuid(), timestamp, content)
+            {
+                SensorUsageBaseline = SensorUsage,
+                SensorCostBaseline = SensorCost,
+                CompactionUsageBaseline = CompactionUsage,
+                CompactionCostBaseline = CompactionCost
+            });
 
     /// <summary>
     /// Returns a new <see cref="AgentStatus.Running"/> state with the pending <c>ask_human</c>

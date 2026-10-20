@@ -1,12 +1,12 @@
-using System.Linq;
 using SapphireGuard.ModelHarness.Framework.State;
 
 namespace SapphireGuard.ModelHarness.Framework.Budget;
 
 /// <summary>
 /// Per-turn budget enforcement for conversational agents. Counts model-call turns, cost, and
-/// tokens incurred since the most recent <see cref="UserMessageStep"/>, so every user turn starts
-/// with a fresh allowance. <see cref="DefaultBudgetEnforcer"/> sums the whole trajectory, which
+/// tokens incurred since the most recent <see cref="UserMessageStep"/> — model calls, delegated tool
+/// spend, and AI-sensor and compaction spend (measured against the baselines that step carries) — so
+/// every user turn starts with a fresh allowance. <see cref="DefaultBudgetEnforcer"/> sums the whole trajectory, which
 /// exhausts a multi-turn chat after MaxTurns total model calls; this resets that window at each
 /// user turn. Live context-window size stays bounded separately by the trajectory guide.
 /// </summary>
@@ -21,11 +21,13 @@ public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) 
         var turns = 0;
         var totalCost = 0m;
         var totalTokens = 0;
+        UserMessageStep? turnStart = null;
         foreach (var step in state.Trajectory)
         {
             switch (step)
             {
-                case UserMessageStep:
+                case UserMessageStep user:
+                    turnStart = user;
                     turns = 0;
                     totalCost = 0m;
                     totalTokens = 0;
@@ -44,11 +46,12 @@ public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) 
             }
         }
 
-        // ponytail: sensor + compaction spend is whole-run cumulative on AgentState, not per-turn —
-        // chat mode wires no AI sensors and defaults to the no-cost view compaction, so this is ~0.
-        // Per-turn accounting would need per-step usage.
-        totalCost += state.SensorCost + state.CompactionCost;
-        totalTokens += state.SensorUsage.TotalTokens + state.CompactionUsage.TotalTokens;
+        // Sensor + compaction spend is cumulative on AgentState, so charge only what accrued since
+        // the latest user message's baseline (zero for the opening message and for legacy checkpoints).
+        totalCost += state.SensorCost + state.CompactionCost
+            - (turnStart?.SensorCostBaseline ?? 0m) - (turnStart?.CompactionCostBaseline ?? 0m);
+        totalTokens += state.SensorUsage.TotalTokens + state.CompactionUsage.TotalTokens
+            - (turnStart?.SensorUsageBaseline.TotalTokens ?? 0) - (turnStart?.CompactionUsageBaseline.TotalTokens ?? 0);
 
         if (turns >= budget.MaxTurns)
             return BudgetCheckResult.Exhausted($"Reached MaxTurns ({budget.MaxTurns}) this turn.");
@@ -60,8 +63,8 @@ public sealed class TurnScopedBudgetEnforcer(TimeProvider? timeProvider = null) 
         // Per-turn wall-clock: measured from the latest user message, so each turn gets a fresh
         // allowance — consistent with the turn/cost/token reset above and resume-safe (both are
         // derived from the trajectory, not a per-invocation capture).
-        var turnStart = state.Trajectory.OfType<UserMessageStep>().LastOrDefault()?.Timestamp ?? _time.GetUtcNow();
-        var elapsed = _time.GetUtcNow() - turnStart + lookahead;
+        var anchor = turnStart?.Timestamp ?? _time.GetUtcNow();
+        var elapsed = _time.GetUtcNow() - anchor + lookahead;
         if (elapsed >= budget.MaxWallClock)
             return BudgetCheckResult.Exhausted($"Reached MaxWallClock ({budget.MaxWallClock}).");
 
