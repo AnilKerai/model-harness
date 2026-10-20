@@ -12,7 +12,8 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Sensors;
 /// A result taints the run whether or not it is an error: error text and the message of an
 /// exception the tool threw reach the model verbatim, so they are tool output like any other.
 /// Only results the harness wrote itself (<see cref="ToolCallStep.HarnessAuthored"/> — a call
-/// blocked before dispatch, or one cut off by the tool-call deadline) are exempt.
+/// blocked before dispatch, one cut off by the tool-call deadline, a call to a tool that was not
+/// offered on that turn, or a call not run because the run suspended for human input) are exempt.
 ///
 /// PostToolCall: advisory — warns the model that untrusted content has entered context.
 /// PreToolCall: blocking — prevents privileged actions while any tainted step is in the trajectory.

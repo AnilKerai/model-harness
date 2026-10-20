@@ -17,8 +17,9 @@ public API even though most consumers only implement a few of them.
 ### Added
 
 - **`ToolCallStep.HarnessAuthored`** — an init-only `bool` (default `false`) that is `true` when the harness
-  wrote the step's `Result` itself rather than the tool: a call blocked at `PreToolCall`, or one that hit
-  `Budget.MaxToolCallDuration`. Only `HarnessLoop` sets it (a tool returns a `ToolResult`, never a step), and
+  wrote the step's `Result` itself rather than the tool: a call blocked at `PreToolCall`, one that hit
+  `Budget.MaxToolCallDuration`, a call to a tool that was not offered on that turn, or a call not run
+  because the run suspended for human input. Only `HarnessLoop` sets it (a tool returns a `ToolResult`, never a step), and
   `TaintTrackingSensor` reads it. The `ToolCallStep` constructor and deconstruction are unchanged, and a
   checkpoint written before this release loads with `false`, which for taint purposes means "the tool's own
   output".
@@ -131,7 +132,8 @@ public API even though most consumers only implement a few of them.
   an untrusted source enters the trajectory, all privileged actions are blocked". A result now taints the run
   whenever the call was actually dispatched, whatever `IsError` says, and that includes the message of an
   exception the tool threw. Only results the harness wrote itself are exempt: a call blocked at `PreToolCall`
-  (the tool never ran) and a tool-call deadline result.
+  (the tool never ran), a tool-call deadline result, a call to a tool that was not offered on that turn, and
+  a call not run because the run suspended for human input (nothing was dispatched for either).
 
   **Behavioural change** — a run that relied on a failed untrusted call not tainting it will now block
   privileged actions afterwards. For example, with `WithTaintTracking(["fetch_webpage"], ["send_email"])`:

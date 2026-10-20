@@ -9,6 +9,8 @@ using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
 using SapphireGuard.ModelHarness.Framework.Tools;
+using SapphireGuard.ModelHarness.Infrastructure.Security;
+using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using SapphireGuard.ModelHarness.Infrastructure.Tools;
 using Xunit;
 using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
@@ -148,6 +150,34 @@ public sealed class HarnessLoopToolAvailabilityTests
         Assert.Equal(["withheld", "allowed"], steps.Select(s => s.Call.ToolName));   // one result per call, in call order
         Assert.True(steps[0].Result.IsError);
         Assert.False(steps[1].Result.IsError);
+    }
+
+    [Fact]
+    public async Task RunAsync_ModelNamesAWithheldUntrustedTool_DoesNotTaintTheRun()
+    {
+        // The harness wrote "not available" itself and dispatched nothing, so no content from the
+        // untrusted source entered the trajectory and a later privileged action must still run.
+        var fetch = new CountingTool("fetch_webpage");
+        var email = new CountingTool("send_email");
+        var taint = new TaintTrackingSensor(new TrustPolicy(
+            untrustedSources: ["fetch_webpage"], privilegedActions: ["send_email"]));
+        var client = new OfferRecordingModelClient(
+            ToolUse(CallTo("fetch_webpage")), ToolUse(CallTo("send_email")), EndTurn("sent"));
+        var harness = BuildHarness(client, [fetch, email], new OnlyTheseTools("send_email"), [taint]);
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal(0, fetch.ExecuteCount);
+        Assert.Equal(1, email.ExecuteCount);
+
+        var steps = outcome.FinalState.Trajectory.OfType<ToolCallStep>().ToList();
+        Assert.Equal(["fetch_webpage", "send_email"], steps.Select(s => s.Call.ToolName));
+        Assert.True(steps[0].Result.IsError);
+        Assert.True(steps[0].HarnessAuthored);
+        Assert.False(steps[1].Result.IsError);
+        Assert.DoesNotContain(outcome.FinalState.Trajectory.OfType<SensorInterventionStep>(),
+            s => s.SensorName == "taint-tracking");
     }
 
     private sealed class OnlyTheseTools(params string[] names) : IToolSelector

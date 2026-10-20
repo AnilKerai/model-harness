@@ -156,12 +156,74 @@ public sealed class TaintTrackingHarnessLoopTests
             s => s.SensorName == "taint-tracking");
     }
 
-    // Lists both tools: the loop offers the model what List() returns and refuses a call to anything
-    // else, so a registry that listed nothing would have the harness reject every call before dispatch.
+    [Fact]
+    public async Task UntrustedToolCallSkippedBecauseTheRunSuspended_DoesNotTaintTheRun()
+    {
+        // [ask_human, fetch_webpage]: the loop suspends at ask_human and writes "Not executed" for the
+        // fetch itself. The tool never ran, so nothing from the untrusted source is in the trajectory.
+        var ask = Call("ask_human");
+        var registry = ScriptedWithPendingAskHuman();
+        var client = new ScriptedModelClient(
+            ToolUse(ask, Call("fetch_webpage")), ToolUse(Call("send_email")), EndTurn("email sent"));
+        var harness = BuildHarness(client, registry);
+
+        var suspended = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.AwaitingHuman, suspended.Status);
+        Assert.Equal(["ask_human"], registry.Dispatched);
+        var fetchStep = suspended.FinalState.Trajectory.OfType<ToolCallStep>().Single(s => s.Call.ToolName == "fetch_webpage");
+        Assert.True(fetchStep.Result.IsError);
+        Assert.True(fetchStep.HarnessAuthored);
+
+        var outcome = await harness.RunAsync(
+            suspended.FinalState.ResumeWithHumanAnswer(ask.CallId, "yes, go ahead"), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal(["ask_human", "send_email"], registry.Dispatched);
+        Assert.DoesNotContain(outcome.FinalState.Trajectory.OfType<SensorInterventionStep>(),
+            s => s.SensorName == "taint-tracking");
+    }
+
+    [Fact]
+    public async Task UntrustedToolDispatchedBeforeTheRunSuspended_StillTaintsTheRun()
+    {
+        // Negative control for the test above: [fetch_webpage, ask_human] dispatches the fetch before
+        // the suspension, so its result is in the trajectory and the privileged action stays blocked.
+        var ask = Call("ask_human");
+        var registry = ScriptedWithPendingAskHuman();
+        var client = new ScriptedModelClient(
+            ToolUse(Call("fetch_webpage"), ask), ToolUse(Call("send_email")), EndTurn("could not send the email"));
+        var harness = BuildHarness(client, registry);
+
+        var suspended = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.AwaitingHuman, suspended.Status);
+        Assert.Equal(["fetch_webpage", "ask_human"], registry.Dispatched);
+
+        var outcome = await harness.RunAsync(
+            suspended.FinalState.ResumeWithHumanAnswer(ask.CallId, "yes, go ahead"), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.Done, outcome.Status);
+        Assert.Equal(["fetch_webpage", "ask_human"], registry.Dispatched);   // send_email never ran
+        var emailStep = outcome.FinalState.Trajectory.OfType<ToolCallStep>().Single(s => s.Call.ToolName == "send_email");
+        Assert.StartsWith("Blocked by sensor 'taint-tracking'", emailStep.Result.Content);
+        Assert.Contains(outcome.FinalState.Trajectory.OfType<SensorInterventionStep>(),
+            s => s.HookPoint == HookPoint.PreToolCall && s.SensorName == "taint-tracking");
+    }
+
+    // ask_human returns a pending result, which suspends the run; every other tool answers "sent".
+    private static ScriptedToolRegistry ScriptedWithPendingAskHuman() =>
+        new((call, _) => Task.FromResult(call.ToolName == "ask_human"
+            ? new ToolResult(call.CallId, "May I fetch the page?", IsPending: true)
+            : new ToolResult(call.CallId, "sent")));
+
+    // Lists the tools the tests call: the loop offers the model what List() returns and refuses a call
+    // to anything else, so a registry that listed nothing would have the harness reject every call
+    // before dispatch.
     private sealed class ScriptedToolRegistry(Func<ToolCall, CancellationToken, Task<ToolResult>> dispatch) : IToolRegistry
     {
         private readonly List<string> _dispatched = [];
-        private readonly ITool[] _tools = [new StubTool("fetch_webpage"), new StubTool("send_email")];
+        private readonly ITool[] _tools = [new StubTool("fetch_webpage"), new StubTool("send_email"), new StubTool("ask_human")];
 
         public IReadOnlyList<string> Dispatched => _dispatched;
 

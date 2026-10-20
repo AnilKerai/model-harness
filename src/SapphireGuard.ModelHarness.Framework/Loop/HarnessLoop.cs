@@ -210,12 +210,14 @@ public sealed class HarnessLoop(
             return null;
 
         var pending = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content);
+        // HarnessAuthored for the same reason: a skipped untrusted tool put nothing into the trajectory.
         foreach (var call in notRun)
             state = state.AppendStep(new ToolCallStep(
                 Id: Guid.NewGuid(),
                 Timestamp: _time.GetUtcNow(),
                 Call: call,
-                Result: new ToolResult(call.CallId, NotExecutedOnSuspend, IsError: true)));
+                Result: new ToolResult(call.CallId, NotExecutedOnSuspend, IsError: true))
+            { HarnessAuthored = true });
 
         var suspended = state with
         {
@@ -353,12 +355,15 @@ public sealed class HarnessLoop(
         // The selector and tool suppression decide what the model is shown; this is what makes them bind.
         // The registry knows every tool, so without the check a model that names a withheld tool (by
         // hallucination, from an earlier turn, or on an injected instruction) would still run it.
+        // HarnessAuthored: the harness wrote this result and nothing was dispatched, so naming a withheld
+        // untrusted tool must not taint the run.
         if (!offeredTools.Contains(call.ToolName))
             return state.AppendStep(new ToolCallStep(
                 Id: Guid.NewGuid(),
                 Timestamp: _time.GetUtcNow(),
                 Call: call,
-                Result: new ToolResult(call.CallId, $"Tool '{call.ToolName}' is not available on this turn.", IsError: true)));
+                Result: new ToolResult(call.CallId, $"Tool '{call.ToolName}' is not available on this turn.", IsError: true))
+            { HarnessAuthored = true });
 
         var preStep = new ToolCallStep(
             Id: Guid.NewGuid(),
