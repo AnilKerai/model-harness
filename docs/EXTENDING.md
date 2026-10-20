@@ -457,6 +457,12 @@ carrying `gen_ai.*` attributes, plus the `gen_ai.client.token.usage` and
 `gen_ai.client.operation.duration` metrics. `CompositeTracer` fans one scope out to each
 registered tracer's child scope, so native OTel and a debug tracer can run side by side.
 
+The loop disposes the tool scope as soon as the tool returns, *before* the `PostToolCall` sensors run, so
+an `execute_tool` span measures the tool alone — a sensor's own model call is a sibling span under the
+run, not part of the tool's duration. The root span's status follows the run's outcome: `Ok` for `Done`,
+`Unset` for `AwaitingHuman` (a suspension is a wait, not a failure, so it stays out of error-rate alerts),
+`Error` for everything else; `harness.status` always carries the exact `AgentStatus`.
+
 A tracer also receives a `GuideContribution` after each guide runs — the structural delta that
 guide made to the context draft: tools filtered out or added, memory snippets surfaced,
 trajectory messages rendered, system-prompt sections added, and the system-prompt character

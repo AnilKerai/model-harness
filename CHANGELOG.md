@@ -89,6 +89,30 @@ public API even though most consumers only implement a few of them.
   *Behavioural change, no migration needed:* the finalisation prompt now has one System message instead of
   two. A custom `IModelClient`, tracer or test that asserted a trailing System message on the finalisation
   call should read the instruction from `messages[0]` instead.
+- **A run that suspends for human input is no longer reported as a failure.** `OpenTelemetryTracer.Complete`
+  gave the root `invoke_agent` span `ActivityStatusCode.Error` for every status except `Done`, so each HITL
+  suspension (`AgentStatus.AwaitingHuman`) counted as an error in error-rate dashboards and alerts. The dashboard
+  did the same: `AwaitingHuman` rendered as a red `failed` pill and a ❌ "complete fail" event. Now an
+  `AwaitingHuman` root span has status `Unset` (it is still tagged `harness.status=AwaitingHuman`), and the
+  dashboard shows a neutral "awaiting human" pill and a ⏸ event. `Done` is still `Ok`; `PartialResult` and
+  `Failed` are still `Error`.
+  *Behavioural change, no migration needed:* a backend alert or query that counts spans with status `Error`
+  no longer includes suspended runs. One that relied on `AwaitingHuman` being an error should filter on
+  `harness.status = AwaitingHuman` instead.
+- **The dashboard no longer keeps a finished run's outcome while the run is live again.** A resumed HITL run or
+  a new chat turn reuses the same task row, and the row kept the last turn's status (`done`, `awaiting human`
+  or `failed`) and any failure banner until the run finished. A new `run` event now resets the row to
+  `running` and clears the failure.
+- **The `execute_tool` span now covers only the tool's execution.** `HarnessLoop` held the tool scope open
+  until the end of `ExecuteToolAsync`, so the span ended after the `PostToolCall` sensors. For an AI sensor
+  that made its own model call, the span's duration included the sensor's time and any SDK-instrumented
+  spans the sensor created were nested under `execute_tool`. The scope is now disposed as soon as the tool
+  returns, before the sensors run, so those spans sit beside the tool span under the run.
+  *Behavioural change, no migration needed:* `execute_tool` spans get shorter by the `PostToolCall` sensor
+  time, and a latency dashboard or alert tuned against the old durations will read lower. The
+  `gen_ai.client.operation.duration` metric was already measured around the tool alone and is unchanged. No
+  `ITracer` change: a custom tracer sees `IToolCallScope.Complete` then `Dispose` slightly earlier, before the
+  sensors run.
 
 ## [3.1.0] — 2026-10-11
 
