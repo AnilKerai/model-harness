@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using SapphireGuard.ModelHarness.Framework.Persistence;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
@@ -36,7 +37,80 @@ public sealed class StepJsonConverterTests
         var result = Assert.IsType<ModelCallStep>(RoundTrip(step));
         Assert.Equal(step.Id, result.Id);
         Assert.Equal(step.Cost, result.Cost);
-        Assert.Single(result.Prompt);
+        Assert.Equal("hi", result.Response.Text);
+        Assert.Empty(result.Prompt); // prompts are not persisted
+    }
+
+    [Fact]
+    public void ModelCallStep_prompt_is_written_as_an_empty_list()
+    {
+        var step = ModelCall("secret-prompt-text");
+
+        var json = JsonSerializer.Serialize<Step>(step, Options);
+
+        Assert.DoesNotContain("secret-prompt-text", json);
+        Assert.Empty(JsonDocument.Parse(json).RootElement.GetProperty("Prompt").EnumerateArray());
+        Assert.Single(step.Prompt); // serialising never mutates the in-memory step
+    }
+
+    [Fact]
+    public void SensorInterventionStep_triggering_model_call_prompt_is_not_written()
+    {
+        var step = new SensorInterventionStep(
+            Guid.NewGuid(), DateTimeOffset.UtcNow, HookPoint.PostModelCall, "pii-redaction", "email leaked",
+            TriggeringStep: ModelCall("secret-prompt-text"));
+
+        var json = JsonSerializer.Serialize<Step>(step, Options);
+
+        Assert.DoesNotContain("secret-prompt-text", json);
+        var restored = Assert.IsType<SensorInterventionStep>(JsonSerializer.Deserialize<Step>(json, Options));
+        var triggering = Assert.IsType<ModelCallStep>(restored.TriggeringStep);
+        Assert.Equal("hi", triggering.Response.Text);
+        Assert.Empty(triggering.Prompt);
+    }
+
+    [Fact]
+    public void ModelCallStep_legacy_json_with_prompts_still_loads()
+    {
+        var legacy = LegacyJson(ModelCall("legacy-prompt-text"));
+
+        var result = Assert.IsType<ModelCallStep>(JsonSerializer.Deserialize<Step>(legacy, Options));
+
+        Assert.Equal("hi", result.Response.Text);
+        Assert.Equal("legacy-prompt-text", Assert.Single(result.Prompt).Content);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ModelCallStep_json_with_missing_or_null_prompt_loads_as_empty(bool explicitNull)
+    {
+        var node = JsonNode.Parse(LegacyJson(ModelCall("legacy-prompt-text")))!.AsObject();
+        node.Remove("Prompt");
+        if (explicitNull)
+            node["Prompt"] = null;
+
+        var result = Assert.IsType<ModelCallStep>(JsonSerializer.Deserialize<Step>(node.ToJsonString(), Options));
+
+        Assert.NotNull(result.Prompt);
+        Assert.Empty(result.Prompt);
+        Assert.Equal("hi", result.Response.Text);
+    }
+
+    private static ModelCallStep ModelCall(string promptText) => new(
+        Guid.NewGuid(),
+        DateTimeOffset.UtcNow,
+        [new Message(MessageRole.User, promptText)],
+        new ModelResponse { Text = "hi", ToolCalls = [], StopReason = StopReason.EndTurn, Usage = Usage.Zero, Cost = 0m },
+        Usage.Zero,
+        Cost: 0m);
+
+    // What a checkpoint written before prompts were dropped looks like: the step serialised as-is.
+    private static string LegacyJson(ModelCallStep step)
+    {
+        var node = JsonSerializer.SerializeToNode(step)!.AsObject();
+        node["$type"] = nameof(ModelCallStep);
+        return node.ToJsonString();
     }
 
     [Fact]
@@ -217,7 +291,7 @@ public sealed class StepJsonConverterTests
         Assert.Equal(4, s.Trajectory.Count);
         Assert.IsType<UserMessageStep>(s.Trajectory[0]);
         var model = Assert.IsType<ModelCallStep>(s.Trajectory[1]);
-        Assert.Equal(2, model.Prompt.Count);
+        Assert.Empty(model.Prompt); // prompts are not persisted
         Assert.Equal(StopReason.ToolUse, model.Response.StopReason);
         Assert.Equal("claude-haiku-4-5", model.Response.Model);
         Assert.Equal("anthropic", model.Response.Provider);

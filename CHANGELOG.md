@@ -12,6 +12,49 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Changed
+
+- **Checkpoints no longer persist `ModelCallStep.Prompt`, so their size grows with the trajectory instead of with
+  every turn's whole context window.** Each `ModelCallStep` stores the full rendered prompt of its call — up to
+  `CompactionOptions.WindowTokens`, about 400 KB of text at the default — and every turn saves a checkpoint of the
+  whole state, so checkpoint *k* held *k* prompts. A scripted 40-turn run wrote a 123 KB checkpoint at turn 10, 377 KB
+  at turn 20 and 1.28 MB at turn 40 (19.2 MB on disk for the task); without prompts the last one is 13× smaller. A
+  long chat with checkpointing reached hundreds of MB to GB per conversation, and each turn rewrote a file that kept
+  growing. `StepJsonConverter` now writes `"Prompt":[]` for every `ModelCallStep`, including the copy a
+  `SensorInterventionStep` carries as its `TriggeringStep` (which is the `ModelCallStep` itself for `PostModelCall` and
+  `PreReturn` interventions). A checkpoint written by an earlier version still loads, prompts included, and a missing or
+  null `Prompt` loads as an empty list. Nothing else about a checkpoint changes, and the prompts of a live run are still
+  in `AgentState` and in the tracers.
+
+  **Behavioural change:** `ModelCallStep.Prompt` on a state loaded from a checkpoint is empty, where before it held the
+  prompt of each call. Nothing in the framework reads it, but code that audits prompts from saved checkpoints now
+  finds none. Capture them where they are produced instead — `OpenTelemetryTracer` with `enableSensitiveData` records
+  them as `gen_ai.input.messages`, or implement `ITracer.BeginModelCall`, which receives the messages:
+
+  ```csharp
+  // Before — audit the prompt of each call from a saved checkpoint
+  var checkpoint = await store.LoadLatestAsync(taskId, ct);
+  var prompts = checkpoint!.State.Trajectory.OfType<ModelCallStep>().Select(s => s.Prompt);
+
+  // After — capture it as the call is made (or read it from your trace backend)
+  builder.WithOtelTracer(enableSensitiveData: true);
+  ```
+
+  A custom `ICheckpointStore` that serialises `AgentState` with its own serialiser (not `CheckpointSerializer`) is
+  unaffected and still stores prompts. `FileCheckpointStore` still keeps every checkpoint file of a task, so the
+  directory grows by one file per turn; each file is now linear in the turns so far rather than quadratic, but call
+  `ICheckpointStore.DeleteAsync(taskId)` when a task is finished.
+
+- **`CheckpointSerializer` writes compact JSON.** It indented its output (`WriteIndented = true`), which cost about
+  1.75× the bytes (68 KB against 39 KB for the 50-turn checkpoint in the new size test) for no reader's benefit.
+  Checkpoint files are now a single line.
+
+  **Behavioural change:** code that matches on the indented text of a serialised checkpoint (for example
+  `json.Contains("\"StopReason\": 5")`) must match the compact form (`"StopReason":5`) or, better, deserialise it.
+  `CheckpointSerializer.Deserialize` reads both forms, so existing checkpoint files still load.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI

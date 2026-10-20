@@ -658,6 +658,11 @@ ID-mapping table is needed. A caller-supplied ID owns its own uniqueness, and be
 `FileCheckpointStore` uses it as a directory name it must be a single path segment (IDs containing
 separators or `..` are rejected). The same ID also flows to the tracer and to tools via `ToolContext`.
 
+A checkpoint holds the whole `AgentState` except `ModelCallStep.Prompt`, which `FileCheckpointStore` does not
+persist (it loads as an empty list): the prompt is up to one context window and is rendered afresh every turn,
+so keeping it would make each checkpoint hold every earlier prompt. Capture prompts with a tracer instead. The
+store keeps one file per turn, so call `DeleteAsync(taskId)` once a task is finished.
+
 Implement `ICheckpointStore` to target blob storage, a database, or any other backend.
 
 ### HITL without durability

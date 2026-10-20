@@ -46,7 +46,7 @@ public sealed class StopReasonTests
         var json = JsonSerializer.Serialize<Step>(step, CheckpointSerializer.Options);
         var back = (ModelCallStep)JsonSerializer.Deserialize<Step>(json, CheckpointSerializer.Options)!;
 
-        Assert.Contains("\"StopReason\": 5", json);
+        Assert.Contains("\"StopReason\":5", json);
         Assert.Equal(StopReason.Refusal, back.Response.StopReason);
     }
 }
