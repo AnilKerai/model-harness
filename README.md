@@ -214,9 +214,13 @@ in a `SensorInterventionStep` and appends it to the trajectory. On the next turn
 prefixed `[HARNESS OBSERVATION — ...]` (the model "owns" the correction — self-consistency). When such a
 note is the final turn before a model call, a trailing user turn is appended restating the directive:
 newer Claude models reject a request ending on an assistant turn (the retired prefill behaviour), so the
-note keeps its framing while a user turn carries the required final role. `HarnessInstructionsGuide` tells the model upfront
-(in the system prompt) what these notes mean and that they must be treated as directives —
-this is the feedforward complement to the sensor's feedback. Intervention records are
+note keeps its framing while a user turn carries the required final role. That turn asks for full
+compliance when a blocking note (`PostModelCall`, `PreToolCall`, `PreReturn`) is among the trailing
+ones, and only that the note be taken into account when all are advisory (`PreModelCall`,
+`PostToolCall`). `HarnessInstructionsGuide` tells the model upfront
+(in the system prompt) what each kind of note means — constraints to comply with for the blocking
+hookpoints, guidance to weigh for the advisory ones — and counts only the blocking interventions as
+sensor violations; this is the feedforward complement to the sensor's feedback. Intervention records are
 separate from tool-call history so tool history stays clean.
 
 See [EXTENDING.md](docs/EXTENDING.md) for the `ISensor` interface and registration.

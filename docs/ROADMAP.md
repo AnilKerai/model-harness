@@ -32,7 +32,7 @@ Explicitly evaluated and **deliberately not built** (the audit's highest-value o
 ### Guide pattern
 - [x] `IGuide` / `IGuideRunner` / `ContextDraft` — sequential pipeline that shapes what the model sees
 - [x] `SystemPromptGuide` — injects agent identity and standing instructions
-- [x] `HarnessInstructionsGuide` — appends harness conventions to the system prompt; teaches the model to treat `[HARNESS OBSERVATION — ...]` notes as directives (feedforward complement to sensor feedback)
+- [x] `HarnessInstructionsGuide` — appends harness conventions to the system prompt; teaches the model what a `[HARNESS OBSERVATION — ...]` note means by hookpoint — blocking notes (reject / challenge / block) are directives, advisory ones (annotate / flag) are guidance to weigh (feedforward complement to sensor feedback)
 - [x] `ReActGuide` — appends ReAct (Thought → Action → Observation) framing to the system prompt; the loop already runs the act/observe cycle, so this guide elicits the explicit reasoning trace. Built-in default, registered after `HarnessInstructionsGuide`
 - [x] `HeadEvictionTrajectoryGuide` — renders the full trajectory (model turns, tool results, sensor notes) into the prompt; sensor notes use `[HARNESS OBSERVATION — ...]` prefix matching what `HarnessInstructionsGuide` declares
 - [x] Token-aware trajectory compaction — `HeadEvictionTrajectoryGuide` trims oldest steps when the estimated token count approaches `CompactionOptions.WindowTokens` (the per-turn context window, separate from the cumulative `Budget.MaxTotalTokens`), prepending an omission note when steps are dropped

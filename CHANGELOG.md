@@ -206,6 +206,33 @@ public API even though most consumers only implement a few of them.
   turns to be omitted or summarised a little sooner; and if you assert on the exact messages it sends for an
   oversized turn, expect the `[CURRENT REQUEST]` text in the system message and no user turn at that position.
 
+- **`HarnessInstructionsGuide` told the model every `[HARNESS OBSERVATION — ...]` note meant its response was
+  blocked and rejected, and counted advisory notes as violations.** Advisory hookpoints block nothing —
+  `PreModelCall` guidance (for example `ProgressCheckSensor`, which intervenes every 5 turns in the default
+  `AddStandardModelHarness` setup) and `PostToolCall` flags (`PromptInjectionSensor`, `TaintTrackingSensor`,
+  `ToolResultSanityCheckSensor`, `ToolErrorLoopSensor`) — yet the model was told to abandon a response that
+  was fine. The instructions now say what each hookpoint did: `PostModelCall` rejected the response,
+  `PreReturn` challenged the answer (revise it), `PreToolCall` blocked the tool call, and `PreModelCall` /
+  `PostToolCall` are advisory (take them into account and carry on). The claim that "the loop will keep
+  retrying until you comply" is gone: the loop stops after three consecutive interventions and returns a
+  `PartialResult`.
+
+- **The "Sensor violations this session" list counted advisory notes and rendered badly.** It now counts only
+  blocking interventions (`PostModelCall`, `PreToolCall`, `PreReturn`) and says they "blocked or challenged"
+  the model's work; a trajectory with only advisory notes has no such section. Items after the first also
+  carried eight leading spaces, which markdown renders as a code block; every item now starts at column 0.
+  The list still spans the whole trajectory, so in a chat an early block is listed on later user turns.
+
+- **`HeadEvictionTrajectoryGuide` closed advisory notes with "Proceed, fully complying with the harness
+  observation above."** A `PreModelCall` note is always the last step before its model call, so advisory notes
+  got the full-compliance framing too. The trailing user turn is now "Proceed, taking the harness observation
+  above into account." when every trailing note is advisory, and keeps the full-compliance wording when any of
+  them is blocking.
+
+  **Behavioural change** — prompt text only, no code change needed. If you assert on the system prompt or the
+  trailing user turn in your own tests, or match the old strings in a custom `IModelClient` or tracer, update
+  them to the new wording.
+
 ### Docs
 
 - **`MaxWallClock` includes the time a HITL run spends waiting for the human.** This has been the behaviour
