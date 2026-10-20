@@ -60,6 +60,7 @@ internal static class SkillDocumentParser
         return sb.ToString();
     }
 
-    private static string OneLine(string v) =>
+    // Also the canonical form of a skill name: FileSkillStore keys its filenames on it.
+    internal static string OneLine(string v) =>
         v.Replace("\r", " ").Replace("\n", " ").Trim();
 }
