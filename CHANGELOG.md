@@ -12,6 +12,23 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+Documentation only — no behavioural change.
+
+### Docs
+
+- **`MaxWallClock` includes the time a HITL run spends waiting for the human.** This has been the behaviour
+  since 2.0.0 (see its `MaxWallClock` note below: the clock accrues across a resume), and is deliberate — it
+  is now stated where you would look for it: the `Budget.MaxWallClock` XML doc, the README budget table,
+  `docs/EXTENDING.md` (HITL suspend/resume), `docs/GLOSSARY.md`, and the `samples/HitlSuspendResume` budget.
+  If the human answers after the cap, the resumed run's first budget check is already exhausted, so it makes
+  one tool-less finalisation call and returns `PartialResult` ("Reached MaxWallClock"). Two ways to plan for it:
+  size `MaxWallClock` to cover human response time, or extend it on the resumed state with
+  `state.ResumeWithHumanAnswer(id, answer) with { Budget = state.Budget with { MaxWallClock = … } }`.
+  Both enforcers (`DefaultBudgetEnforcer`, `TurnScopedBudgetEnforcer`) behave this way, and
+  `HarnessLoopHitlWallClockTests` now pins both the failure and the remedy.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI

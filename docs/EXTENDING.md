@@ -737,10 +737,25 @@ while (outcome.Status == AgentStatus.AwaitingHuman)
     var pending = outcome.FinalState.PendingHumanInput!;
     var answer = await GetHumanAnswerAsync(pending.CallId);
 
-    outcome = await agent.RunAsync(
-        outcome.FinalState.ResumeWithHumanAnswer(pending.CallId, answer));
+    var state = outcome.FinalState.ResumeWithHumanAnswer(pending.CallId, answer);
+    // MaxWallClock keeps running while the human thinks — extend it if the answer may arrive after the cap:
+    // state = state with { Budget = state.Budget with { MaxWallClock = TimeSpan.FromHours(1) } };
+    outcome = await agent.RunAsync(state);
 }
 ```
+
+**`Budget.MaxWallClock` includes the time spent waiting for the human.** The clock is measured
+from the run's first user message (`TurnScopedBudgetEnforcer`: the latest one), and a resume adds
+no user message, so the suspended time counts. If the human answers after the cap, the resumed
+run's first budget check is already exhausted: it makes one tool-less finalisation call and
+returns `PartialResult` with `FailureReason` "Reached MaxWallClock", so the agent can use the
+answer only in that one tool-less reply. This is deliberate. Plan for it in one of two ways:
+
+- **Size `MaxWallClock` to cover the human's response time** — the 2-minute default and the
+  1-minute cap in `samples/HitlSuspendResume` assume an answer within seconds.
+- **Extend `MaxWallClock` on the resumed state**, as in the commented line above. `AgentState.Budget`
+  is `init`, so a `with` expression on the state returned by `ResumeWithHumanAnswer` is how a host
+  gives the resumed run a bigger allowance.
 
 **Resuming after a crash:**
 
