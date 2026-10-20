@@ -146,12 +146,12 @@ public sealed class HarnessLoop(
                 }
 
                 consecutiveInterventions = 0;
-                foreach (var call in response.ToolCalls)
+                for (var i = 0; i < response.ToolCalls.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    state = await ExecuteToolAsync(state, turnIndex, call, offeredTools, ct);
+                    state = await ExecuteToolAsync(state, turnIndex, response.ToolCalls[i], offeredTools, ct);
 
-                    var suspended = await TrySuspendForHumanAsync(state, runId, turnIndex, ct);
+                    var suspended = await TrySuspendForHumanAsync(state, runId, turnIndex, response.ToolCalls.Skip(i + 1), ct);
                     if (suspended is not null)
                         return suspended;
                 }
@@ -194,15 +194,29 @@ public sealed class HarnessLoop(
         return outcome;
     }
 
+    private const string NotExecutedOnSuspend =
+        "Not executed: the run suspended for human input before this call ran. Re-issue it after reading the answer if it is still needed.";
+
     // Suspends the run for human input when the last tool returned a pending result; returns the
-    // AwaitingHuman outcome to bubble out of the loop, or null to keep going.
-    private async Task<AgentOutcome?> TrySuspendForHumanAsync(AgentState state, string runId, int turn, CancellationToken ct)
+    // AwaitingHuman outcome to bubble out of the loop, or null to keep going. The calls that followed the
+    // pending one in the same response are not run — the human may be about to be asked whether one of
+    // them is allowed — but each gets an error ToolCallStep after the pending step, so the audit trail
+    // and the next prompt still hold a tool_result for every tool_use. The pending step is looked up
+    // before those are appended, so they cannot hide it.
+    private async Task<AgentOutcome?> TrySuspendForHumanAsync(AgentState state, string runId, int turn, IEnumerable<ToolCall> notRun, CancellationToken ct)
     {
         var lastTool = state.Trajectory.OfType<ToolCallStep>().LastOrDefault();
         if (lastTool?.Result.IsPending != true)
             return null;
 
         var pending = new PendingHumanInput(lastTool.Result.CallId, lastTool.Result.Content);
+        foreach (var call in notRun)
+            state = state.AppendStep(new ToolCallStep(
+                Id: Guid.NewGuid(),
+                Timestamp: _time.GetUtcNow(),
+                Call: call,
+                Result: new ToolResult(call.CallId, NotExecutedOnSuspend, IsError: true)));
+
         var suspended = state with
         {
             Status = AgentStatus.AwaitingHuman,

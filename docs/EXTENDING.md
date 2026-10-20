@@ -699,6 +699,13 @@ When the model calls `ask_human`, the loop:
 3. Fires `IHumanNotifier.NotifyAsync` (fire-and-forget)
 4. Returns `AgentOutcome { Status = AwaitingHuman }`
 
+If the same response carried further tool calls after `ask_human`, they are not run before the
+suspension (the human may be about to be asked whether one of them is allowed). Each is recorded as
+an error `ToolCallStep` after the pending one (`Not executed: the run suspended for human input
+before this call ran. ...`), so the resumed model sees that they did not run and can re-issue them.
+Locate the pending step by `Result.IsPending` or `PendingHumanInput.CallId`, not as the last
+`ToolCallStep`.
+
 The checkpoint is self-describing — `State.PendingHumanInput` carries the call ID and
 question, so a process that restarts can load the checkpoint and know exactly what to do
 without needing the original `AgentOutcome` in memory.

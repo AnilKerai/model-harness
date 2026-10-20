@@ -16,6 +16,27 @@ public API even though most consumers only implement a few of them.
 
 ### Fixed
 
+- **Tool calls that follow an `ask_human` call in the same response are no longer silently dropped when the run
+  suspends.** A response can carry several tool calls. The loop dispatches them in order and suspends the run
+  (`AwaitingHuman`) as soon as one returns a pending result, so any later calls were never executed and never
+  recorded: no `ToolCallStep`, nothing for the tracer, and nothing in the trajectory the next prompt is built
+  from, so after the human answered the model was not told they had not run. They are still not executed — the
+  human may be about to be asked whether one of them is allowed (`ask_human("may I delete X?")` sent in parallel
+  with `delete X`). But the loop now appends a `ToolCallStep` for each of them, after the pending step, with
+  `IsError = true` and `Not executed: the run suspended for human input before this call ran. Re-issue it after
+  reading the answer if it is still needed.` No sensor runs and no tool scope opens for them, as for a call to a
+  tool that was not offered. `PendingHumanInput` is unchanged, and the checkpoint saved at suspension differs only
+  by those extra steps.
+  *Behavioural change:* an `AwaitingHuman` outcome's `FinalState.Trajectory` (and the saved checkpoint) can now
+  hold `ToolCallStep`s after the pending one, and the resumed model sees a `tool_result` with `error=True` for
+  each call that did not run, so it can re-issue the call if it is still wanted. Code that took the pending step
+  to be the last `ToolCallStep` of a suspended state must now find it by `Result.IsPending` (as
+  `AgentState.ResumeWithHumanAnswer` does) or by `PendingHumanInput.CallId`:
+  Before: `state.Trajectory.OfType<ToolCallStep>().Last()`
+  After: `state.Trajectory.OfType<ToolCallStep>().Single(s => s.Result.IsPending)`
+  A run whose responses carry a single call, or whose `ask_human` call is the last one in its response, is
+  unchanged.
+
 - **The loop now dispatches only tool calls whose tool was offered to the model on that call.** It sends the
   model `ContextBuildResult.SelectedTools` — the registry's tools as narrowed by `IToolSelector` — or no tools
   at all on a tool-suppressed turn (`SensorResult.InterveneWithToolSuppression`), but then dispatched every
