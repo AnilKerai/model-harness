@@ -380,29 +380,33 @@ public sealed class HarnessLoop(
         }
 
         var ctx = new ToolContext(state.TaskId, call.CallId, state.Metadata);
-        using var scope = tracer.BeginToolCall(state.TaskId, turn, call);
 
         var deadline = state.Budget.MaxToolCallDuration;
         using var deadlineCts = deadline is { } d ? new CancellationTokenSource(d, _time) : null;
         using var linkedCts = deadlineCts is null ? null
             : CancellationTokenSource.CreateLinkedTokenSource(ct, deadlineCts.Token);
 
+        // Block-scoped so the execute_tool span ends with the tool, before the PostToolCall sensors
+        // (which may make model calls of their own) run.
         ToolResult result;
-        try
+        using (var scope = tracer.BeginToolCall(state.TaskId, turn, call))
         {
-            result = await toolRegistry.DispatchAsync(call, ctx, linkedCts?.Token ?? ct);
+            try
+            {
+                result = await toolRegistry.DispatchAsync(call, ctx, linkedCts?.Token ?? ct);
+            }
+            catch (OperationCanceledException) when (deadlineCts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
+            {
+                result = new ToolResult(call.CallId,
+                    $"Tool '{call.ToolName}' exceeded the {deadline!.Value.TotalSeconds:0}s tool-call deadline.",
+                    IsError: true);
+            }
+            catch (Exception ex)
+            {
+                result = new ToolResult(call.CallId, $"Tool threw {ex.GetType().Name}: {ex.Message}", IsError: true);
+            }
+            scope.Complete(result);
         }
-        catch (OperationCanceledException) when (deadlineCts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
-        {
-            result = new ToolResult(call.CallId,
-                $"Tool '{call.ToolName}' exceeded the {deadline!.Value.TotalSeconds:0}s tool-call deadline.",
-                IsError: true);
-        }
-        catch (Exception ex)
-        {
-            result = new ToolResult(call.CallId, $"Tool threw {ex.GetType().Name}: {ex.Message}", IsError: true);
-        }
-        scope.Complete(result);
 
         var executed = new ToolCallStep(
             Id: Guid.NewGuid(),
