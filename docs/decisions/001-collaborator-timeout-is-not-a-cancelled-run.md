@@ -57,18 +57,24 @@ takes the path it already had for a fault:
 |---|---|
 | `HarnessLoop` (model client, checkpoint store, rate limiter) | `Failed`, `FailureReason` = the exception's message; `IModelCallScope.Fail(ex)` puts `exception.type`/`message`/`stacktrace` on the `chat` span |
 | `DefaultSensorRunner` | `SensorResult.Failed(reason)` — flagged `IsError`, **not** an intervention; the batch survives and the model keeps its turn |
-| `DefaultGuideRunner` (supporting guides) | Guide skipped, contribution lost for that turn, logged via `LogGuideError` |
+| `DefaultGuideRunner` (supporting guides) | Guide skipped and logged via `LogGuideError`. The draft is not rolled back, so anything the guide changed before it threw stays |
+| `ToolSelectorGuide` (fail-**closed**) | Tool list emptied, then rethrown so the runner logs it: the model is offered no tools that turn |
 | `HeadEvictionTrajectoryGuide` (the fold call) | Fallback omission note carrying `CompactionResult.Error` |
 | `HarnessLoop.ExecuteToolAsync` | Recoverable `IsError` `ToolResult` — the model replans. **Not the two-clause shape:** see below |
 | `TaintTrackingSensor` (fail-**closed**) | `Intervene` — blocks the privileged action |
 | Polly breakers (`ResilientModelClientDecorator`, `ResilientTool`) | Counted as a failure, so the circuit can open |
 
-Three components invert, narrow or route around the rule, deliberately:
+Four components invert, narrow or route around the rule, deliberately:
 
 - **`TaintTrackingSensor` fails closed.** Fail-open would let a privileged action through
   while tainted content sits in context — the one outcome it exists to prevent. Its catch
   is the same two clauses inverted: genuine cancellation propagates, everything else
   returns `Intervene`.
+- **`ToolSelectorGuide` fails closed.** Its output is the dispatch allowlist, so the runner's skip would
+  keep the full seeded tool list and offer and dispatch every registered tool, a policy selector failing
+  open on exactly the turns its backing service is down. Its catch is the same two clauses inverted:
+  genuine cancellation propagates; everything else empties `AvailableTools` and rethrows, so the runner
+  still logs it and the run continues with the model offered no tools for that turn.
 - **`ResilientTool` counts its own timeout but does not retry it.** The call may already
   have run its side effect, and each retry would wait out the full timeout again.
 - **`ExecuteToolAsync` has no genuine-cancellation clause at all.** Its only special case is

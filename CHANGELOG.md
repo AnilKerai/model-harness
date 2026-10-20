@@ -31,6 +31,44 @@ public API even though most consumers only implement a few of them.
 
 ### Changed
 
+- **A throwing `IToolSelector` now offers the model no tools for that turn, where it used to offer every
+  registered tool.** The loop dispatches only the tools it offered on each model call, so the selector's output
+  is the dispatch allowlist, and `IToolSelector` is documented as a policy boundary. But `ToolSelectorGuide` was
+  an ordinary supporting guide: when the selector threw (a remote permission service timing out raises
+  `TaskCanceledException` with the harness token untouched), `DefaultGuideRunner` logged the error and skipped the
+  guide, which left the full registry list the draft had been seeded with. On exactly the turns the policy could
+  not be evaluated, every registered tool was offered and dispatchable, including the ones the policy exists to
+  withhold, and `ToolCatalogueGuide` advertised them in the system prompt. `ToolSelectorGuide` now catches the
+  failure, empties `ContextDraft.AvailableTools` and rethrows, so the runner still logs it via
+  `ITracer.LogGuideError` (guide `tool-selector`) and the run continues. On that turn the model is offered no
+  tools, a call to any tool gets `Tool '<name>' is not available on this turn.` without running a `PreToolCall`
+  sensor, and `ToolCatalogueGuide` renders no catalogue. The next turn asks the selector again. Only genuine
+  cancellation of the harness token propagates untouched; a selector's own `TaskCanceledException` fails closed.
+  `DefaultGuideRunner` and every signature are unchanged.
+
+  **Behavioural change:** a selector that throws used to leave the model with every tool and now leaves it with
+  none. A persistently failing selector therefore leaves the model toolless, so it may answer in prose and
+  `PreReturn` may accept that as final. A selector that would rather stay available than strict (a relevance or
+  ranking selector) must now catch its own errors and return the tools it was given:
+
+  ```csharp
+  // Before — a ranking failure fell through to "every tool is offered"
+  public Task<IReadOnlyList<ITool>> SelectAsync(IReadOnlyList<ITool> tools, AgentState state, CancellationToken ct)
+      => RankAsync(tools, state, ct);
+
+  // After — opt back in to availability over enforcement
+  public async Task<IReadOnlyList<ITool>> SelectAsync(IReadOnlyList<ITool> tools, AgentState state, CancellationToken ct)
+  {
+      try { return await RankAsync(tools, state, ct); }
+      catch (Exception) when (!ct.IsCancellationRequested) { return tools; }
+  }
+  ```
+
+  The same applies to a custom guide (`WithGuide<T>`) that narrows `AvailableTools` as policy: `DefaultGuideRunner`
+  skips a throwing guide but does not roll the draft back, so it keeps whatever the guide had changed before it
+  threw (the docs said the contribution was "lost"; they now say so). Empty the list and rethrow, as
+  `ToolSelectorGuide` does, if the restriction must hold when the guide fails.
+
 - **Checkpoints no longer persist `ModelCallStep.Prompt`, so their size grows with the trajectory instead of with
   every turn's whole context window.** Each `ModelCallStep` stores the full rendered prompt of its call — up to
   `CompactionOptions.WindowTokens`, about 400 KB of text at the default — and every turn saves a checkpoint of the
