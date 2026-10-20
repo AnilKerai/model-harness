@@ -80,6 +80,7 @@ body.run-enabled .controls { display: flex; }
 .status.st-running { background: #e0e7ff; color: var(--indigo); }
 .status.st-done { background: #dcfce7; color: var(--green); }
 .status.st-failed { background: #fee2e2; color: var(--red); }
+.status.st-suspended { background: #e2e8f0; color: #475569; }
 
 .stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 16px; }
 .stat {
@@ -158,6 +159,7 @@ pre.answer { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 
 .evt.error { border-left-color: var(--red); }
 .evt.complete { border-left-color: var(--green); }
 .evt.complete.fail { border-left-color: var(--red); }
+.evt.complete.suspended { border-left-color: var(--muted); }
 
 .spinner {
     width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--blue);

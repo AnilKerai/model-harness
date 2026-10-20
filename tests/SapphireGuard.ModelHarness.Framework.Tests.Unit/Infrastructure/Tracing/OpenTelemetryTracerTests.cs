@@ -343,4 +343,42 @@ public sealed class OpenTelemetryTracerTests
         Assert.Equal("tool_call", part.GetProperty("type").GetString());
         Assert.Equal("mul", part.GetProperty("arguments").GetProperty("op").GetString());
     }
+
+    // ── Root span status ─────────────────────────────────────────────────────
+
+    private static Activity RootEndedWith(AgentStatus status, string? failureReason)
+    {
+        var taskId = "otel-status-" + Guid.NewGuid().ToString("N");
+        var tracer = new OpenTelemetryTracer();
+
+        var activities = Capture(() =>
+        {
+            tracer.StartTrace(taskId, "task");
+            tracer.Complete(taskId, status, failureReason);
+        });
+
+        return Root(activities, taskId);
+    }
+
+    [Theory]
+    [InlineData(AgentStatus.Done, ActivityStatusCode.Ok, null)]
+    [InlineData(AgentStatus.Failed, ActivityStatusCode.Error, "boom")]
+    [InlineData(AgentStatus.PartialResult, ActivityStatusCode.Error, "budget")]
+    public void The_root_span_status_follows_how_the_run_ended(AgentStatus status, ActivityStatusCode expected, string? failureReason)
+    {
+        var root = RootEndedWith(status, failureReason);
+
+        Assert.Equal(expected, root.Status);
+        Assert.Equal(status.ToString(), root.GetTagItem("harness.status"));
+    }
+
+    [Fact]
+    public void A_run_suspended_for_human_input_is_not_an_error()
+    {
+        var root = RootEndedWith(AgentStatus.AwaitingHuman, failureReason: null);
+
+        // Unset, not Error: a suspension is a normal wait and must stay out of error-rate dashboards and alerts.
+        Assert.Equal(ActivityStatusCode.Unset, root.Status);
+        Assert.Equal("AwaitingHuman", root.GetTagItem("harness.status"));
+    }
 }

@@ -290,9 +290,12 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
         if (failureReason is not null)
             activity.SetTag("harness.failure.reason", failureReason);
 
-        activity.SetStatus(
-            status == AgentStatus.Done ? ActivityStatusCode.Ok : ActivityStatusCode.Error,
-            failureReason);
+        // A run suspended for human input is waiting, not broken: Unset keeps it out of error-rate
+        // dashboards and alerts, and harness.status still says why the span ended.
+        if (status != AgentStatus.AwaitingHuman)
+            activity.SetStatus(
+                status == AgentStatus.Done ? ActivityStatusCode.Ok : ActivityStatusCode.Error,
+                failureReason);
 
         activity.Dispose();
     }

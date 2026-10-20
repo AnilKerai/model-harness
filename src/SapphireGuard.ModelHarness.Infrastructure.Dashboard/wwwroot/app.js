@@ -62,6 +62,9 @@ function ingest(e) {
   switch (e.kind) {
     case 'run':
       r.title = e.summary;
+      // A resumed HITL run or a new chat turn reuses this row, so drop the last turn's outcome.
+      r.status = 'running';
+      r.failure = undefined;
       break;
     case 'model': {
       r.totals.modelCalls++;
@@ -101,7 +104,7 @@ function renderRuns() {
     return `<button class="taskrow ${id === selected ? 'active' : ''}" data-id="${id}">
       <span class="taskrow-top">
         <span class="taskrow-title">${escapeHtml(r.title)}</span>
-        <span class="status ${statusClass(r.status)}">${escapeHtml(r.status)}</span>
+        <span class="status ${statusClass(r.status)}">${escapeHtml(statusLabel(r.status))}</span>
       </span>
       <span class="taskrow-time">${fmtTime(r.started)}</span>
     </button>`;
@@ -146,7 +149,7 @@ function renderAnswer(s) {
 
 function statsHtml(r) {
   return `<section class="stats">
-    <div class="stat"><span class="k">Status</span><span class="v">${escapeHtml(r.status)}</span></div>
+    <div class="stat"><span class="k">Status</span><span class="v">${escapeHtml(statusLabel(r.status))}</span></div>
     <div class="stat"><span class="k">Model turns</span><span class="v">${r.totals.modelCalls}</span></div>
     <div class="stat"><span class="k">Tokens in/out</span><span class="v">${fmtN(r.totals.in)} / ${fmtN(r.totals.out)}</span></div>
     <div class="stat"><span class="k">Cached</span><span class="v">${fmtN(r.totals.cached)}</span></div>
@@ -205,12 +208,16 @@ function meta(e) {
     case 'compaction': return ['🗜', 'compaction'];
     case 'warn': return ['⚠️', 'warn'];
     case 'error': return ['❌', 'error'];
-    case 'done': return d.status === 'Done' ? ['✅', 'complete'] : ['❌', 'complete fail'];
+    case 'done':
+      if (d.status === 'Done') return ['✅', 'complete'];
+      if (d.status === 'AwaitingHuman') return ['⏸', 'complete suspended'];
+      return ['❌', 'complete fail'];
     default: return ['•', ''];
   }
 }
 
-const statusClass = s => s === 'done' ? 'st-done' : s === 'running' ? 'st-running' : 'st-failed';
+const statusClass = s => s === 'done' ? 'st-done' : s === 'running' ? 'st-running' : s === 'awaitinghuman' ? 'st-suspended' : 'st-failed';
+const statusLabel = s => s === 'awaitinghuman' ? 'awaiting human' : s;
 const fmtN = n => (n || 0).toLocaleString();
 const fmtTime = ms => new Date(ms).toLocaleTimeString();
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
