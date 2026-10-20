@@ -436,7 +436,10 @@ figure twice.
 for a **live agent console** with no OTLP, collector, or Docker. It turns each loop event into a
 `DashboardEvent` (kind, `taskId`, nullable `turn`, a summary, and a structured `detail` bag),
 keeps a bounded ring buffer so a browser connecting mid-run replays the history, and exposes
-`Subscribe(ct)` for a host endpoint (e.g. Server-Sent Events) to stream. Run/turn aggregation is
+`Subscribe(ct)` for a host endpoint (e.g. Server-Sent Events) to stream. A reconnecting client that
+already processed part of the stream passes the last `DashboardEvent.Seq` it saw to
+`Subscribe(ct, afterSeq)` and is replayed only what came after it (the SSE endpoint does this from
+the `Last-Event-ID` header). Run/turn aggregation is
 left to the consumer, so the tracer stays transport-neutral. Pass
 `new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to also
 include conversation content — each model response's text (the run's result), the task text (otherwise a run

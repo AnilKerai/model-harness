@@ -53,11 +53,23 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
     private long _seq;
 
     /// <summary>
-    /// Streams events to one subscriber: first the ring-buffer backlog (so a late-joining browser
+    /// Streams every event to one subscriber: first the ring-buffer backlog (so a late-joining browser
     /// catches up), then every subsequent event live until <paramref name="ct"/> cancels. A slow
     /// reader never blocks the harness — its channel drops the oldest queued event instead.
     /// </summary>
-    public async IAsyncEnumerable<DashboardEvent> Subscribe([EnumeratorCancellation] CancellationToken ct)
+    public IAsyncEnumerable<DashboardEvent> Subscribe(CancellationToken ct) => Subscribe(ct, 0);
+
+    /// <summary>
+    /// Like <see cref="Subscribe(CancellationToken)"/>, but resumes a dropped connection: backlog events
+    /// with <see cref="DashboardEvent.Seq"/> at or below <paramref name="afterSeq"/> (the last id the client
+    /// processed — an SSE <c>Last-Event-ID</c>) are skipped so it does not see them twice. Live events are
+    /// never filtered. An <paramref name="afterSeq"/> beyond the newest seq means this process restarted and
+    /// seq began again, so the whole backlog is new to the client and is replayed.
+    /// </summary>
+    /// <param name="ct">Cancels the stream.</param>
+    /// <param name="afterSeq">Seq of the last event the client already has; <c>0</c> replays the whole backlog.</param>
+    public async IAsyncEnumerable<DashboardEvent> Subscribe(
+        [EnumeratorCancellation] CancellationToken ct, long afterSeq)
     {
         var channel = Channel.CreateBounded<DashboardEvent>(
             new BoundedChannelOptions(RingCapacity) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
@@ -65,7 +77,8 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
         DashboardEvent[] backlog;
         lock (_gate)
         {
-            backlog = [.. _ring];
+            var skipThrough = afterSeq > _seq ? 0 : afterSeq;
+            backlog = [.. _ring.Where(e => e.Seq > skipThrough)];
             _subscribers.Add(channel);
         }
 
@@ -83,11 +96,13 @@ public sealed class LiveDashboardTracer(bool enableSensitiveData = false) : ITra
 
     // ponytail: single lock guards the ring + subscriber list; a publish is a few non-blocking
     // TryWrites (DropOldest never blocks), so it can't stall the loop thread that called it.
+    // Seq is assigned inside the lock so ring/delivery order is seq order — Subscribe's afterSeq
+    // resume and its "afterSeq beyond newest" restart check both rely on that.
     private void Publish(string kind, string taskId, int? turn, string summary, object? detail = null)
     {
-        var evt = new DashboardEvent(Interlocked.Increment(ref _seq), kind, taskId, turn, summary, detail);
         lock (_gate)
         {
+            var evt = new DashboardEvent(++_seq, kind, taskId, turn, summary, detail);
             if (_ring.Count == RingCapacity) _ring.Dequeue();
             _ring.Enqueue(evt);
             foreach (var s in _subscribers) s.Writer.TryWrite(evt);

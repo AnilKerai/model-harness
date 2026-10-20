@@ -24,6 +24,11 @@ public API even though most consumers only implement a few of them.
   and a checkpoint written before this release loads with `false`, which for taint purposes means "the tool's
   own output".
 
+- **`LiveDashboardTracer.Subscribe(CancellationToken, long afterSeq)`** — resumes a dropped connection:
+  backlog events with `Seq <= afterSeq` are skipped, so a reconnecting client is not sent events it has
+  already processed. An `afterSeq` beyond the newest seq (the process restarted and seq began again)
+  replays the whole backlog. `Subscribe(CancellationToken)` is unchanged and still replays everything.
+
 ### Changed
 
 - **Checkpoints no longer persist `ModelCallStep.Prompt`, so their size grows with the trajectory instead of with
@@ -306,6 +311,19 @@ public API even though most consumers only implement a few of them.
   names the matched PII, `ToolResultSanityCheckSensor` copies the whole tool-error body, `CriticSensor` quotes
   model text. Both are now gated, matching `OpenTelemetryTracer`. A sensor *error*'s reason stays ungated, as
   in `OpenTelemetryTracer` (ADR-001), so a failing sensor is still diagnosable.
+
+- **The live dashboard double-counted tokens, cost and events after an SSE reconnect.** The `/feed`
+  endpoint ignored the `Last-Event-ID` header `EventSource` sends when it reconnects (a network blip, a
+  proxy idle timeout), so each reconnect replayed the whole backlog and the browser, which sums every event
+  it receives, added it to the run totals again. The endpoint now resumes after `Last-Event-ID`, and flushes
+  its response headers up front so a reconnect with nothing to replay opens at once.
+
+- **`LiveDashboardTracer` assigned `Seq` outside its lock**, so with concurrent runs (sub-agents, parallel
+  tasks) events could be queued and delivered out of `Seq` order. `Seq` is now assigned under the lock:
+  ring and delivery order is `Seq` order.
+
+  **Behavioural change:** a `Subscribe` consumer now always sees ascending `Seq`; before, a concurrent
+  publisher could make it see `4, 3`. No code change is needed.
 
 ### Docs
 
