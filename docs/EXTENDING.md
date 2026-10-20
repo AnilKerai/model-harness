@@ -880,6 +880,10 @@ builder.WithSkills("~/.skills/builtin")
 `SkillsGuide` surfaces the catalogue automatically; `skill_view` lets the model load
 the full body on demand. No separate tool wiring needed.
 
+A skill is identified by the `name` in its frontmatter, not by its filename. Any `.md`
+file in the directory that lacks a `name` or `description` (a `README.md`, say) is
+silently ignored — it never hides the other skills.
+
 ## Learning
 
 Enable the agent to accumulate its own skills over time. See the

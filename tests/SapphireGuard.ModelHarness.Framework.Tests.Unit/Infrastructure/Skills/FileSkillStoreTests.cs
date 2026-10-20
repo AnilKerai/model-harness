@@ -148,4 +148,323 @@ public sealed class FileSkillStoreTests : IDisposable
         Assert.Null(await store.GetAsync("s", CancellationToken.None));
         Assert.Single(await store.ListVersionsAsync("s", CancellationToken.None));
     }
+
+    // ── Hand-written files ───────────────────────────────────────────────────
+
+    private static string SkillText(string name, string body = "Do it.", string description = "desc") =>
+        $"---\nname: {name}\ndescription: {description}\nwhen_to_use: when\nversion: 1.0.0\n---\n\n{body}\n";
+
+    private void WriteFile(string fileName, string text)
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, fileName), text);
+    }
+
+    [Fact]
+    public async Task List_MalformedFile_IsSkippedAndTheRestListed()
+    {
+        WriteFile("good.md", SkillText("good"));
+        WriteFile("bad.md", "---\nname: bad\n---\n\nno description\n");
+
+        var summaries = await new FileSkillStore(_dir).ListAsync(CancellationToken.None);
+
+        Assert.Equal("good", Assert.Single(summaries).Name);
+    }
+
+    [Fact]
+    public async Task List_NonSkillMarkdown_IsSkipped()
+    {
+        WriteFile("README.md", "# My skills\n\nSome notes, no frontmatter.\n");
+        WriteFile("empty.md", "");
+        WriteFile("good.md", SkillText("good"));
+
+        var summaries = await new FileSkillStore(_dir).ListAsync(CancellationToken.None);
+
+        Assert.Equal("good", Assert.Single(summaries).Name);
+    }
+
+    [Fact]
+    public async Task List_FileNameDiffersFromFrontmatterName_ListedUnderFrontmatterName()
+    {
+        WriteFile("order-enquiry.md", SkillText("answer-order-enquiry"));
+
+        var summaries = await new FileSkillStore(_dir).ListAsync(CancellationToken.None);
+
+        Assert.Equal("answer-order-enquiry", Assert.Single(summaries).Name);
+    }
+
+    [Fact]
+    public async Task Get_FileNameDiffersFromFrontmatterName_FoundByFrontmatterName()
+    {
+        WriteFile("order-enquiry.md", SkillText("answer-order-enquiry", body: "Look up the order."));
+        var store = new FileSkillStore(_dir);
+
+        var loaded = await store.GetAsync("answer-order-enquiry", CancellationToken.None);
+
+        Assert.NotNull(loaded);
+        Assert.Equal("answer-order-enquiry", loaded!.Name);
+        Assert.Equal("Look up the order.", loaded.Body);
+    }
+
+    [Fact]
+    public async Task Get_FrontmatterNameMatchIsCaseInsensitive()
+    {
+        WriteFile("order-enquiry.md", SkillText("Answer-Order-Enquiry"));
+
+        var loaded = await new FileSkillStore(_dir).GetAsync("answer-order-enquiry", CancellationToken.None);
+
+        Assert.Equal("Answer-Order-Enquiry", loaded!.Name);
+    }
+
+    [Fact]
+    public async Task Get_ExactFileNameMatch_StillWorks()
+    {
+        WriteFile("deploy.md", SkillText("deploy", body: "Ship it."));
+
+        var loaded = await new FileSkillStore(_dir).GetAsync("deploy", CancellationToken.None);
+
+        Assert.Equal("Ship it.", loaded!.Body);
+    }
+
+    [Fact]
+    public async Task Get_FileNameMatchesButFrontmatterNameDoesNot_IsNotReturnedUnderTheFileName()
+    {
+        WriteFile("order-enquiry.md", SkillText("answer-order-enquiry"));
+
+        Assert.Null(await new FileSkillStore(_dir).GetAsync("order-enquiry", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Get_DirectFileMalformed_FallsThroughToAnotherFileWithThatName()
+    {
+        WriteFile("deploy.md", "not a skill at all");
+        WriteFile("zz-deploy-notes.md", SkillText("deploy", body: "From the other file."));
+
+        var loaded = await new FileSkillStore(_dir).GetAsync("deploy", CancellationToken.None);
+
+        Assert.Equal("From the other file.", loaded!.Body);
+    }
+
+    [Fact]
+    public async Task Get_OnlyMalformedFiles_ReturnsNullWithoutThrowing()
+    {
+        WriteFile("deploy.md", "not a skill at all");
+        WriteFile("other.md", "---\ndescription: no name\n---\n");
+
+        Assert.Null(await new FileSkillStore(_dir).GetAsync("deploy", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DuplicateNames_FileNamedAfterTheSkillWins_InGetAndList()
+    {
+        // "a-copy.md" sorts before "deploy.md", but deploy.md is the skill's own file.
+        WriteFile("a-copy.md", SkillText("deploy", body: "copy"));
+        WriteFile("deploy.md", SkillText("deploy", body: "original", description: "original desc"));
+        var store = new FileSkillStore(_dir);
+
+        var loaded = await store.GetAsync("deploy", CancellationToken.None);
+        var summaries = await store.ListAsync(CancellationToken.None);
+
+        Assert.Equal("original", loaded!.Body);
+        var summary = Assert.Single(summaries);
+        Assert.Equal("original desc", summary.Description);
+    }
+
+    [Fact]
+    public async Task DuplicateNames_NoneNamedAfterTheSkill_FirstByOrdinalFileNameWins()
+    {
+        WriteFile("b.md", SkillText("deploy", body: "from b", description: "b desc"));
+        WriteFile("a.md", SkillText("deploy", body: "from a", description: "a desc"));
+        WriteFile("c.md", SkillText("deploy", body: "from c", description: "c desc"));
+        var store = new FileSkillStore(_dir);
+
+        var loaded = await store.GetAsync("deploy", CancellationToken.None);
+        var summaries = await store.ListAsync(CancellationToken.None);
+
+        Assert.Equal("from a", loaded!.Body);
+        Assert.Equal("a desc", Assert.Single(summaries).Description);
+    }
+
+    [Fact]
+    public async Task List_ReturnsSkillsInOrdinalFileNameOrder()
+    {
+        WriteFile("c.md", SkillText("c"));
+        WriteFile("a.md", SkillText("a"));
+        WriteFile("b.md", SkillText("b"));
+
+        var summaries = await new FileSkillStore(_dir).ListAsync(CancellationToken.None);
+
+        Assert.Equal(["a", "b", "c"], summaries.Select(s => s.Name));
+    }
+
+    // ── Names the agent supplies ─────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("deploy ")]
+    [InlineData(" deploy")]
+    [InlineData("deploy\n")]
+    public async Task Save_NameWithStrayWhitespace_IsListedAndLoadableUnderTheCleanName(string messyName)
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill(messyName, "d", "u", "b"), CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(_dir, "deploy.md")));
+        Assert.Equal("deploy", Assert.Single(await store.ListAsync(CancellationToken.None)).Name);
+        Assert.NotNull(await store.GetAsync("deploy", CancellationToken.None));
+        Assert.NotNull(await store.GetAsync(messyName, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Save_NameWithEmbeddedNewline_IsListedAndLoadableUnderTheFoldedName()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("deploy\nmodal", "d", "u", "b"), CancellationToken.None);
+
+        var listed = Assert.Single(await store.ListAsync(CancellationToken.None));
+        Assert.Equal("deploy modal", listed.Name);
+        Assert.NotNull(await store.GetAsync(listed.Name, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Save_TwiceWithDifferentWhitespace_OverwritesAndArchivesOneSkill()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("deploy", "d", "u", "v1"), CancellationToken.None);
+        await store.SaveAsync(new Skill("deploy ", "d", "u", "v2"), CancellationToken.None);
+
+        Assert.Single(await store.ListAsync(CancellationToken.None));
+        Assert.Equal("v2", (await store.GetAsync("deploy", CancellationToken.None))!.Body);
+        Assert.Equal("v1", Assert.Single(await store.ListVersionsAsync("deploy ", CancellationToken.None)).Skill.Body);
+    }
+
+    [Fact]
+    public async Task Delete_NameWithStrayWhitespace_RemovesTheSkill()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("deploy", "d", "u", "b"), CancellationToken.None);
+
+        await store.DeleteAsync(" deploy\n", CancellationToken.None);
+
+        Assert.Empty(await store.ListAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData(" .. ")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Save_ReservedName_IsRejectedAndWritesNothing(string name)
+    {
+        var store = new FileSkillStore(_dir);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.SaveAsync(new Skill(name, "d", "u", "b"), CancellationToken.None));
+
+        Assert.Empty(await store.ListAsync(CancellationToken.None));
+        Assert.False(Directory.Exists(_dir) && Directory.EnumerateFileSystemEntries(_dir).Any());
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    public async Task ReadAndDelete_ReservedName_AreHarmlessNoOps(string name)
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("real", "d", "u", "b"), CancellationToken.None);
+
+        await store.DeleteAsync(name, CancellationToken.None);
+
+        Assert.Null(await store.GetAsync(name, CancellationToken.None));
+        Assert.Empty(await store.ListVersionsAsync(name, CancellationToken.None));
+        Assert.Null(await store.GetVersionAsync(name, "20260101T000000Z", CancellationToken.None));
+        Assert.Single(await store.ListAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Save_LeavesNoTempFileBehind()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("s", "d", "u", "v1"), CancellationToken.None);
+        await store.SaveAsync(new Skill("s", "d", "u", "v2"), CancellationToken.None);
+
+        Assert.Equal(["s.md"], Directory.EnumerateFiles(_dir).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Save_OverMalformedFile_ReplacesItWithAValidSkill()
+    {
+        WriteFile("s.md", "garbage");
+        var store = new FileSkillStore(_dir);
+
+        await store.SaveAsync(new Skill("s", "d", "u", "fixed"), CancellationToken.None);
+
+        Assert.Equal("fixed", (await store.GetAsync("s", CancellationToken.None))!.Body);
+    }
+
+    // ── History ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ListVersions_MalformedArchive_IsSkipped()
+    {
+        var store = new FileSkillStore(_dir);
+        await store.SaveAsync(new Skill("s", "d", "u", "v1"), CancellationToken.None);
+        await store.SaveAsync(new Skill("s", "d", "u", "v2"), CancellationToken.None);
+        File.WriteAllText(Path.Combine(_dir, ".history", "s", "20200101T000000Z.md"), "torn");
+
+        var versions = await store.ListVersionsAsync("s", CancellationToken.None);
+
+        Assert.Equal("v1", Assert.Single(versions).Skill.Body);
+    }
+
+    [Fact]
+    public async Task Save_OverMalformedFile_ThenListVersions_DoesNotThrow()
+    {
+        WriteFile("s.md", "garbage");
+        var store = new FileSkillStore(_dir);
+
+        await store.SaveAsync(new Skill("s", "d", "u", "fixed"), CancellationToken.None);
+
+        Assert.Empty(await store.ListVersionsAsync("s", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetVersion_MalformedArchive_ReturnsNull()
+    {
+        var historyDir = Path.Combine(_dir, ".history", "s");
+        Directory.CreateDirectory(historyDir);
+        File.WriteAllText(Path.Combine(historyDir, "20200101T000000Z.md"), "torn");
+
+        Assert.Null(await new FileSkillStore(_dir).GetVersionAsync("s", "20200101T000000Z", CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("../../../secret")]
+    [InlineData("../../../secret.md")]
+    [InlineData("..\\..\\..\\secret")]
+    public async Task GetVersion_IdWithPathSegments_DoesNotReadOutsideTheStore(string versionId)
+    {
+        // Layout: {_dir}/secret.md is a valid skill outside the store at {_dir}/store.
+        var store = await StoreWithSecretOutsideAsync();
+
+        Assert.Null(await store.GetVersionAsync("s", versionId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetVersion_AbsolutePathId_DoesNotReadOutsideTheStore()
+    {
+        var store = await StoreWithSecretOutsideAsync();
+
+        Assert.Null(await store.GetVersionAsync("s", Path.Combine(_dir, "secret"), CancellationToken.None));
+    }
+
+    private async Task<FileSkillStore> StoreWithSecretOutsideAsync()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "secret.md"), SkillText("secret"));
+        var store = new FileSkillStore(Path.Combine(_dir, "store"));
+        await store.SaveAsync(new Skill("s", "d", "u", "v1"), CancellationToken.None);
+        await store.SaveAsync(new Skill("s", "d", "u", "v2"), CancellationToken.None);
+        return store;
+    }
 }
