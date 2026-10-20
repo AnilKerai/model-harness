@@ -180,6 +180,32 @@ public API even though most consumers only implement a few of them.
   you build by hand and `AppendStep` directly has zero baselines too; use `WithUserMessage` for a chat turn. A
   custom `IBudgetEnforcer` is unaffected.
 
+- **Chat mode could drop the user's current question from the model's context.** `AddChatHarness` builds
+  `HeadEvictionTrajectoryGuide(pinOriginalGoal: false)`, so nothing protected the latest user turn. Eviction
+  trims groups oldest-first, so when the current turn's tool results alone exceeded
+  `CompactionOptions.WindowTokens` the latest `UserMessageStep` was trimmed after the earlier turns — with the
+  default `NullCompactionStrategy` it became a bare "[N earlier step(s) omitted — context window limit]"
+  note, and the model no longer knew what it had been asked. (Task mode was unaffected: the `[ORIGINAL GOAL]`
+  pin carries the goal.)
+
+  In chat mode, when the latest user message's group is trimmed this turn or sits behind the fold watermark,
+  the guide now renders it verbatim as a System trajectory message, `[CURRENT REQUEST] {content}`, which
+  `DefaultContextBuilder` folds into the single system message. While the turn survives in position nothing
+  extra is rendered. Task mode (`pinOriginalGoal: true`) is unchanged.
+
+  **Behavioural change** — chat mode now subtracts the `[CURRENT REQUEST]` note's size (roughly the latest
+  user message) from the eviction budget on every turn, as task mode does for the goal anchor. The reserve is
+  charged before trimming, so the trim is computed once and the window is still respected, but it is charged
+  whether or not the note ends up rendered. The effect is that eviction — and, with `AiCompactionStrategy`,
+  the fold and its compaction model call — starts that much sooner: when a chat history is within that margin
+  of `WindowTokens`, older turns are dropped (or folded) where they previously still fit. The latest user
+  message stays in its position in the conversation unless it is itself the oldest remaining group (for
+  example a single-turn chat whose history is a question followed by a long answer); only then is it moved
+  into the system message, with its text unchanged.
+  Nothing needs to change in calling code. If a chat harness runs close to its `WindowTokens`, expect earlier
+  turns to be omitted or summarised a little sooner; and if you assert on the exact messages it sends for an
+  oversized turn, expect the `[CURRENT REQUEST]` text in the system message and no user turn at that position.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SapphireGuard.ModelHarness.Framework.Context;
 using SapphireGuard.ModelHarness.Framework.Guides;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
@@ -78,10 +79,12 @@ public sealed class HeadEvictionTrajectoryGuideTests
         Assert.True(rendered <= window,
             $"rendered {rendered} tokens into a {window}-token window — the goal anchor is not being charged for");
 
-        // Control: without the anchor the same state fits the window untrimmed (1 user + 40 assistant),
-        // so the trimming above is the anchor making room for itself rather than the history being too big.
+        // Control: without the anchor the same history fits the window with every answer kept, so the
+        // trimming above is the anchor making room for itself rather than the history being too big.
+        // (Chat mode reserves room for a [CURRENT REQUEST] note instead, which moves the oversized
+        // opener into the system message — hence the count of answers, not of all messages.)
         var unpinned = await ContributeAsync(state, windowTokens: window, pinOriginalGoal: false);
-        Assert.Equal(41, unpinned.TrajectoryMessages.Count);
+        Assert.Equal(40, unpinned.TrajectoryMessages.Count(m => m.Role == MessageRole.Assistant));
     }
 
     private static int RenderedTokens(ContextDraft draft) =>
@@ -452,6 +455,147 @@ public sealed class HeadEvictionTrajectoryGuideTests
         var draft = await ContributeAsync(state);
 
         Assert.Null(draft.CompactionTrace);
+    }
+
+    // ── Chat mode: the latest user turn survives eviction ─────────────────────
+
+    private const string Question = "Which of these invoices are overdue?";
+    private const string CurrentRequestNote = "[CURRENT REQUEST] " + Question;
+
+    private static ToolCallStep BulkyToolStep(int resultChars) =>
+        new(Guid.NewGuid(), DateTimeOffset.UtcNow,
+            Call: new ToolCall(Guid.NewGuid().ToString("n"), "fetch", JsonDocument.Parse("{}").RootElement),
+            Result: new ToolResult("id", new string('x', resultChars)));
+
+    // A second chat turn whose tool output alone overflows a 500-token window (~1000 tokens), so the
+    // earlier turn *and* the user message that opened this one are trimmed oldest-first.
+    private static AgentState SecondTurnWithBulkyToolResult() =>
+        EmptyState()
+            .AppendStep(ModelStep("opening answer"))
+            .WithUserMessage(Question, DateTimeOffset.UtcNow)
+            .AppendStep(BulkyToolStep(4_000));
+
+    [Fact]
+    public async Task Contribute_ChatModeUserTurnEvicted_RendersItAsASystemCurrentRequest()
+    {
+        var draft = await ContributeAsync(SecondTurnWithBulkyToolResult(), windowTokens: 500, pinOriginalGoal: false);
+
+        var note = Assert.Single(draft.TrajectoryMessages, m => m.Content.StartsWith("[CURRENT REQUEST]"));
+        Assert.Equal(MessageRole.System, note.Role);
+        Assert.Equal(CurrentRequestNote, note.Content);
+        // Evicted from its position, so it is not also rendered as a user turn.
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Role == MessageRole.User);
+        // The still-live tool exchange is untouched.
+        Assert.Contains(draft.TrajectoryMessages, m => m.Role == MessageRole.Tool);
+    }
+
+    [Fact]
+    public async Task Contribute_ChatModeUserTurnEvicted_OnlyTheLatestUserTurnIsRenderedAsCurrentRequest()
+    {
+        var draft = await ContributeAsync(SecondTurnWithBulkyToolResult(), windowTokens: 500, pinOriginalGoal: false);
+
+        Assert.Single(draft.TrajectoryMessages, m => m.Content.Contains("[CURRENT REQUEST]"));
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("[ORIGINAL GOAL]"));
+    }
+
+    [Fact]
+    public async Task BuildAsync_ChatModeUserTurnEvicted_PutsTheQuestionInTheSystemMessageNotTheConversation()
+    {
+        // End to end through the builder: the System-role note is folded into the single system
+        // message (the only one an adapter forwards), and the conversation no longer carries the turn.
+        var guide = new HeadEvictionTrajectoryGuide(
+            new NullCompactionStrategy(), new CompactionOptions { WindowTokens = 500 }, pinOriginalGoal: false);
+        var builder = new DefaultContextBuilder(new DefaultGuideRunner([], guide));
+
+        var result = await builder.BuildAsync(SecondTurnWithBulkyToolResult(), [], CancellationToken.None);
+
+        var system = Assert.Single(result.Messages, m => m.Role == MessageRole.System);
+        Assert.Same(system, result.Messages[0]);
+        Assert.Contains(CurrentRequestNote, system.Content);
+        Assert.DoesNotContain(result.Messages.Skip(1), m => m.Content.Contains(Question));
+    }
+
+    [Fact]
+    public async Task Contribute_ChatModeUserTurnBehindTheFoldWatermark_RendersItAsACurrentRequest()
+    {
+        // Groups: opener, answer, question, tool exchange. A watermark of 3 means the question is
+        // represented only by the summary — which is lossy — so it must still reach the model verbatim.
+        var state = SecondTurnWithBulkyToolResult() with { RollingSummary = new RollingSummary("PRIOR SUMMARY", 3) };
+
+        var draft = await ContributeAsync(state, pinOriginalGoal: false); // default large window → no trim
+
+        Assert.Single(draft.TrajectoryMessages, m => m.Content == CurrentRequestNote);
+        Assert.Contains(draft.TrajectoryMessages, m => m.Content == "PRIOR SUMMARY");
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Role == MessageRole.User);
+    }
+
+    [Fact]
+    public async Task Contribute_ChatModeUserTurnEvicted_ChargesTheCurrentRequestToTheBudget()
+    {
+        // The [CURRENT REQUEST] note is added after the trim but rides in the same window, so it has to
+        // be charged before trimming — as the goal anchor is. A 2,000-char question (~500 tokens)
+        // followed by twenty ~10-token answers totals ~700 tokens against a 650-token window: the
+        // question is evicted, and re-adding it uncharged would render ~690 tokens into 650.
+        const int window = 650;
+        var state = AgentState.NewTask(new string('q', 2_000), new StateBudget
+        {
+            MaxTurns = 100, MaxTotalTokens = 100_000, MaxCost = 10m, MaxWallClock = TimeSpan.FromMinutes(1)
+        }, DateTimeOffset.UtcNow);
+        for (var i = 0; i < 20; i++)
+            state = state.AppendStep(ModelStep($"answer {i:00} with padding to ~40 chars...."));
+
+        var draft = new ContextDraft();
+        await new HeadEvictionTrajectoryGuide(new SilentViewStrategy(), new CompactionOptions { WindowTokens = window }, pinOriginalGoal: false)
+            .ContributeAsync(draft, state, CancellationToken.None);
+
+        Assert.Single(draft.TrajectoryMessages, m => m.Content.StartsWith("[CURRENT REQUEST]"));
+        var rendered = RenderedTokens(draft);
+        Assert.True(rendered <= window,
+            $"rendered {rendered} tokens into a {window}-token window — the current request is not being charged for");
+    }
+
+    [Fact]
+    public async Task Contribute_ChatModeUserTurnNotEvicted_RendersItInPositionWithNoCurrentRequest()
+    {
+        var draft = await ContributeAsync(SecondTurnWithBulkyToolResult(), pinOriginalGoal: false); // large window
+
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("[CURRENT REQUEST]"));
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Role == MessageRole.System);
+        Assert.Equal(
+            new[] { MessageRole.User, MessageRole.Assistant, MessageRole.User, MessageRole.ToolUse, MessageRole.Tool },
+            draft.TrajectoryMessages.Select(m => m.Role));
+        Assert.Equal(Question, draft.TrajectoryMessages[2].Content);
+    }
+
+    [Fact]
+    public async Task Contribute_ChatModeNewTurnIsTheLastGroup_KeepsItInPositionEvenInATinyWindow()
+    {
+        // The question just arrived: it is the most recent group, which eviction never removes.
+        var state = EmptyState()
+            .AppendStep(ModelStep("opening answer"))
+            .WithUserMessage(Question, DateTimeOffset.UtcNow);
+
+        var draft = await ContributeAsync(state, windowTokens: 1, pinOriginalGoal: false);
+
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("[CURRENT REQUEST]"));
+        Assert.Equal(Question, draft.TrajectoryMessages[^1].Content);
+        Assert.Equal(MessageRole.User, draft.TrajectoryMessages[^1].Role);
+    }
+
+    [Fact]
+    public async Task Contribute_TaskModeOversizedTurn_IsUnchanged()
+    {
+        // Task mode keeps the [ORIGINAL GOAL] pin and never renders a [CURRENT REQUEST]: the same
+        // oversized state evicts exactly as before (the omission note, the pinned goal, then the
+        // still-live tool exchange).
+        var draft = await ContributeAsync(SecondTurnWithBulkyToolResult(), windowTokens: 500, pinOriginalGoal: true);
+
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("[CURRENT REQUEST]"));
+        Assert.Equal(
+            new[] { MessageRole.System, MessageRole.System, MessageRole.ToolUse, MessageRole.Tool },
+            draft.TrajectoryMessages.Select(m => m.Role));
+        Assert.Contains("omitted", draft.TrajectoryMessages[0].Content);
+        Assert.Equal("[ORIGINAL GOAL] test", draft.TrajectoryMessages[1].Content);
     }
 
     // ── Never-empty conversation (empty messages array is a provider 400) ──────

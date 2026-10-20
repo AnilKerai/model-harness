@@ -23,7 +23,8 @@ public sealed class DefaultContextBuilder(IGuideRunner guideRunner) : IContextBu
 
         // Every model adapter forwards only the first System message and drops the rest, so any
         // System-role message left inline in the trajectory (the compaction summary and the
-        // [ORIGINAL GOAL] anchor emitted by HeadEvictionTrajectoryGuide) would silently vanish.
+        // [ORIGINAL GOAL] / [CURRENT REQUEST] anchor emitted by HeadEvictionTrajectoryGuide) would
+        // silently vanish.
         // Fold them into the single system message that survives; the conversation carries only
         // the non-System turns.
         var systemParts = new List<string> { AssembleSystemMessage(draft) };

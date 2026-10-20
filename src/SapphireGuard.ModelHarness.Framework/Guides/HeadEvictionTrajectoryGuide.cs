@@ -26,6 +26,11 @@ namespace SapphireGuard.ModelHarness.Framework.Guides;
 /// When <paramref name="pinOriginalGoal"/> is <see langword="false"/> (chat mode) the
 /// fixed <c>[ORIGINAL GOAL]</c> anchor is omitted — the latest user turn is already the
 /// live goal, so re-pinning the first message would misdirect a multi-turn conversation.
+/// Nothing protects that turn from eviction, though: when the current turn's tool results alone
+/// overflow the window, its group is trimmed (or sits behind the fold watermark) and the model
+/// would no longer know what was asked. So in that case the latest user message is rendered
+/// verbatim as a <c>[CURRENT REQUEST]</c> system note instead; while it survives in position,
+/// nothing extra is rendered.
 /// </summary>
 public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionStrategy, CompactionOptions options, bool pinOriginalGoal = true) : ITrajectoryGuide
 {
@@ -53,6 +58,14 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
             budget -= EstimateTokens(priorSummary.Text);
         if (pinOriginalGoal)
             budget -= EstimateTokens(OriginalGoal(state.TaskText));
+
+        // Chat mode: the latest user turn is the live goal and has no pin, so it may be evicted and
+        // have to be re-rendered as a system note. Reserve room for that note up front rather than
+        // trimming twice; the reserve is conservative, as the goal anchor's is, since the note is
+        // only emitted when the turn is actually gone.
+        var currentRequest = pinOriginalGoal ? null : state.Trajectory.OfType<UserMessageStep>().LastOrDefault();
+        if (currentRequest is not null)
+            budget -= EstimateTokens(CurrentRequest(currentRequest.Content));
 
         // Never evict the most recent group: a fully-evicted turn renders zero conversational
         // messages, which the provider rejects as an empty `messages` array. Keeping one live group
@@ -127,6 +140,11 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
         if (pinOriginalGoal)
             draft.TrajectoryMessages.Add(new Message(MessageRole.System, OriginalGoal(state.TaskText)));
 
+        // The latest user turn is gone from the live groups (trimmed this turn, or behind the fold
+        // watermark): without this the model cannot tell what the user asked.
+        if (currentRequest is not null && !liveGroups.Any(g => ReferenceEquals(g.Step, currentRequest)))
+            draft.TrajectoryMessages.Add(new Message(MessageRole.System, CurrentRequest(currentRequest.Content)));
+
         foreach (var (_, messages) in liveGroups)
             draft.TrajectoryMessages.AddRange(messages);
 
@@ -143,6 +161,8 @@ public sealed class HeadEvictionTrajectoryGuide(ICompactionStrategy compactionSt
     // One definition so the text charged to the eviction budget and the text rendered are the same
     // string — counting one thing and emitting another is exactly how the window overshoot arose.
     private static string OriginalGoal(string taskText) => $"[ORIGINAL GOAL] {taskText}";
+
+    private static string CurrentRequest(string userMessage) => $"[CURRENT REQUEST] {userMessage}";
 
     private static List<(Step Step, List<Message> Messages)> RenderSteps(IReadOnlyList<Step> trajectory)
     {
