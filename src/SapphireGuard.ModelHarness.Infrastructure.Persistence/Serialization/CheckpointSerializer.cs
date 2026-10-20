@@ -9,7 +9,6 @@ public static class CheckpointSerializer
 {
     public static readonly JsonSerializerOptions Options = new()
     {
-        WriteIndented = true,
         Converters = { new StepJsonConverter() }
     };
 
