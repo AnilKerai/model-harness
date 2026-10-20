@@ -49,9 +49,9 @@ public sealed class HarnessLoopHitlWallClockTests
         Assert.Equal(AgentStatus.PartialResult, outcome.Status);
         Assert.Contains("Reached MaxWallClock", outcome.FailureReason);
         Assert.Equal("best effort", outcome.FinalAnswer);
-        // Call 1 was offered the tool (so the registry really does list one); call 2 — the only
+        // Call 1 was offered both tools (so the registry really does list some); call 2 — the only
         // post-resume call — is the tool-less finalisation.
-        Assert.Equal([1, 0], client.ToolsOffered);
+        Assert.Equal([2, 0], client.ToolsOffered);
     }
 
     [Theory]
@@ -70,7 +70,7 @@ public sealed class HarnessLoopHitlWallClockTests
             .RunAsync(resumed, CancellationToken.None);
 
         Assert.Equal(AgentStatus.Done, outcome.Status);
-        Assert.Equal([1, 1], client.ToolsOffered);
+        Assert.Equal([2, 2], client.ToolsOffered);
     }
 
     // ── The documented remedy ─────────────────────────────────────────────────
@@ -99,7 +99,7 @@ public sealed class HarnessLoopHitlWallClockTests
         Assert.Equal("all done", outcome.FinalAnswer);
         Assert.Null(outcome.FailureReason);
         Assert.Equal(1, registry.DispatchedLookups); // the tool really ran after the resume
-        Assert.Equal([1, 1, 1], client.ToolsOffered); // every post-resume call was offered the tool
+        Assert.Equal([2, 2, 2], client.ToolsOffered); // every post-resume call was offered the tools
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -185,11 +185,13 @@ public sealed class HarnessLoopHitlWallClockTests
         }
     }
 
-    // Lists one real tool (StubToolRegistry lists none, which would make "offered no tools" vacuous);
-    // ask_human dispatches as a pending result, anything else as a plain success.
+    // Lists the tools it dispatches, as production does (AskHumanTool is registered and offered; the
+    // loop refuses a call to a tool that was not offered). StubToolRegistry lists none, which would
+    // make "offered no tools" vacuous. ask_human dispatches as a pending result, anything else as a
+    // plain success.
     private sealed class ListingToolRegistry : IToolRegistry
     {
-        private readonly ITool[] _tools = [new LookupTool()];
+        private readonly ITool[] _tools = [new NamedTool("ask_human"), new NamedTool("lookup")];
 
         public int DispatchedLookups { get; private set; }
 
@@ -207,10 +209,10 @@ public sealed class HarnessLoopHitlWallClockTests
         }
     }
 
-    private sealed class LookupTool : ITool
+    private sealed class NamedTool(string name) : ITool
     {
-        public string Name => "lookup";
-        public string Description => "Looks something up.";
+        public string Name => name;
+        public string Description => $"The {name} tool.";
         public JsonElement InputSchema => EmptyArgs();
 
         public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct) =>
