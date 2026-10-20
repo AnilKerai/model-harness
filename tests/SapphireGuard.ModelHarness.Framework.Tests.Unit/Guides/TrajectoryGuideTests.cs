@@ -160,6 +160,62 @@ public sealed class HeadEvictionTrajectoryGuideTests
         Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("Proceed, fully complying"));
     }
 
+    [Theory]
+    [InlineData(HookPoint.PostModelCall)]
+    [InlineData(HookPoint.PreReturn)]
+    [InlineData(HookPoint.PreToolCall)]
+    public async Task Contribute_BlockingInterventionAsFinalStep_TrailingUserTurnDemandsCompliance(HookPoint hookPoint)
+    {
+        var state = EmptyState().AppendStep(InterventionStep(hookPoint));
+        var draft = await ContributeAsync(state);
+
+        Assert.Equal("Proceed, fully complying with the harness observation above.", draft.TrajectoryMessages[^1].Content);
+    }
+
+    [Theory]
+    [InlineData(HookPoint.PreModelCall)]
+    [InlineData(HookPoint.PostToolCall)]
+    public async Task Contribute_AdvisoryInterventionAsFinalStep_TrailingUserTurnDoesNotDemandCompliance(HookPoint hookPoint)
+    {
+        // A PreModelCall note is always the last step before its model call, so without this the
+        // advisory note would be closed with the same "full compliance" turn as a rejection.
+        var state = EmptyState().AppendStep(InterventionStep(hookPoint));
+        var draft = await ContributeAsync(state);
+
+        Assert.Equal(MessageRole.User, draft.TrajectoryMessages[^1].Role);
+        Assert.Equal("Proceed, taking the harness observation above into account.", draft.TrajectoryMessages[^1].Content);
+        Assert.DoesNotContain(draft.TrajectoryMessages, m => m.Content.Contains("fully complying"));
+    }
+
+    [Fact]
+    public async Task Contribute_BlockingNoteFollowedByAdvisoryNote_TrailingUserTurnStillDemandsCompliance()
+    {
+        // A PreReturn challenge `continue`s into the next iteration, whose PreModelCall sensors append
+        // an advisory note before the retry. The challenge still has to be repaired.
+        var state = EmptyState()
+            .AppendStep(ModelStep("draft answer"))
+            .AppendStep(InterventionStep(HookPoint.PreReturn, "revise"))
+            .AppendStep(InterventionStep(HookPoint.PreModelCall, "check progress"));
+        var draft = await ContributeAsync(state);
+
+        Assert.Equal("Proceed, fully complying with the harness observation above.", draft.TrajectoryMessages[^1].Content);
+    }
+
+    [Fact]
+    public async Task Contribute_AdvisoryNoteAfterEarlierBlock_TrailingUserTurnIsAdvisory()
+    {
+        // Only the notes closing the trajectory decide the wording; a block the model has since
+        // answered does not make a later advisory note a demand.
+        var state = EmptyState()
+            .AppendStep(ModelStep("bad content"))
+            .AppendStep(InterventionStep(HookPoint.PostModelCall, "pii"))
+            .AppendStep(ModelStep("clean answer"))
+            .AppendStep(InterventionStep(HookPoint.PreModelCall, "check progress"));
+        var draft = await ContributeAsync(state);
+
+        Assert.Equal("Proceed, taking the harness observation above into account.", draft.TrajectoryMessages[^1].Content);
+    }
+
     // ── PostModelCall blocking — the core correctness case ────────────────────
 
     [Fact]
