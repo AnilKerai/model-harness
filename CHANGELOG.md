@@ -12,6 +12,31 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Fixed
+
+- **Chat mode could drop the user's current question from the model's context.** `AddChatHarness` builds
+  `HeadEvictionTrajectoryGuide(pinOriginalGoal: false)`, so nothing protected the latest user turn. Eviction
+  trims groups oldest-first, so when the current turn's tool results alone exceeded
+  `CompactionOptions.WindowTokens` the latest `UserMessageStep` was trimmed after the earlier turns — with the
+  default `NullCompactionStrategy` it became a bare "[N earlier step(s) omitted — context window limit]"
+  note, and the model no longer knew what it had been asked. (Task mode was unaffected: the `[ORIGINAL GOAL]`
+  pin carries the goal.)
+
+  In chat mode, when the latest user message's group is trimmed this turn or sits behind the fold watermark,
+  the guide now renders it verbatim as a System trajectory message, `[CURRENT REQUEST] {content}`, which
+  `DefaultContextBuilder` folds into the single system message. While the turn survives in position nothing
+  extra is rendered. Task mode (`pinOriginalGoal: true`) is unchanged.
+
+  **Behavioural change** — chat mode reserves room for that note on every turn, as task mode does for the
+  goal anchor. The reserve is charged before trimming (so the trim is computed once and the window is still
+  respected), which counts the latest user message twice while trimming: when a history fits the window by
+  less than that message's own size, the message is now moved from the conversation into the system message
+  even though everything would have fit. Its text is unchanged.
+  Nothing needs to change in calling code; if you assert on the exact messages a chat harness sends for an
+  oversized turn, expect the `[CURRENT REQUEST]` text in the system message and no user turn at that position.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI

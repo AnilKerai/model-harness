@@ -34,7 +34,9 @@ immediately exposed the second bug, fixed in 2.2.0: neither had ever been charge
 budget, so every compacted turn now overshot `WindowTokens` by their size. The overshoot had been
 inert only because the text it counted was being discarded. Counting one string and emitting
 another is the general failure, which is why `OriginalGoal(...)` is now a single definition shared
-by the charge and the render.
+by the charge and the render. The chat-mode `[CURRENT REQUEST]` note (the latest user message, rendered
+as a System message when its group is evicted or behind the watermark) follows the same rule through
+`CurrentRequest(...)`.
 
 ## Decision
 

@@ -42,6 +42,9 @@ These are thin siblings of the model-harness entry points — same `HarnessLoop`
   sums the whole trajectory, which would exhaust a long chat after `MaxTurns` total model calls.
 - **Unpinned goal** (`HeadEvictionTrajectoryGuide(pinOriginalGoal: false)`): drops the
   `[ORIGINAL GOAL]` anchor, since a conversation's live goal is the latest user turn, not the opener.
+  That turn has no pin, so if eviction trims it (e.g. the current turn's tool results alone overflow
+  `CompactionOptions.WindowTokens`) or the fold watermark covers it, the guide renders it verbatim as a
+  `[CURRENT REQUEST]` system note rather than letting the model lose what the user asked.
 
 `AddStandardChatHarness` additionally wires the chat-appropriate standard defaults —
 `InMemoryToolRegistry`, `GetDateTimeTool`, OpenTelemetry tracing, and the `PromptInjectionSensor`

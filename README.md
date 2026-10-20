@@ -458,7 +458,7 @@ stays open across many user turns — use `AddChatHarness` (bare, in `Framework`
 just swap two seams for the conversational lifecycle: a **per-turn budget**
 (`TurnScopedBudgetEnforcer`, so each user turn gets a fresh allowance instead of the whole
 conversation draining one budget) and an **unpinned goal** (the trajectory guide stops re-injecting
-the first message as `[ORIGINAL GOAL]`, since a conversation's live goal is the latest turn).
+the first message as `[ORIGINAL GOAL]`, since a conversation's live goal is the latest turn; if eviction ever trims that turn out of the window, it is re-rendered verbatim as a `[CURRENT REQUEST]` system note).
 `AddStandardChatHarness` also wires the chat-appropriate sensors — `PromptInjectionSensor` and
 `StuckDetector` — but not the task-completion `ProgressCheckSensor`.
 
