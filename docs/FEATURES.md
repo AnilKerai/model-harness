@@ -23,7 +23,7 @@ flowchart LR
 - **Distinct runs** — every event carries a `taskId`, so the UI lists each run, lets you switch between them, and filters them by keyword.
 - **Grouped by turn** — every event carries a zero-based `turn` (nullable: run-level events like `run`/`done` sit outside any turn), so the UI totals tokens / cost / tool-calls per turn and divides the live trace into turns.
 - **Drill into any event** — each event carries a structured `detail` bag (tokens, cost, finish reason, sensor verdict, checkpoint timing, …) shown on demand.
-- **The run's result** — build the tracer with `enableSensitiveData: true` and each `model` event also carries the response text, so the UI can show the final answer (the result *is* the last model response's text). Off by default, matching `OpenTelemetryTracer` — no model output leaves the process unless you opt in.
+- **The run's result** — build the tracer with `enableSensitiveData: true` and each `model` event also carries the response text, so the UI can show the final answer (the result *is* the last model response's text). Off by default, matching `OpenTelemetryTracer` — no conversation content leaves the process unless you opt in. The same flag also gates the task text (the `run` event's summary — with it off the run list shows task ids, and the keyword filter matches ids only) and each sensor intervention's reason, which can quote the content it flagged; a sensor *error*'s reason is always shown.
 
 ### Why it's built this way
 
@@ -32,7 +32,7 @@ flowchart LR
 | **It's an `ITracer`, not a new port** | No loop change, no new abstraction — the loop already emits every event a dashboard needs (`BeginModelCall`, `LogSensorResult`, `LogBudgetSnapshot`, …). Compose it *alongside* `OpenTelemetryTracer`: local console and durable OTLP backend at once. |
 | **The tracer is transport-neutral** | It is a plain event feed with **zero web dependencies** (just `System.Threading.Channels`). All run/turn aggregation happens in the consumer over the event stream, so the same tracer drives Server-Sent Events, SignalR, a Blazor circuit, or a terminal UI. |
 | **Hosting is a thin, separate package** | `LiveDashboardTracer` ships in `Infrastructure` (no web deps); the ASP.NET Core hosting — page, assets, and SSE feed — ships as `SapphireGuard.ModelHarness.Dashboard`, added with one line: `app.MapHarnessDashboard()`. Only that package references ASP.NET Core, so a non-web consumer never pays for it, and the UI is embedded (nothing to copy). |
-| **Content is opt-in** | Metadata and short summaries by default; response text only when `enableSensitiveData` is set. Full prompt/tool-result bodies remain `OpenTelemetryTracer`'s job. |
+| **Content is opt-in** | Metadata and short summaries by default; response text, task text and sensor intervention reasons only when `enableSensitiveData` is set. Full prompt/tool-result bodies remain `OpenTelemetryTracer`'s job. |
 
 > The dashboard is the **local operator console**; for durable multi-run history and cross-service correlation, point `WithOtelTracer()` at an OTLP backend (Aspire, Grafana/Tempo, Honeycomb, Datadog, [Langfuse](EXTENDING.md#exporting-to-langfuse)). The two compose. See `samples/LiveDashboard` and [RUNNING.md](RUNNING.md#live-dashboard) to run it, and [EXTENDING.md](EXTENDING.md#tracers) for wiring.
 

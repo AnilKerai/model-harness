@@ -12,6 +12,28 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Fixed
+
+- **`LiveDashboardTracer` no longer publishes conversation content unless `enableSensitiveData` is on.** Its
+  documentation promised this, but with the default `false` it still pushed two kinds of content over the
+  dashboard's SSE feed to every viewer: the first 300 characters of the task text (the `run` event's summary)
+  and every sensor intervention's `reason`. A reason can quote what the sensor flagged — `PiiRedactionSensor`
+  names the matched PII, `ToolResultSanityCheckSensor` copies the whole tool-error body, `CriticSensor` quotes
+  model text. Both are now gated, matching `OpenTelemetryTracer`. A sensor *error*'s reason stays ungated, as
+  in `OpenTelemetryTracer` (ADR-001), so a failing sensor is still diagnosable.
+
+### Changed
+
+- **What the live dashboard feed sends by default changes at runtime.** With `enableSensitiveData: false` (the
+  default): the `run` event's summary is the task id instead of the task text, so the dashboard's run list
+  shows task ids and its keyword filter matches ids only; and a `sensor` event's `detail.reason` is `null` for
+  an intervention (the sensor name, hook point and verdict are still sent). **Migration:** if you read those
+  fields from `LiveDashboardTracer.Subscribe` or the `{prefix}/feed` SSE endpoint, build the tracer with
+  `new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to restore them —
+  only on a feed that is safe to show conversation content. `samples/LiveDashboard` already does.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI
