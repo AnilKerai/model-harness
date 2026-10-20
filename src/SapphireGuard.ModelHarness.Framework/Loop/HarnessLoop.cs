@@ -418,7 +418,21 @@ public sealed class HarnessLoop(
         // silently clipped answer under a status that only mentions the budget.
         if (CutShortReason(response.StopReason) is { } cutShort)
             reason += $" The finalisation response was also cut short: {cutShort}";
-        return PartialOutcome(finalState, response.Text, reason);
+
+        // The finalisation response is model output like any other, so the PostModelCall content gates
+        // (PII redaction) apply to it. Without this the intervention-cap path — which runs exactly when a
+        // gate just rejected three responses — would hand a fourth, unchecked one to the caller. A
+        // rejection withholds the answer rather than retrying: there is no further model call, and
+        // PreReturn is skipped because PartialResult already tells the caller the answer is not final.
+        var gated = await RunSensorsAsync(finalState, turn, HookPoint.PostModelCall, finalState.Trajectory[^1], ct);
+        if (gated.Intervened)
+        {
+            var withheldBy = gated.State.Trajectory.Skip(finalState.Trajectory.Count).OfType<SensorInterventionStep>().First();
+            return PartialOutcome(gated.State, finalAnswer: null,
+                $"{reason} The finalisation response was withheld by sensor '{withheldBy.SensorName}': {withheldBy.Reason}");
+        }
+
+        return PartialOutcome(gated.State, response.Text, reason);
     }
 
     // Null when the response ended normally; otherwise the FailureReason to report, naming the remedy. The

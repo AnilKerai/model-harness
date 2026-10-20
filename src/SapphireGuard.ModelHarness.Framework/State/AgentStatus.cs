@@ -17,7 +17,10 @@ public enum AgentStatus
 
     /// <summary>
     /// Budget was exhausted before the model could finalise naturally. The loop made
-    /// one final model call with tools disabled and returned its best answer.
+    /// one final model call with tools disabled and returned its best answer — unless a
+    /// <see cref="Sensors.HookPoint.PostModelCall"/> sensor rejected that answer, in which case
+    /// <see cref="AgentOutcome.FinalAnswer"/> is <see langword="null"/> and
+    /// <see cref="AgentOutcome.FailureReason"/> names the sensor.
     /// </summary>
     PartialResult
 }

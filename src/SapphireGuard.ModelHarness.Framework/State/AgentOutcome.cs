@@ -13,7 +13,9 @@ public sealed record AgentOutcome
     /// <summary>Terminal status of the run.</summary>
     public required AgentStatus Status { get; init; }
 
-    /// <summary>The model's last text response. <see langword="null"/> if the run did not produce an answer.</summary>
+    /// <summary>The model's last text response. <see langword="null"/> if the run did not produce an answer, or a
+    /// <see cref="Sensors.HookPoint.PostModelCall"/> sensor withheld the forced-finalisation answer
+    /// (<see cref="FailureReason"/> names it).</summary>
     public required string? FinalAnswer { get; init; }
 
     /// <summary>The <see cref="AgentState"/> at the end of the run, including the full trajectory.</summary>

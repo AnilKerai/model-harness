@@ -16,6 +16,22 @@ public API even though most consumers only implement a few of them.
 
 ### Fixed
 
+- **The forced-finalisation response now passes the `PostModelCall` sensors.** When the budget is exhausted,
+  or the sensor-intervention cap (3 consecutive rejections) is hit, `HarnessLoop` makes one last tool-free
+  call and returned its text as `AgentOutcome.FinalAnswer` without running any sensor. The cap path runs
+  exactly when a content gate such as `PiiRedactionSensor` has just rejected three responses in a row, so the
+  fourth, unchecked response went straight to the caller. The loop now runs the `PostModelCall` sensors on it
+  like any other response: their spend accrues on `AgentState.SensorUsage` / `SensorCost` and their
+  interventions are recorded as `SensorInterventionStep`s. If any sensor intervenes, the outcome is still
+  `PartialResult` but `FinalAnswer` is `null` and `FailureReason` ends with
+  `The finalisation response was withheld by sensor '<name>': <reason>` (the first intervening sensor in
+  registration order). There is no retry and no further model call; `PreReturn` sensors are not run on a
+  finalisation response, as before.
+  *Behavioural change:* `FinalAnswer` can now be `null` on a `PartialResult` where it used to be filled.
+  Before: `if (outcome.Status == AgentStatus.PartialResult) Show(outcome.FinalAnswer!);` — the answer was
+  always there. After: null-check it, and fall back to `FailureReason`:
+  `Show(outcome.FinalAnswer ?? outcome.FailureReason);`. A run with no `PostModelCall` sensors, or whose
+  sensors pass the finalisation response, is unchanged.
 - **The forced-finalisation instruction now reaches the model.** When the budget is exhausted, or the
   sensor-intervention cap (3 consecutive rejections) is hit, `HarnessLoop` makes one tool-free call with
   "Budget is exhausted. Produce your best final answer now … Do not request more tools." It used to add that

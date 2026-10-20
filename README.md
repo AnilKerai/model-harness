@@ -269,7 +269,8 @@ sequenceDiagram
             L->>CB: BuildAsync — force-finalise prompt
             L->>M: CallAsync (no tools)
             M-->>L: ModelResponse
-            L-->>C: AgentOutcome { PartialResult }
+            L->>S: RunAsync(PostModelCall)
+            L-->>C: AgentOutcome { PartialResult } (FinalAnswer null if a sensor intervened)
         else Budget ok
             B-->>L: Ok
             L->>RL: CheckAsync(state)
