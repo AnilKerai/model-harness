@@ -92,7 +92,7 @@ public sealed class AgentToolStatusTests
     public async Task AwaitingHuman_IsAnErrorCarryingTheQuestion_NotAnEmptySuccess()
     {
         var askHuman = new StubToolRegistry(call =>
-            new ToolResult(call.CallId, "Which account is this about?", IsPending: true));
+            new ToolResult(call.CallId, "Which account is this about?", IsPending: true), "ask_human");
         var call = new ToolCall("c1", "ask_human", JsonDocument.Parse("{}").RootElement);
         var sut = BuildTool(askHuman, Response(null, StopReason.ToolUse, call));
 

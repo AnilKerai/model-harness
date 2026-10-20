@@ -7,7 +7,11 @@ namespace SapphireGuard.ModelHarness.Framework.Tools;
 /// </summary>
 public interface IToolRegistry
 {
-    /// <summary>Returns all registered tools.</summary>
+    /// <summary>
+    /// Returns all registered tools. This must include every tool <see cref="DispatchAsync"/> accepts:
+    /// the model is offered only tools listed here (after <see cref="IToolSelector"/>), and the loop
+    /// refuses a call to any other name.
+    /// </summary>
     IReadOnlyList<ITool> List();
 
     /// <summary>Returns the tool with the given <paramref name="name"/>, or <see langword="null"/> if not registered.</summary>

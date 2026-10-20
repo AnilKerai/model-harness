@@ -198,7 +198,7 @@ Implement the interface:
 public sealed class MyToolRegistry : IToolRegistry
 {
     public IReadOnlyList<ITool> List()
-        // return whatever tools are available right now
+        // return whatever tools are available right now — every tool DispatchAsync accepts
 
     public ITool? Get(string name)
         // resolve by name — return null if not found
@@ -214,6 +214,8 @@ public sealed class MyToolRegistry : IToolRegistry
 ```
 
 `DispatchAsync` should return an error `ToolResult` for unknown tool names rather than throwing — the loop treats an error result as a clean signal the model can replan from.
+
+`List()` must report every tool `DispatchAsync` accepts. The loop sends the model only the tools `List()` returns (narrowed by any `IToolSelector`) and does not dispatch a call to any other name: it records an error step, `Tool '<name>' is not available on this turn.`, and the run continues. A registry that dispatches tools it does not list, such as one that resolves names lazily on a remote server, will see those calls refused until they appear in `List()`. The same rule makes `IToolSelector` a policy boundary rather than a hint: a tool the selector drops cannot run on that turn, and neither can any tool on a turn where a sensor suppressed tools.
 
 ## Expose MCP tools
 

@@ -95,7 +95,7 @@ public sealed class HarnessLoop(
                 (state, _, _) = await RunSensorsAsync(state, turnIndex, HookPoint.PreModelCall, triggeringStep: null, ct);
 
                 var prevSuppressTools = suppressTools;
-                var (newState, response) = await CallModelAsync(state, turnIndex, forceFinalise: false, ct, suppressTools);
+                var (newState, response, offeredTools) = await CallModelAsync(state, turnIndex, forceFinalise: false, ct, suppressTools);
                 state = newState;
                 suppressTools = false;
 
@@ -149,7 +149,7 @@ public sealed class HarnessLoop(
                 foreach (var call in response.ToolCalls)
                 {
                     ct.ThrowIfCancellationRequested();
-                    state = await ExecuteToolAsync(state, turnIndex, call, ct);
+                    state = await ExecuteToolAsync(state, turnIndex, call, offeredTools, ct);
 
                     var suspended = await TrySuspendForHumanAsync(state, runId, turnIndex, ct);
                     if (suspended is not null)
@@ -274,7 +274,7 @@ public sealed class HarnessLoop(
         return (next, intervened, suppressTools);
     }
 
-    private async Task<(AgentState State, ModelResponse Response)> CallModelAsync(AgentState state, int turn, bool forceFinalise, CancellationToken ct, bool suppressTools = false)
+    private async Task<(AgentState State, ModelResponse Response, IReadOnlySet<string> OfferedTools)> CallModelAsync(AgentState state, int turn, bool forceFinalise, CancellationToken ct, bool suppressTools = false)
     {
         var buildResult = await contextBuilder.BuildAsync(state, toolRegistry.List(), ct);
 
@@ -330,11 +330,22 @@ public sealed class HarnessLoop(
                 CompactionCost = next.CompactionCost + compaction.Cost
             };
 
-        return (next, response);
+        // Returned rather than stored: the loop is a singleton shared by concurrent runs.
+        return (next, response, modelTools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal));
     }
 
-    private async Task<AgentState> ExecuteToolAsync(AgentState state, int turn, ToolCall call, CancellationToken ct)
+    private async Task<AgentState> ExecuteToolAsync(AgentState state, int turn, ToolCall call, IReadOnlySet<string> offeredTools, CancellationToken ct)
     {
+        // The selector and tool suppression decide what the model is shown; this is what makes them bind.
+        // The registry knows every tool, so without the check a model that names a withheld tool (by
+        // hallucination, from an earlier turn, or on an injected instruction) would still run it.
+        if (!offeredTools.Contains(call.ToolName))
+            return state.AppendStep(new ToolCallStep(
+                Id: Guid.NewGuid(),
+                Timestamp: _time.GetUtcNow(),
+                Call: call,
+                Result: new ToolResult(call.CallId, $"Tool '{call.ToolName}' is not available on this turn.", IsError: true)));
+
         var preStep = new ToolCallStep(
             Id: Guid.NewGuid(),
             Timestamp: _time.GetUtcNow(),
@@ -412,7 +423,7 @@ public sealed class HarnessLoop(
 
     private async Task<AgentOutcome> FinaliseOnBudgetAsync(AgentState state, int turn, string reason, CancellationToken ct)
     {
-        var (finalState, response) = await CallModelAsync(state, turn, forceFinalise: true, ct);
+        var (finalState, response, _) = await CallModelAsync(state, turn, forceFinalise: true, ct);
         // The finalisation call is the likeliest in the run to be truncated — it was just instructed to
         // produce a complete answer in one shot — so name that in the reason rather than handing back a
         // silently clipped answer under a status that only mentions the budget.

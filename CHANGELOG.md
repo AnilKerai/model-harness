@@ -16,6 +16,26 @@ public API even though most consumers only implement a few of them.
 
 ### Fixed
 
+- **The loop now dispatches only tool calls whose tool was offered to the model on that call.** It sends the
+  model `ContextBuildResult.SelectedTools` — the registry's tools as narrowed by `IToolSelector` — or no tools
+  at all on a tool-suppressed turn (`SensorResult.InterveneWithToolSuppression`), but then dispatched every
+  tool call in the response by name through `IToolRegistry`, which knows every registered tool. A model that
+  named a tool the selector had dropped, or that was suppressed, got it run anyway: by hallucinating the name,
+  by remembering it from an earlier turn, or because injected content told it to. The selector was advisory,
+  not a policy boundary. Now a call to any name that was not among the tools sent with that model call is not
+  dispatched and runs no `PreToolCall` sensor; the loop appends a `ToolCallStep` with `IsError = true` and
+  `Tool '<name>' is not available on this turn.`, so the model can replan and the provider still gets a
+  `tool_result` for every `tool_use`. Forced-finalisation responses were never dispatched and still are not.
+  *Behavioural change:* a tool the selector excludes, or that the model calls on a suppressed turn, no longer
+  runs. A run whose registry, selector and context builder agree with each other is unchanged. Two custom
+  implementations can disagree and will now see their calls rejected as "not available":
+  - **A custom `IToolRegistry` whose `List()` under-reports what `DispatchAsync` accepts** (for example one that
+    resolves tool names lazily and lists only some of them). Before: unlisted tools were never offered to the
+    model but still ran if it named them. After: they are refused. Make `List()` return every tool
+    `DispatchAsync` accepts.
+  - **A custom `IContextBuilder` that returns a partial `SelectedTools`** (a builder that filters tools itself,
+    or hands back an empty list). Before: only the model's view was narrowed. After: the narrowed list is also
+    what may run. Return the full set you want callable on that turn.
 - **The forced-finalisation response now passes the `PostModelCall` sensors.** When the budget is exhausted,
   or the sensor-intervention cap (3 consecutive rejections) is hit, `HarnessLoop` makes one last tool-free
   call and returned its text as `AgentOutcome.FinalAnswer` without running any sensor. The cap path runs

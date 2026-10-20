@@ -95,7 +95,7 @@ public sealed class HarnessLoopTests
     public async Task RunAsync_ModelUsesTool_DispatchesToolThenContinues()
     {
         var toolCall = MakeToolCall("calc");
-        var toolRegistry = new StubToolRegistry(_ => new ToolResult(toolCall.CallId, "42"));
+        var toolRegistry = new StubToolRegistry(_ => new ToolResult(toolCall.CallId, "42"), "calc");
         var client = new ScriptedModelClient(
             ToolUseResponse(toolCall),
             EndTurnResponse("the answer is 42"));
@@ -119,7 +119,7 @@ public sealed class HarnessLoopTests
     {
         var call1 = MakeToolCall("tool-a");
         var call2 = MakeToolCall("tool-b");
-        var toolRegistry = new StubToolRegistry();
+        var toolRegistry = new StubToolRegistry("tool-a", "tool-b");
         var client = new ScriptedModelClient(
             ToolUseResponse(call1, call2),
             EndTurnResponse("done"));
@@ -134,7 +134,7 @@ public sealed class HarnessLoopTests
     public async Task RunAsync_DispatchesTool_ForwardsAgentStateMetadataToToolContext()
     {
         // AgentState.Metadata is documented as reaching tools via ToolContext — assert the loop wires it.
-        var toolRegistry = new StubToolRegistry();
+        var toolRegistry = new StubToolRegistry("t");
         var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall("t")), EndTurnResponse("done"));
         var harness = BuildHarness(client, toolRegistry: toolRegistry);
 
@@ -186,7 +186,7 @@ public sealed class HarnessLoopTests
     {
         // No deadline is configured and the harness token is untouched, so the tool's own timeout
         // is a tool fault like any other: an IsError result the model can replan around.
-        var registry = new StubToolRegistry(_ => throw new TaskCanceledException("tool request timed out"));
+        var registry = new StubToolRegistry(_ => throw new TaskCanceledException("tool request timed out"), "slow-tool");
         var client = new ScriptedModelClient(
             ToolUseResponse(MakeToolCall("slow-tool")),
             EndTurnResponse("recovered after timeout"));
@@ -208,7 +208,7 @@ public sealed class HarnessLoopTests
         {
             cts.Cancel();
             throw new OperationCanceledException(cts.Token);
-        });
+        }, "test-tool");
         var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall()), EndTurnResponse());
         var harness = BuildHarness(client, toolRegistry: registry);
 
@@ -296,7 +296,7 @@ public sealed class HarnessLoopTests
             Usage = Usage.Zero,
             Cost = 0m
         };
-        var registry = new StubToolRegistry();
+        var registry = new StubToolRegistry("test-tool");
         var client = new ScriptedModelClient(truncatedWithCall);
         var harness = BuildHarness(client, toolRegistry: registry);
 
@@ -442,7 +442,7 @@ public sealed class HarnessLoopTests
     {
         // Sensor blocks a ToolUse response — tool must not execute.
         var toolCall = MakeToolCall("dangerous-tool");
-        var toolRegistry = new StubToolRegistry();
+        var toolRegistry = new StubToolRegistry("dangerous-tool");
         var sensor = new CountdownSensor(HookPoint.PostModelCall, blockCount: 1);
         var client = new ScriptedModelClient(
             ToolUseResponse(toolCall),  // blocked — tool must not run
@@ -483,7 +483,7 @@ public sealed class HarnessLoopTests
     public async Task RunAsync_PreToolCallIntervened_ToolNotDispatchedAndErrorResultCreated()
     {
         var toolCall = MakeToolCall("blocked-tool");
-        var toolRegistry = new StubToolRegistry();
+        var toolRegistry = new StubToolRegistry("blocked-tool");
         var sensor = new CountdownSensor(HookPoint.PreToolCall, blockCount: 1, reason: "tool not permitted");
         var client = new ScriptedModelClient(
             ToolUseResponse(toolCall),
@@ -511,7 +511,7 @@ public sealed class HarnessLoopTests
         // PostToolCall block is advisory — the tool result is already in the
         // trajectory and the model will see both the result and the intervention.
         var toolCall = MakeToolCall("data-tool");
-        var toolRegistry = new StubToolRegistry(_ => new ToolResult(toolCall.CallId, "-999"));
+        var toolRegistry = new StubToolRegistry(_ => new ToolResult(toolCall.CallId, "-999"), "data-tool");
         var sensor = new CountdownSensor(HookPoint.PostToolCall, blockCount: 1, reason: "result out of range");
         var client = new ScriptedModelClient(
             ToolUseResponse(toolCall),
@@ -675,7 +675,7 @@ public sealed class HarnessLoopTests
             ToolUseResponse(toolCall),
             EndTurnResponse("done"));
 
-        var harness = BuildHarness(client);
+        var harness = BuildHarness(client, toolRegistry: new StubToolRegistry("calc"));
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
 
         var trajectory = outcome.FinalState.Trajectory;
@@ -786,7 +786,7 @@ public sealed class HarnessLoopTests
         var client = new ScriptedModelClient(
             ToolUseResponse(MakeToolCall("calc")),
             EndTurnResponse("done"));
-        var harness = BuildHarness(client, tracer: tracer);
+        var harness = BuildHarness(client, toolRegistry: new StubToolRegistry("calc"), tracer: tracer);
 
         await harness.RunAsync(NewState(), CancellationToken.None);
 
@@ -834,7 +834,7 @@ public sealed class HarnessLoopTests
     {
         var tracer = new RecordingTracer();
         var call = MakeToolCall("ask_human");
-        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "Which region?", IsPending: true));
+        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "Which region?", IsPending: true), "ask_human");
         var harness = BuildHarness(new ScriptedModelClient(ToolUseResponse(call)), toolRegistry: registry, tracer: tracer);
 
         await harness.RunAsync(NewState(), CancellationToken.None);
@@ -849,7 +849,7 @@ public sealed class HarnessLoopTests
         // Every turn opens with a checkpoint save and a budget snapshot — both must reach the tracer.
         var tracer = new RecordingTracer();
         var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall("t")), EndTurnResponse("done"));
-        var harness = BuildHarness(client, tracer: tracer);
+        var harness = BuildHarness(client, toolRegistry: new StubToolRegistry("t"), tracer: tracer);
 
         await harness.RunAsync(NewState(), CancellationToken.None);
 
@@ -943,7 +943,7 @@ public sealed class HarnessLoopTests
     public async Task RunAsync_ToolReturnsPins_CommitsThemToState()
     {
         var client = new ScriptedModelClient(ToolUseResponse(MakeToolCall("load")), EndTurnResponse("done"));
-        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "ack", Pins: [new PinnedNote("Skill: x", "the body")]));
+        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "ack", Pins: [new PinnedNote("Skill: x", "the body")]), "load");
         var harness = BuildHarness(client, toolRegistry: registry);
 
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
@@ -959,7 +959,7 @@ public sealed class HarnessLoopTests
         var client = new ScriptedModelClient(
             ToolUseResponse(MakeToolCall("a")), ToolUseResponse(MakeToolCall("b")), EndTurnResponse("done"));
         var n = 0;
-        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "ack", Pins: [new PinnedNote("Skill: x", $"body {++n}")]));
+        var registry = new StubToolRegistry(c => new ToolResult(c.CallId, "ack", Pins: [new PinnedNote("Skill: x", $"body {++n}")]), "a", "b");
         var harness = BuildHarness(client, toolRegistry: registry);
 
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
@@ -1014,8 +1014,8 @@ file sealed class BlockingToolRegistry : IToolRegistry
     private int _dispatchCount;
     public int DispatchCount => _dispatchCount;
 
-    public IReadOnlyList<ITool> List() => [];
-    public ITool? Get(string name) => null;
+    public IReadOnlyList<ITool> List() => [new StubTool("slow-tool")];
+    public ITool? Get(string name) => name == "slow-tool" ? new StubTool(name) : null;
 
     public async Task<ToolResult> DispatchAsync(ToolCall call, ToolContext context, CancellationToken ct)
     {

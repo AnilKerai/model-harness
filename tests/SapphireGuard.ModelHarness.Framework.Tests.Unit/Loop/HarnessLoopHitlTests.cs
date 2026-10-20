@@ -76,7 +76,7 @@ public sealed class HarnessLoopHitlTests
     {
         var callId = Guid.NewGuid().ToString("n");
         var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
-        var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your name?", IsPending: true));
+        var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your name?", IsPending: true), "ask_human");
         var client = new ScriptedModelClient(ToolUseResponse(toolCall));
 
         var harness = BuildHarness(client, registry);
@@ -94,7 +94,7 @@ public sealed class HarnessLoopHitlTests
     {
         var callId = Guid.NewGuid().ToString("n");
         var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
-        var registry = new StubToolRegistry(_ => new ToolResult(callId, "Approve this action?", IsPending: true));
+        var registry = new StubToolRegistry(_ => new ToolResult(callId, "Approve this action?", IsPending: true), "ask_human");
         var client = new ScriptedModelClient(ToolUseResponse(toolCall));
 
         var harness = BuildHarness(client, registry);
@@ -110,7 +110,7 @@ public sealed class HarnessLoopHitlTests
     {
         var callId = Guid.NewGuid().ToString("n");
         var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
-        var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your age?", IsPending: true));
+        var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your age?", IsPending: true), "ask_human");
         var client = new ScriptedModelClient(ToolUseResponse(toolCall));
 
         var harness = BuildHarness(client, registry);
@@ -129,7 +129,7 @@ public sealed class HarnessLoopHitlTests
     {
         var callId = Guid.NewGuid().ToString("n");
         var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
-        var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your name?", IsPending: true));
+        var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your name?", IsPending: true), "ask_human");
         var firstClient = new ScriptedModelClient(ToolUseResponse(toolCall));
 
         var firstHarness = BuildHarness(firstClient, registry);
@@ -154,7 +154,7 @@ public sealed class HarnessLoopHitlTests
         var calcCall = new ToolCall(Guid.NewGuid().ToString("n"), "calc", JsonDocument.Parse("{}").RootElement);
         var registry = new StubToolRegistry(call => call.ToolName == "ask_human"
             ? new ToolResult(askCallId, "What is your name?", IsPending: true)
-            : new ToolResult(call.CallId, "42"));
+            : new ToolResult(call.CallId, "42"), "ask_human", "calc");
 
         // Turn 0 runs a normal tool; turn 1 asks the human and suspends — so two model calls
         // (turns 0 and 1) are in the trajectory before resume.
@@ -185,7 +185,7 @@ public sealed class HarnessLoopHitlTests
         // across two RunIds and broke correlation. It is now derived from the trajectory.
         var askCallId = Guid.NewGuid().ToString("n");
         var askCall = new ToolCall(askCallId, "ask_human", JsonDocument.Parse("{}").RootElement);
-        var registry = new StubToolRegistry(_ => new ToolResult(askCallId, "What is your name?", IsPending: true));
+        var registry = new StubToolRegistry(_ => new ToolResult(askCallId, "What is your name?", IsPending: true), "ask_human");
 
         var firstStore = new RecordingCheckpointStore();
         var firstHarness = BuildHarness(new ScriptedModelClient(ToolUseResponse(askCall)), registry, firstStore);

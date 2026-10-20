@@ -5,7 +5,9 @@ namespace SapphireGuard.ModelHarness.Framework.Tools;
 /// <summary>
 /// Filters or reranks the tool list before each model call. Implement this to reduce
 /// prompt noise by exposing only tools relevant to the current turn. The default is
-/// <c>PassthroughToolSelector</c> (returns all tools unchanged).
+/// <c>PassthroughToolSelector</c> (returns all tools unchanged). The selection is enforced, not
+/// advisory: the loop dispatches only calls to tools the model was sent on that call, so a tool dropped
+/// here cannot run on that turn even if the model names it.
 /// </summary>
 public interface IToolSelector
 {
