@@ -10,10 +10,11 @@ public sealed record ClaudeClientOptions
     public required string ApiKey { get; init; }
 
     /// <summary>
-    /// Anthropic model identifier. Defaults to claude-sonnet-4-5.
+    /// Anthropic model identifier. Defaults to <c>claude-sonnet-4-5-20250929</c>, a dated snapshot of
+    /// Claude Sonnet 4.5 (unlike an alias such as <c>claude-sonnet-4-5</c>, it always resolves to the same model).
     /// See https://docs.anthropic.com/en/docs/about-claude/models for current model IDs.
     /// </summary>
-    public string ModelId { get; init; } = "claude-sonnet-4-5-20251001";
+    public string ModelId { get; init; } = "claude-sonnet-4-5-20250929";
 
     /// <summary>
     /// Maximum number of output tokens the model may generate per call. The Anthropic API requires
