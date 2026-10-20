@@ -28,6 +28,9 @@ var budget = new Budget
     MaxTurns = 5,
     MaxTotalTokens = 100_000,
     MaxCost = 1m,
+    // Includes the time spent waiting for the human: if the answer arrives after this, the resumed run
+    // finalises immediately with PartialResult. Size it for the human's response time, or extend
+    // Budget.MaxWallClock on the resumed state.
     MaxWallClock = TimeSpan.FromMinutes(1)
 };
 

@@ -23,7 +23,14 @@ public sealed record Budget
     /// <summary>Maximum cumulative cost before budget finalisation.</summary>
     public required decimal MaxCost { get; init; }
 
-    /// <summary>Maximum wall-clock duration from task start before budget finalisation.</summary>
+    /// <summary>
+    /// Maximum wall-clock duration from task start before budget finalisation. The clock keeps running
+    /// while a HITL run is suspended waiting for a human (a resume adds no user message, so it does not
+    /// restart): if the human answers after this cap, the resumed run finalises immediately with
+    /// <c>PartialResult</c> ("Reached MaxWallClock"). Either size this to cover the human's response
+    /// time, or extend it on the resumed state:
+    /// <c>state.ResumeWithHumanAnswer(id, answer) with { Budget = state.Budget with { MaxWallClock = ... } }</c>.
+    /// </summary>
     public required TimeSpan MaxWallClock { get; init; }
 
     /// <summary>

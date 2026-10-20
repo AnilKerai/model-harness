@@ -329,7 +329,7 @@ before any sensor or model call:
 | `MaxTurns` | Maximum number of loop iterations |
 | `MaxTotalTokens` | Cumulative token ceiling across the whole run (all model, tool, sensor, and compaction calls). Not the per-turn context window — that's `CompactionOptions.WindowTokens`. |
 | `MaxCost` | Maximum spend (based on the model client's cost tracking) |
-| `MaxWallClock` | Maximum elapsed wall-clock from the run's start (its first user message). Derived from the trajectory, so it keeps accumulating across a resume rather than restarting. |
+| `MaxWallClock` | Maximum elapsed wall-clock from the run's start (its first user message). Derived from the trajectory, so it keeps accumulating across a resume rather than restarting — **including time a HITL run (`ask_human`) spends suspended waiting for the human**. If the human answers after the cap, the resumed run finalises immediately with `PartialResult` ("Reached MaxWallClock"). Size it to cover human response time, or extend `Budget.MaxWallClock` on the resumed state — see [HITL suspend/resume](docs/EXTENDING.md#hitl-with-durability-most-common). |
 
 Budget exhaustion is **not an exception** — it is control flow. When a limit is hit,
 the loop makes one final model call with tools disabled so the model can produce a
