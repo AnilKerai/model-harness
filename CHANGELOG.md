@@ -29,12 +29,17 @@ public API even though most consumers only implement a few of them.
   `DefaultContextBuilder` folds into the single system message. While the turn survives in position nothing
   extra is rendered. Task mode (`pinOriginalGoal: true`) is unchanged.
 
-  **Behavioural change** — chat mode reserves room for that note on every turn, as task mode does for the
-  goal anchor. The reserve is charged before trimming (so the trim is computed once and the window is still
-  respected), which counts the latest user message twice while trimming: when a history fits the window by
-  less than that message's own size, the message is now moved from the conversation into the system message
-  even though everything would have fit. Its text is unchanged.
-  Nothing needs to change in calling code; if you assert on the exact messages a chat harness sends for an
+  **Behavioural change** — chat mode now subtracts the `[CURRENT REQUEST]` note's size (roughly the latest
+  user message) from the eviction budget on every turn, as task mode does for the goal anchor. The reserve is
+  charged before trimming, so the trim is computed once and the window is still respected, but it is charged
+  whether or not the note ends up rendered. The effect is that eviction — and, with `AiCompactionStrategy`,
+  the fold and its compaction model call — starts that much sooner: when a chat history is within that margin
+  of `WindowTokens`, older turns are dropped (or folded) where they previously still fit. The latest user
+  message stays in its position in the conversation unless it is itself the oldest remaining group (for
+  example a single-turn chat whose history is a question followed by a long answer); only then is it moved
+  into the system message, with its text unchanged.
+  Nothing needs to change in calling code. If a chat harness runs close to its `WindowTokens`, expect earlier
+  turns to be omitted or summarised a little sooner; and if you assert on the exact messages it sends for an
   oversized turn, expect the `[CURRENT REQUEST]` text in the system message and no user turn at that position.
 
 ## [3.1.0] — 2026-10-11
