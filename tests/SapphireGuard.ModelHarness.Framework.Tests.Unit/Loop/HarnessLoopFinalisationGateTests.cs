@@ -5,6 +5,7 @@ using SapphireGuard.ModelHarness.Framework.RateLimiting;
 using SapphireGuard.ModelHarness.Framework.Sensors;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tests.Unit.Fakes;
+using SapphireGuard.ModelHarness.Infrastructure.Sensors;
 using Xunit;
 using BudgetNs = SapphireGuard.ModelHarness.Framework.Budget;
 using StateBudget = SapphireGuard.ModelHarness.Framework.State.Budget;
@@ -21,7 +22,7 @@ public sealed class HarnessLoopFinalisationGateTests
     private const string SensorName = "pii-redaction";
     private const string SensorReason = "email detected";
     private const string BudgetReason = "test budget exhausted";
-    private const string WithheldSentence = $" The finalisation response was withheld by sensor '{SensorName}': {SensorReason}";
+    private const string WithheldSentence = $" The finalisation response was withheld by sensor '{SensorName}'.";
 
     // ── Intervention cap ──────────────────────────────────────────────────────
 
@@ -144,8 +145,33 @@ public sealed class HarnessLoopFinalisationGateTests
         var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
 
         Assert.Null(outcome.FinalAnswer);
-        Assert.Equal($"{BudgetReason} The finalisation response was withheld by sensor 'first': r1", outcome.FailureReason);
+        Assert.Equal($"{BudgetReason} The finalisation response was withheld by sensor 'first'.", outcome.FailureReason);
         Assert.Equal(["first", "second"], outcome.FinalState.Trajectory.OfType<SensorInterventionStep>().Select(s => s.SensorName));
+    }
+
+    [Theory]
+    [InlineData(true)]  // intervention-cap path
+    [InlineData(false)] // budget-exhaustion path
+    public async Task RunAsync_FinalisationWithheldByPiiSensor_FailureReasonDoesNotQuoteTheMatchedPii(bool viaInterventionCap)
+    {
+        // PiiRedactionSensor's reason quotes the matched value, and FailureReason reaches the caller, a
+        // parent agent's tool result and the tracers. The outcome must name the sensor but not carry the PII.
+        const string email = "john.doe@example.com";
+        var client = new ScriptedModelClient(
+            EndTurn($"mail {email}"), EndTurn($"mail {email}"), EndTurn($"mail {email}"), EndTurn($"mail {email}"));
+        var harness = viaInterventionCap
+            ? BuildHarness(client, [new PiiRedactionSensor()])
+            : BuildHarness(client, [new PiiRedactionSensor()], new AlwaysExhaustedBudgetEnforcer());
+
+        var outcome = await harness.RunAsync(NewState(), CancellationToken.None);
+
+        Assert.Equal(AgentStatus.PartialResult, outcome.Status);
+        Assert.Null(outcome.FinalAnswer);
+        Assert.EndsWith("withheld by sensor 'pii-redaction'.", outcome.FailureReason);
+        Assert.DoesNotContain(email, outcome.FailureReason);
+        Assert.DoesNotContain("john.doe", outcome.FailureReason);
+        // The full reason is still recorded for audit, on the intervention step the tracers gate.
+        Assert.Contains(email, outcome.FinalState.Trajectory.OfType<SensorInterventionStep>().Last().Reason);
     }
 
     // ── Spend and scope ───────────────────────────────────────────────────────

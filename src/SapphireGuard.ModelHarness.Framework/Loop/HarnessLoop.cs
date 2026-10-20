@@ -427,9 +427,13 @@ public sealed class HarnessLoop(
         var gated = await RunSensorsAsync(finalState, turn, HookPoint.PostModelCall, finalState.Trajectory[^1], ct);
         if (gated.Intervened)
         {
+            // Name the sensor, not its reason: a content gate's reason quotes the flagged content (the PII
+            // detector names the PII), and FailureReason goes to the caller, to a parent agent's tool
+            // result and ungated into the tracers. The full reason stays on the SensorInterventionStep,
+            // which the tracers already gate.
             var withheldBy = gated.State.Trajectory.Skip(finalState.Trajectory.Count).OfType<SensorInterventionStep>().First();
             return PartialOutcome(gated.State, finalAnswer: null,
-                $"{reason} The finalisation response was withheld by sensor '{withheldBy.SensorName}': {withheldBy.Reason}");
+                $"{reason} The finalisation response was withheld by sensor '{withheldBy.SensorName}'.");
         }
 
         return PartialOutcome(gated.State, response.Text, reason);

@@ -24,12 +24,17 @@ public API even though most consumers only implement a few of them.
   like any other response: their spend accrues on `AgentState.SensorUsage` / `SensorCost` and their
   interventions are recorded as `SensorInterventionStep`s. If any sensor intervenes, the outcome is still
   `PartialResult` but `FinalAnswer` is `null` and `FailureReason` ends with
-  `The finalisation response was withheld by sensor '<name>': <reason>` (the first intervening sensor in
-  registration order). There is no retry and no further model call; `PreReturn` sensors are not run on a
-  finalisation response, as before.
+  `The finalisation response was withheld by sensor '<name>'.` (the first intervening sensor in registration
+  order). The sensor's own reason is deliberately left out: a content gate's reason quotes what it flagged
+  (`PiiRedactionSensor` names the matched PII), and `FailureReason` reaches the caller, a parent agent's tool
+  result and the tracers' failure-reason attributes — so it stays on the `SensorInterventionStep` in the
+  trajectory, where the tracers already gate it. There is no retry and no further model call; `PreReturn`
+  sensors are not run on a finalisation response, as before.
   *Behavioural change:* `FinalAnswer` can now be `null` on a `PartialResult` where it used to be filled.
-  Before: `if (outcome.Status == AgentStatus.PartialResult) Show(outcome.FinalAnswer!);` — the answer was
-  always there. After: null-check it, and fall back to `FailureReason`:
+  Before: `if (outcome.Status == AgentStatus.PartialResult) Show(outcome.FinalAnswer!);` — this assumed a
+  budget `PartialResult` carries text (it already could not when the response had no text —
+  `ModelResponse.Text` is nullable, and `ClaudeModelClient` returns `null` when there are no text blocks).
+  After: null-check it, and fall back to `FailureReason`:
   `Show(outcome.FinalAnswer ?? outcome.FailureReason);`. A run with no `PostModelCall` sensors, or whose
   sensors pass the finalisation response, is unchanged.
 - **The forced-finalisation instruction now reaches the model.** When the budget is exhausted, or the
