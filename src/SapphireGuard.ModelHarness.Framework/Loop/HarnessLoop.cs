@@ -279,8 +279,7 @@ public sealed class HarnessLoop(
         var buildResult = await contextBuilder.BuildAsync(state, toolRegistry.List(), ct);
 
         var messages = forceFinalise
-            ? [.. buildResult.Messages, new Message(MessageRole.System,
-                "Budget is exhausted. Produce your best final answer now using only what you already know. Do not request more tools.")]
+            ? WithFinalisationInstruction(buildResult.Messages)
             : buildResult.Messages;
 
         var modelTools = forceFinalise || suppressTools
@@ -399,6 +398,17 @@ public sealed class HarnessLoop(
         var replaced = incoming.Select(p => p.Label).ToHashSet();
         return [.. existing.Where(p => !replaced.Contains(p.Label)), .. incoming];
     }
+
+    private const string FinalisationInstruction =
+        "Budget is exhausted. Produce your best final answer now using only what you already know. Do not request more tools.";
+
+    // Every adapter forwards only the first System message and drops the rest, so the instruction is
+    // folded into that message rather than appended as a second one — an appended message never reaches
+    // the model. A builder that returns no leading System message gets one prepended.
+    private static IReadOnlyList<Message> WithFinalisationInstruction(IReadOnlyList<Message> messages) =>
+        messages is [{ Role: MessageRole.System } system, ..]
+            ? [system with { Content = $"{system.Content}\n\n{FinalisationInstruction}" }, .. messages.Skip(1)]
+            : [new Message(MessageRole.System, FinalisationInstruction), .. messages];
 
     private async Task<AgentOutcome> FinaliseOnBudgetAsync(AgentState state, int turn, string reason, CancellationToken ct)
     {

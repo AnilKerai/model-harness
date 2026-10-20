@@ -12,6 +12,22 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Fixed
+
+- **The forced-finalisation instruction now reaches the model.** When the budget is exhausted, or the
+  sensor-intervention cap (3 consecutive rejections) is hit, `HarnessLoop` makes one tool-free call with
+  "Budget is exhausted. Produce your best final answer now … Do not request more tools." It used to add that
+  as a *second* System message, and every adapter (`ClaudeModelClient`, `AzureOpenAIModelClient`,
+  `OllamaModelClient`) forwards only the first System message — so the model was never told to answer. The
+  instruction is now appended to the leading System message (`"\n\n" + instruction`); if a custom
+  `IContextBuilder` returns no leading System message, one holding the instruction is prepended. The prompt
+  recorded on `ModelCallStep.Prompt` and passed to `ITracer.BeginModelCall` is the folded list that was sent.
+  *Behavioural change, no migration needed:* the finalisation prompt now has one System message instead of
+  two. A custom `IModelClient`, tracer or test that asserted a trailing System message on the finalisation
+  call should read the instruction from `messages[0]` instead.
+
 ## [3.1.0] — 2026-10-11
 
 A minor release with two threads: Langfuse-ready traces, using only the standard OpenTelemetry GenAI
