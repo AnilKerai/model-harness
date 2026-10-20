@@ -213,7 +213,7 @@ public static class DependencyInjection
     /// <summary>
     /// Adds a <see cref="LiveDashboardTracer"/> — a zero-dependency in-process feed for a live agent
     /// console (no OTLP, no collector, no Docker). The same instance is registered as a singleton so a
-    /// host endpoint (e.g. Server-Sent Events) can resolve it and call <see cref="LiveDashboardTracer.Subscribe"/>.
+    /// host endpoint (e.g. Server-Sent Events) can resolve it and call <see cref="LiveDashboardTracer.Subscribe(CancellationToken)"/>.
     /// Pass your own <paramref name="tracer"/> when the endpoint needs to close over the instance directly;
     /// otherwise one is created and resolvable from DI. Composes with <see cref="WithOtelTracer"/>.
     /// See <c>samples/LiveDashboard</c>.

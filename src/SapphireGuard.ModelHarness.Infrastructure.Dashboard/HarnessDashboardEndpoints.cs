@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -54,7 +55,13 @@ public static class HarnessDashboardEndpoints
             ctx.Response.Headers.ContentType = "text/event-stream";
             ctx.Response.Headers.CacheControl = "no-cache";
             ctx.Response.Headers["X-Accel-Buffering"] = "no";
-            await foreach (var evt in feed.Subscribe(ct))
+            // Send the headers now: a resumed connection may have nothing to replay, and EventSource stays
+            // "connecting" (and a proxy sees an idle response) until the first byte arrives.
+            await ctx.Response.Body.FlushAsync(ct);
+            // EventSource re-sends the last `id:` it received when it reconnects; resume after it so the
+            // browser, which sums every event it is given, does not count the backlog a second time.
+            var afterSeq = long.TryParse(ctx.Request.Headers["Last-Event-ID"], CultureInfo.InvariantCulture, out var lastId) ? lastId : 0;
+            await foreach (var evt in feed.Subscribe(ct, afterSeq))
             {
                 await ctx.Response.WriteAsync($"id: {evt.Seq}\ndata: {JsonSerializer.Serialize(evt, Json)}\n\n", ct);
                 await ctx.Response.Body.FlushAsync(ct);
