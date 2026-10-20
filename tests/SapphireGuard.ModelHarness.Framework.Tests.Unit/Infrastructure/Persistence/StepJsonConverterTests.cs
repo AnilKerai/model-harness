@@ -121,6 +121,39 @@ public sealed class StepJsonConverterTests
     }
 
     [Fact]
+    public void UserMessageStep_spend_baselines_round_trip()
+    {
+        var step = new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, "follow-up question")
+        {
+            SensorUsageBaseline = new Usage(11, 4),
+            SensorCostBaseline = 0.07m,
+            CompactionUsageBaseline = new Usage(310, 90),
+            CompactionCostBaseline = 0.31m
+        };
+
+        var result = Assert.IsType<UserMessageStep>(RoundTrip(step));
+
+        Assert.Equal(step, result);
+    }
+
+    [Fact]
+    public void UserMessageStep_from_a_legacy_checkpoint_without_baselines_loads_as_zero()
+    {
+        var json = """
+            {"$type":"UserMessageStep","Id":"00000000-0000-0000-0000-000000000001",
+             "Timestamp":"2024-01-01T00:00:00+00:00","Content":"old question"}
+            """;
+
+        var result = Assert.IsType<UserMessageStep>(JsonSerializer.Deserialize<Step>(json, Options));
+
+        Assert.Equal("old question", result.Content);
+        Assert.Equal(Usage.Zero, result.SensorUsageBaseline);
+        Assert.Equal(0m, result.SensorCostBaseline);
+        Assert.Equal(Usage.Zero, result.CompactionUsageBaseline);
+        Assert.Equal(0m, result.CompactionCostBaseline);
+    }
+
+    [Fact]
     public void Read_throws_on_missing_type_discriminator()
     {
         var json = """{"Id":"00000000-0000-0000-0000-000000000001","Timestamp":"2024-01-01T00:00:00+00:00"}""";
@@ -182,7 +215,11 @@ public sealed class StepJsonConverterTests
 
         var trajectory = new Step[]
         {
-            new UserMessageStep(Guid.NewGuid(), t0, "where is my order?"),
+            new UserMessageStep(Guid.NewGuid(), t0, "where is my order?")
+            {
+                SensorUsageBaseline = new Usage(50, 10), SensorCostBaseline = 0.05m,
+                CompactionUsageBaseline = new Usage(70, 20), CompactionCostBaseline = 0.08m
+            },
             new ModelCallStep(
                 Guid.NewGuid(), t0.AddSeconds(1),
                 [new Message(MessageRole.System, "sys"), new Message(MessageRole.User, "where is my order?")],
@@ -250,7 +287,11 @@ public sealed class StepJsonConverterTests
         Assert.Equal("need a refund approval?", s.PendingHumanInput.Question);
 
         Assert.Equal(4, s.Trajectory.Count);
-        Assert.IsType<UserMessageStep>(s.Trajectory[0]);
+        var user = Assert.IsType<UserMessageStep>(s.Trajectory[0]);
+        Assert.Equal(new Usage(50, 10), user.SensorUsageBaseline);
+        Assert.Equal(0.05m, user.SensorCostBaseline);
+        Assert.Equal(new Usage(70, 20), user.CompactionUsageBaseline);
+        Assert.Equal(0.08m, user.CompactionCostBaseline);
         var model = Assert.IsType<ModelCallStep>(s.Trajectory[1]);
         Assert.Equal(2, model.Prompt.Count);
         Assert.Equal(StopReason.ToolUse, model.Response.StopReason);

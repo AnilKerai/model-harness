@@ -35,6 +35,34 @@ public sealed class AgentStateTests
     }
 
     [Fact]
+    public void WithUserMessage_SnapshotsCumulativeSensorAndCompactionSpendAsBaselines()
+    {
+        var state = AgentState.NewTask("t", Budget, T0) with
+        {
+            SensorUsage = new Usage(10, 5), SensorCost = 0.1m,
+            CompactionUsage = new Usage(20, 8), CompactionCost = 0.2m
+        };
+
+        var user = Assert.IsType<UserMessageStep>(state.WithUserMessage("follow-up", T0).Trajectory[^1]);
+
+        Assert.Equal(new Usage(10, 5), user.SensorUsageBaseline);
+        Assert.Equal(0.1m, user.SensorCostBaseline);
+        Assert.Equal(new Usage(20, 8), user.CompactionUsageBaseline);
+        Assert.Equal(0.2m, user.CompactionCostBaseline);
+    }
+
+    [Fact]
+    public void NewTask_OpeningUserMessageHasZeroBaselines()
+    {
+        var user = Assert.IsType<UserMessageStep>(AgentState.NewTask("t", Budget, T0).Trajectory[0]);
+
+        Assert.Equal(Usage.Zero, user.SensorUsageBaseline);
+        Assert.Equal(0m, user.SensorCostBaseline);
+        Assert.Equal(Usage.Zero, user.CompactionUsageBaseline);
+        Assert.Equal(0m, user.CompactionCostBaseline);
+    }
+
+    [Fact]
     public void TotalSpend_CountsSensorCompactionAndDelegatedToolSpend_NotJustModelCalls()
     {
         // The whole point of hoisting this: a walk over ModelCallStep alone misses three real spend

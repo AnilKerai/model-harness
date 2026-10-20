@@ -115,6 +115,104 @@ public sealed class TurnScopedBudgetEnforcerTests
     }
 
     [Fact]
+    public void Check_CompactionCostFromEarlierTurns_DoesNotExhaustNewTurn()
+    {
+        // The regression: compaction spend from earlier turns already exceeds the per-turn MaxCost.
+        // It is whole-run cumulative on AgentState, so before baselines every later turn was
+        // exhausted at its first check and got only a tool-less finalisation call.
+        var budget = Generous with { MaxCost = 1m };
+        var state = EmptyState(budget) with { CompactionCost = 5m };
+
+        var result = Sut.Check(state.WithUserMessage("turn 2", DateTimeOffset.UtcNow));
+
+        Assert.False(result.IsExhausted);
+    }
+
+    [Fact]
+    public void Check_SensorAndCompactionTokensFromEarlierTurns_DoNotExhaustNewTurn()
+    {
+        var budget = Generous with { MaxTotalTokens = 100 };
+        var state = EmptyState(budget) with
+        {
+            SensorUsage = new Usage(300, 100),
+            CompactionUsage = new Usage(200, 50)
+        };
+
+        var result = Sut.Check(state.WithUserMessage("turn 2", DateTimeOffset.UtcNow));
+
+        Assert.False(result.IsExhausted);
+    }
+
+    [Fact]
+    public void Check_SensorSpendAfterBaselineWithinTurn_StillCounts()
+    {
+        var budget = Generous with { MaxCost = 1m };
+        var state = (EmptyState(budget) with { SensorCost = 5m })
+            .WithUserMessage("turn 2", DateTimeOffset.UtcNow);
+
+        Assert.False(Sut.Check(state).IsExhausted);
+
+        var result = Sut.Check(state with { SensorCost = 5m + 1m });
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
+    }
+
+    [Fact]
+    public void Check_CompactionSpendAfterBaselineWithinTurn_StillCountsAlongsideModelSpend()
+    {
+        // 0.4 model + 0.3 sensor + 0.3 compaction = 1.0 >= MaxCost, all incurred this turn.
+        var budget = Generous with { MaxCost = 1m };
+        var state = (EmptyState(budget) with { SensorCost = 5m, CompactionCost = 5m })
+            .WithUserMessage("turn 2", DateTimeOffset.UtcNow)
+            .AppendStep(ModelStep(cost: 0.4m));
+
+        var result = Sut.Check(state with { SensorCost = 5.3m, CompactionCost = 5.3m });
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
+    }
+
+    [Fact]
+    public void Check_CompactionTokensAfterBaselineWithinTurn_StillCount()
+    {
+        var budget = Generous with { MaxTotalTokens = 100 };
+        var state = (EmptyState(budget) with { CompactionUsage = new Usage(500, 500) })
+            .WithUserMessage("turn 2", DateTimeOffset.UtcNow);
+
+        var result = Sut.Check(state with { CompactionUsage = new Usage(550, 550) });
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxTotalTokens", result.Reason);
+    }
+
+    [Fact]
+    public void Check_OpeningMessageHasNoBaseline_SensorSpendThisTurnCounts()
+    {
+        var budget = Generous with { MaxCost = 1m };
+        var state = EmptyState(budget) with { SensorCost = 1m };
+
+        var result = Sut.Check(state);
+
+        Assert.True(result.IsExhausted);
+        Assert.Contains("MaxCost", result.Reason);
+    }
+
+    [Fact]
+    public void Check_UserMessageWithoutBaselines_BehavesAsBefore()
+    {
+        // A UserMessageStep from a checkpoint written before baselines existed carries zeros, so the
+        // whole-run sensor/compaction total is charged until the next WithUserMessage — the old behaviour.
+        var budget = Generous with { MaxCost = 1m };
+        var state = EmptyState(budget)
+            .AppendStep(new UserMessageStep(Guid.NewGuid(), DateTimeOffset.UtcNow, "legacy turn"))
+            with { CompactionCost = 5m };
+
+        Assert.True(Sut.Check(state).IsExhausted);
+        Assert.False(Sut.Check(state.WithUserMessage("fresh turn", DateTimeOffset.UtcNow)).IsExhausted);
+    }
+
+    [Fact]
     public void Check_WallClockExceeded_ReturnsExhausted()
     {
         var budget = Generous with { MaxWallClock = TimeSpan.FromMilliseconds(1) };

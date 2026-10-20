@@ -38,7 +38,8 @@ These are thin siblings of the model-harness entry points — same `HarnessLoop`
 `Agent` — that swap two seams for the conversational lifecycle:
 
 - **Per-turn budget** (`TurnScopedBudgetEnforcer`): counts turns/cost/tokens since the last
-  `UserMessageStep`, so every user turn gets a fresh allowance. The default `DefaultBudgetEnforcer`
+  `UserMessageStep` — including AI-sensor and compaction spend, via baselines `WithUserMessage` records on
+  that step — so every user turn gets a fresh allowance. The default `DefaultBudgetEnforcer`
   sums the whole trajectory, which would exhaust a long chat after `MaxTurns` total model calls.
 - **Unpinned goal** (`HeadEvictionTrajectoryGuide(pinOriginalGoal: false)`): drops the
   `[ORIGINAL GOAL]` anchor, since a conversation's live goal is the latest user turn, not the opener.
