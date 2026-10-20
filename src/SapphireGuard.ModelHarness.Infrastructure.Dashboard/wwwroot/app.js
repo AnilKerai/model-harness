@@ -98,7 +98,7 @@ function renderRuns() {
   if (ids.length === 0) { runsEl.innerHTML = '<p class="empty">No runs match.</p>'; return; }
   runsEl.innerHTML = ids.map(id => {
     const r = runs.get(id);
-    return `<button class="taskrow ${id === selected ? 'active' : ''}" data-id="${id}">
+    return `<button class="taskrow ${id === selected ? 'active' : ''}" data-id="${escapeHtml(id)}">
       <span class="taskrow-top">
         <span class="taskrow-title">${escapeHtml(r.title)}</span>
         <span class="status ${statusClass(r.status)}">${escapeHtml(r.status)}</span>
@@ -180,7 +180,7 @@ function timelineHtml(r) {
 function evtHtml(e) {
   const [icon, css] = meta(e);
   const detail = e.detail
-    ? `<details class="evt-detail" data-seq="${e.seq}" ${expanded.has(e.seq) ? 'open' : ''}>
+    ? `<details class="evt-detail" data-seq="${escapeHtml(e.seq)}" ${expanded.has(e.seq) ? 'open' : ''}>
          <summary>details</summary><pre>${escapeHtml(JSON.stringify(e.detail, null, 2))}</pre></details>`
     : '';
   return `<div class="evt ${css}">
@@ -213,4 +213,11 @@ function meta(e) {
 const statusClass = s => s === 'done' ? 'st-done' : s === 'running' ? 'st-running' : 'st-failed';
 const fmtN = n => (n || 0).toLocaleString();
 const fmtTime = ms => new Date(ms).toLocaleTimeString();
-function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+// Safe in text and in a quoted attribute value: the textContent->innerHTML trick covers & < >, and
+// innerHTML leaves quotes alone, so " and ' are escaped by hand. Feed values (taskId, summary, …) can
+// come from the caller, so every interpolation of one into the page goes through this.
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
