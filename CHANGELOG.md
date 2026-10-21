@@ -336,6 +336,38 @@ public API even though most consumers only implement a few of them.
   trailing user turn in your own tests, or match the old strings in a custom `IModelClient` or tracer, update
   them to the new wording.
 
+- **One unreadable or malformed file in a `FileSkillStore` directory hid every skill, and a skill could be listed
+  under a name it could not be loaded by.** `ListAsync` threw on the first `*.md` file that would not read or
+  parse (a stray `README.md` with no frontmatter, a torn write), and `ListVersionsAsync` did the same for a bad
+  archive, so one bad file hid the whole catalogue: `SkillsGuide` fails open, and the model saw no skills.
+  `GetAsync` returned `{name}.md` whatever its frontmatter said and never looked at any other file, so a skill that
+  `ListAsync` reported under its frontmatter `name` could not be loaded when its file had another name. `SaveAsync`
+  named the file after the raw name while `Serialize` writes it trimmed and on one line, so saving `"deploy "`
+  wrote `deploy .md`, which listed as `deploy` and was not found by `GetAsync("deploy")`; saving `".."` archived
+  the previous version into the skills directory itself; and `GetVersionAsync` joined the version id into a
+  path, so `"../../../x"` read any `.md` outside the store. Now a bad file affects only itself: `ListAsync`,
+  `GetAsync` and `ListVersionsAsync` skip a file that cannot be read or parsed, silently (`ISkillStore` has no
+  diagnostics channel, so the skip leaves no trace). `GetAsync` resolves a skill by its frontmatter `name`
+  (case-insensitive): it tries `{name}.md` first, accepts it only when the name inside matches, and otherwise
+  scans the directory. When several files declare one name, the file named after the skill wins, then the first by
+  ordinal filename; `ListAsync` applies the same rule, returns one entry per name in ordinal filename order, and
+  so lists the skill that `GetAsync` loads. `SaveAsync` and `DeleteAsync` (and the history directory) use the
+  canonical name `Serialize` writes (single line, trimmed). `SaveAsync` writes a temp file and renames it over
+  the target, so a crash cannot leave a torn `.md`, and `GetVersionAsync` returns null for a version id that
+  contains path characters.
+
+  **Behavioural change** in `GetAsync`: it no longer returns `{name}.md` just because the filename matches; the
+  frontmatter `name` must match too, ignoring case. A `deploy.md` whose frontmatter says `name: release` is no
+  longer what `GetAsync("deploy")` returns (it is now found as `release`). Rename the file or correct its
+  frontmatter if you relied on the filename alone. Where a directory used to make `ListAsync`, `GetAsync` or
+  `ListVersionsAsync` throw, they now return what they could read, so code that caught the exception to detect a
+  bad skill file sees none.
+
+  **Behavioural change** in `SaveAsync`: it throws `ArgumentException` for a name that is empty or `.` or `..`
+  once trimmed (before, it wrote a file named `.md`, `..md` or `...md`); the `skill_manage` tool
+  reports it as an error result. Saving a skill named `"deploy "` now writes `deploy.md`, and
+  `DeleteAsync("deploy ")` deletes it, where before they used `deploy .md`.
+
 - **`FileSkillStore` lost version history when a skill was overwritten twice in the same second, and its
   archive ids followed the process culture.** The archive id was a second-resolution timestamp, so two
   overwrites in one second (a model can issue two `skill_manage` saves in one response) wrote the same
@@ -389,6 +421,17 @@ public API even though most consumers only implement a few of them.
 - **`WithLearning`/`WithSkills` built their `FileSkillStore`s with the system clock instead of the
   registered `TimeProvider`**, so replacing `TimeProvider` through DI did not control skill archive
   timestamps (`WithSkillStore(directory)` already honoured it). They now use the registered clock.
+
+- **A crafted task id could inject script into the live dashboard page.** `app.js` interpolated the run's id
+  unescaped into the run list's `data-id="…"` attribute, so an id such as `x" onmouseover="…` closed the attribute
+  and added an event handler that ran in the dashboard's origin for everyone viewing the feed. The id is the
+  `taskId` the host gave the run, which a host may take from its own users. `escapeHtml` did not cover it: it used
+  the `textContent` → `innerHTML` trick, which escapes `&`, `<` and `>` but leaves quotes alone, so it was safe in
+  element text and not in a quoted attribute value. `escapeHtml` now also escapes `"` and `'`, and the `data-id`
+  and `data-seq` attributes go through it (`data-seq` is the tracer's own sequence number and not attacker-controlled;
+  it is escaped so that no attribute interpolates feed data raw). The page is an embedded resource of the
+  `SapphireGuard.ModelHarness.Dashboard` package, so upgrading the package is the whole fix and no host code
+  changes.
 
 ### Docs
 
