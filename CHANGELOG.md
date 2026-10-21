@@ -296,7 +296,7 @@ public API even though most consumers only implement a few of them.
   named the file after the raw name while `Serialize` writes it trimmed and on one line, so saving `"deploy "`
   wrote `deploy .md`, which listed as `deploy` and was not found by `GetAsync("deploy")`; saving `".."` archived
   the previous version into the skills directory itself; and `GetVersionAsync` joined the version id into a
-  path, so `"../../x"` read any `.md` outside the store. Now a bad file affects only itself: `ListAsync`,
+  path, so `"../../../x"` read any `.md` outside the store. Now a bad file affects only itself: `ListAsync`,
   `GetAsync` and `ListVersionsAsync` skip a file that cannot be read or parsed, silently (`ISkillStore` has no
   diagnostics channel, so the skip leaves no trace). `GetAsync` resolves a skill by its frontmatter `name`
   (case-insensitive): it tries `{name}.md` first, accepts it only when the name inside matches, and otherwise
@@ -316,8 +316,8 @@ public API even though most consumers only implement a few of them.
 
   **Behavioural change** in `SaveAsync`: it throws `ArgumentException` for a name that is empty or `.` or `..`
   once trimmed (before, it wrote a file named `.md`, `..md` or `...md`); the `skill_manage` tool
-  reports it as an error result. `SaveAsync("deploy ")` now writes `deploy.md`, and `DeleteAsync("deploy ")`
-  deletes it, where before they used `deploy .md`.
+  reports it as an error result. Saving a skill named `"deploy "` now writes `deploy.md`, and
+  `DeleteAsync("deploy ")` deletes it, where before they used `deploy .md`.
 
 - **`FileSkillStore` lost version history when a skill was overwritten twice in the same second, and its
   archive ids followed the process culture.** The archive id was a second-resolution timestamp, so two
