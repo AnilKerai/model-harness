@@ -8,6 +8,12 @@ namespace SapphireGuard.ModelHarness.Framework.Tools;
 /// <c>PassthroughToolSelector</c> (returns all tools unchanged). The selection is enforced, not
 /// advisory: the loop dispatches only calls to tools the model was sent on that call, so a tool dropped
 /// here cannot run on that turn even if the model names it.
+/// <para>
+/// A selector that throws fails closed: the model is offered no tools for that turn (the run continues and
+/// the error is logged as a guide error). Only genuine cancellation of the harness token propagates. A
+/// selector that would rather keep every tool than lose them all (a relevance ranker, say) must catch its own
+/// errors and return the tools it was given.
+/// </para>
 /// </summary>
 public interface IToolSelector
 {
