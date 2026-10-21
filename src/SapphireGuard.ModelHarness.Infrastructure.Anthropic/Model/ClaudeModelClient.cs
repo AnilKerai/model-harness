@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Messages;
 using SapphireGuard.ModelHarness.Framework.Model;
@@ -7,18 +6,14 @@ using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
 using AnthropicSdkOptions = Anthropic.Core.ClientOptions;
-using SdkMessage = Anthropic.Models.Messages.Message;
-using SdkRole = Anthropic.Models.Messages.Role;
 using FrameworkMessage = SapphireGuard.ModelHarness.Framework.State.Message;
-using FrameworkUsage = SapphireGuard.ModelHarness.Framework.State.Usage;
-using FrameworkToolCall = SapphireGuard.ModelHarness.Framework.Tools.ToolCall;
 
 namespace SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 
 /// <summary>
-/// <see cref="IModelClient"/> adapter over the official Anthropic SDK.
-/// Maps framework messages and tool definitions to SDK types, calls the
-/// Messages API, and maps the response back to framework types.
+/// <see cref="IModelClient"/> adapter over the official Anthropic SDK. Calls the Messages API and
+/// delegates every framework ↔ SDK mapping to <see cref="ClaudeWireFormat"/>, which is where the
+/// testable logic lives; this class is transport only.
 /// </summary>
 [ExcludeFromCodeCoverage]
 public sealed class ClaudeModelClient : IModelClient
@@ -43,13 +38,9 @@ public sealed class ClaudeModelClient : IModelClient
         IReadOnlyList<ToolDefinition> availableTools,
         CancellationToken ct)
     {
-        var systemText = messages
-            .Where(m => m.Role == MessageRole.System)
-            .Select(m => m.Content)
-            .FirstOrDefault();
-
-        var sdkMessages = BuildMessages(messages);
-        var sdkTools = availableTools.Select(MapTool).Select(t => (ToolUnion)t).ToArray();
+        var sdkMessages = ClaudeWireFormat.BuildMessages(messages);
+        var sdkTools = availableTools.Select(ClaudeWireFormat.MapTool).Select(t => (ToolUnion)t).ToArray();
+        var systemText = ClaudeWireFormat.SystemText(messages);
 
         var request = new MessageCreateParams
         {
@@ -64,203 +55,6 @@ public sealed class ClaudeModelClient : IModelClient
         };
 
         var response = await _client.Messages.Create(request, ct);
-        return MapResponse(response);
-    }
-
-    private static List<MessageParam> BuildMessages(IReadOnlyList<FrameworkMessage> messages)
-    {
-        var result = new List<MessageParam>();
-
-        // System messages are hoisted to MessageCreateParams.System
-        var nonSystem = messages.Where(m => m.Role != MessageRole.System).ToList();
-
-        // The Anthropic API requires alternating user/assistant turns. We batch
-        // consecutive same-role messages together using content blocks, and inline
-        // tool results (our Tool role) into user turns.
-        var pendingBlocks = new List<ContentBlockParam>();
-        SdkRole? pendingRole = null;
-
-        foreach (var msg in nonSystem)
-        {
-            var sdkRole = msg.Role is MessageRole.Assistant or MessageRole.ToolUse
-                ? SdkRole.Assistant
-                : SdkRole.User;
-
-            if (pendingRole is not null && pendingRole != sdkRole)
-            {
-                Flush(result, pendingRole.Value, pendingBlocks);
-                pendingBlocks.Clear();
-            }
-
-            pendingRole = sdkRole;
-
-            if (msg.Role == MessageRole.Tool)
-            {
-                pendingBlocks.Add(new ContentBlockParam(ParseToolResult(msg.Content)));
-            }
-            else if (msg.Role == MessageRole.ToolUse)
-            {
-                pendingBlocks.Add(new ContentBlockParam(ParseToolUse(msg.Content)));
-            }
-            else
-            {
-                pendingBlocks.Add(new ContentBlockParam(new TextBlockParam { Text = msg.Content }));
-            }
-        }
-
-        if (pendingBlocks.Count > 0 && pendingRole is not null)
-        {
-            Flush(result, pendingRole.Value, pendingBlocks);
-        }
-
-        return result;
-    }
-
-    private static void Flush(List<MessageParam> result, SdkRole role, List<ContentBlockParam> blocks)
-    {
-        if (blocks.Count == 1 && blocks[0].TryPickText(out var textBlock))
-        {
-            result.Add(new MessageParam { Role = role, Content = textBlock.Text });
-        }
-        else
-        {
-            result.Add(new MessageParam { Role = role, Content = new MessageParamContent([.. blocks]) });
-        }
-    }
-
-    private static ToolUseBlockParam ParseToolUse(string content)
-    {
-        // Content format written by HeadEvictionTrajectoryGuide:
-        // "[tool_call name={name} id={callId}] {argsJson}"
-        string name = "";
-        string callId = "";
-        string argsJson = "{}";
-
-        if (content.StartsWith("[tool_call ", StringComparison.Ordinal))
-        {
-            var closeBracket = content.IndexOf(']');
-            if (closeBracket > 0)
-            {
-                var meta = content[1..closeBracket];
-                argsJson = content[(closeBracket + 1)..].TrimStart();
-
-                foreach (var part in meta.Split(' '))
-                {
-                    if (part.StartsWith("name=", StringComparison.Ordinal))
-                        name = part[5..];
-                    if (part.StartsWith("id=", StringComparison.Ordinal))
-                        callId = part[3..];
-                }
-            }
-        }
-
-        var input = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(argsJson) ?? [];
-        return new ToolUseBlockParam { ID = callId, Name = name, Input = input };
-    }
-
-    private static ToolResultBlockParam ParseToolResult(string content)
-    {
-        // Content format written by HeadEvictionTrajectoryGuide:
-        // "[tool_result id={callId} error={bool}] {resultText}"
-        string callId = "";
-        bool isError = false;
-        string resultText = content;
-
-        if (content.StartsWith("[tool_result ", StringComparison.Ordinal))
-        {
-            var closeBracket = content.IndexOf(']');
-            if (closeBracket > 0)
-            {
-                var meta = content[1..closeBracket];
-                resultText = content[(closeBracket + 1)..].TrimStart();
-
-                foreach (var part in meta.Split(' '))
-                {
-                    if (part.StartsWith("id=", StringComparison.Ordinal))
-                        callId = part[3..];
-                    if (part.StartsWith("error=", StringComparison.Ordinal))
-                        isError = string.Equals(part[6..], "true", StringComparison.OrdinalIgnoreCase);
-                }
-            }
-        }
-
-        return new ToolResultBlockParam
-        {
-            ToolUseID = callId,
-            Content = resultText,
-            IsError = isError ? true : null
-        };
-    }
-
-    private static Tool MapTool(ToolDefinition def)
-    {
-        var schemaDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
-            def.InputSchema.GetRawText()) ?? [];
-
-        return new Tool
-        {
-            Name = def.Name,
-            Description = def.Description,
-            InputSchema = InputSchema.FromRawUnchecked(schemaDict)
-        };
-    }
-
-    private static ModelResponse MapResponse(SdkMessage response)
-    {
-        var textParts = new List<string>();
-        var toolCalls = new List<FrameworkToolCall>();
-
-        foreach (var block in response.Content)
-        {
-            if (block.TryPickText(out var tb))
-            {
-                textParts.Add(tb.Text);
-            }
-            else if (block.TryPickToolUse(out var tu))
-            {
-                var argsJson = JsonSerializer.Serialize(tu.Input);
-                var argsElement = JsonDocument.Parse(argsJson).RootElement;
-                toolCalls.Add(new FrameworkToolCall(tu.ID, tu.Name, argsElement));
-            }
-        }
-
-        // With prompt caching on, Anthropic reports input_tokens as the uncached remainder only;
-        // the cached prefix is billed separately (reads at a per-model fraction of input, 5-min writes
-        // at 1.25x). Fold all three buckets into the reported input count so token budgets see the
-        // true prompt size, and price each bucket at its own rate below.
-        var uncachedInput = response.Usage.InputTokens;
-        var cacheReadTokens = response.Usage.CacheReadInputTokens ?? 0;
-        var cacheWriteTokens = response.Usage.CacheCreationInputTokens ?? 0;
-        var outputTokens = response.Usage.OutputTokens;
-
-        var usage = new FrameworkUsage(
-            InputTokens: (int)(uncachedInput + cacheReadTokens + cacheWriteTokens),
-            OutputTokens: (int)outputTokens);
-
-        // Rate limiting counts a different number than billing does: Anthropic excludes cache reads from
-        // ITPM, so caching raises effective throughput rather than consuming it (their worked example: a
-        // 2M ITPM limit with an 80% hit rate carries 10M total input tokens/min). Counting the folded
-        // input here would throttle a well-cached agent several times too early, and get worse the better
-        // the cache performed. Cache *writes* do count, so they stay in.
-        // The one exception is Haiku 3.5, which counts cache reads too — it is retired on this API, so it
-        // cannot arrive through this client; revisit if a Bedrock/Vertex backend is ever added.
-        var rateLimitedInput = (int)(uncachedInput + cacheWriteTokens);
-
-        var stopReason = ClaudeWireFormat.MapStopReason(response.StopReason?.Raw());
-        var cost = ClaudePricing.Cost(response.Model, uncachedInput, cacheReadTokens, cacheWriteTokens, outputTokens);
-
-        return new ModelResponse
-        {
-            Text = textParts.Count > 0 ? string.Join("\n", textParts) : null,
-            ToolCalls = toolCalls,
-            StopReason = stopReason,
-            Usage = usage,
-            Cost = cost,
-            Model = response.Model,
-            Provider = "anthropic",
-            CachedInputTokens = (int)cacheReadTokens,
-            CacheWriteTokens = (int)cacheWriteTokens,
-            InputTokensTowardRateLimit = rateLimitedInput
-        };
+        return ClaudeWireFormat.MapResponse(response);
     }
 }
