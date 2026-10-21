@@ -108,7 +108,39 @@ public sealed class SkillStoreConfigurationTests
         AssertNoTool<SkillManageTool>(builder);
     }
 
+    // ── The store uses the DI clock ──────────────────────────────────────────
+
+    [Fact]
+    public async Task Learning_StoreArchivesWithTheRegisteredTimeProvider()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "skillcfg_" + Guid.NewGuid().ToString("n"));
+        var now = new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<TimeProvider>(new FixedClock(now));
+            services.AddModelHarness(b => b.WithLearning(dir));
+            await using var provider = services.BuildServiceProvider();
+            var store = provider.GetRequiredService<ISkillStore>();
+
+            await store.SaveAsync(new Skill("s", "d", "u", "v1"), CancellationToken.None);
+            await store.SaveAsync(new Skill("s", "d", "u", "v2"), CancellationToken.None);
+
+            var version = Assert.Single(await store.ListVersionsAsync("s", CancellationToken.None));
+            Assert.Equal(now, version.ArchivedAt);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
     // ── Helper ───────────────────────────────────────────────────────────────
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 
     private sealed class InMemorySkillStoreWithSeed(string skillName) : ISkillStore
     {

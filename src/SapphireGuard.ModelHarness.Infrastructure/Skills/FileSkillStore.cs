@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using SapphireGuard.ModelHarness.Framework.Skills;
 
@@ -28,6 +29,14 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Skills;
 /// <see cref="SaveAsync"/> and <see cref="DeleteAsync"/> are keyed by filename (the agent writes
 /// those files), using the same canonical name as the serialised frontmatter (single line, trimmed).
 /// </para>
+/// <para>
+/// <see cref="SaveAsync"/> and <see cref="DeleteAsync"/> of one skill file are serialised
+/// process-wide: the gate is keyed by the file's full path, not by store instance, so several
+/// <see cref="FileSkillStore"/>s on one directory (concurrent runs, <c>AgentFactory</c> sub-agents)
+/// cannot interleave a save's read, archive and write. Cross-process writers sharing a directory
+/// are not coordinated and can still lose a history version; each save writes a uniquely named
+/// temp file, so they cannot corrupt each other's write.
+/// </para>
 /// </remarks>
 public sealed class FileSkillStore : ISkillStore
 {
@@ -36,6 +45,14 @@ public sealed class FileSkillStore : ISkillStore
     // second-resolution and is parse-only, so history written before the change still lists.
     private const string ArchiveIdFormat = "yyyyMMddTHHmmssfffZ";
     private const string LegacyArchiveIdFormat = "yyyyMMddTHHmmssZ";
+
+    // One gate per skill file, shared by every FileSkillStore in the process. AgentFactory
+    // sub-containers, SkillStoreConfiguration and WithSkillStore each build their own store on the
+    // same directory, so a per-instance lock would not serialise them. Keyed by full path and
+    // case-insensitively: on macOS/Windows "Deploy" and "deploy" are the same file. Never pruned
+    // (one SemaphoreSlim per distinct skill path ever written), which the skill catalogue bounds.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _dir;
     private readonly TimeProvider _time;
@@ -80,25 +97,54 @@ public sealed class FileSkillStore : ISkillStore
 
         Directory.CreateDirectory(_dir);
         var current = Path.Combine(_dir, stem + ".md");
-        if (File.Exists(current))
-            await ArchiveAsync(stem, current, ct);
 
-        // Write to a temp file then atomically rename, so a crash mid-write can't leave a torn
-        // .md behind. The .tmp suffix keeps it out of the *.md glob.
-        var tmp = Path.Combine(_dir, stem + ".tmp");
-        await File.WriteAllTextAsync(tmp, SkillDocumentParser.Serialize(skill), ct);
-        File.Move(tmp, current, overwrite: true);
+        // Read-current / archive / write-current must run as one unit per skill file, or two saves
+        // both archive the same version and the one written in between is never archived.
+        var gate = GateFor(current);
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (File.Exists(current))
+                await ArchiveAsync(stem, current, ct);
+
+            // Write to a temp file then atomically rename, so a crash mid-write can't leave a torn
+            // .md behind. The .tmp suffix keeps it out of the *.md glob, and the Guid keeps savers
+            // that are not behind the gate (another process) off each other's temp file.
+            var tmp = Path.Combine(_dir, $"{stem}.{Guid.NewGuid():n}.tmp");
+            try
+            {
+                await File.WriteAllTextAsync(tmp, SkillDocumentParser.Serialize(skill), ct);
+                File.Move(tmp, current, overwrite: true);
+            }
+            finally
+            {
+                // No-op after a successful move; removes the orphan when the write or move failed.
+                File.Delete(tmp);
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
-    public Task DeleteAsync(string name, CancellationToken ct)
+    public async Task DeleteAsync(string name, CancellationToken ct)
     {
-        if (StemFor(name) is { } stem)
+        if (StemFor(name) is not { } stem)
+            return;
+
+        var path = Path.Combine(_dir, stem + ".md");
+        var gate = GateFor(path);
+        await gate.WaitAsync(ct);
+        try
         {
-            var path = Path.Combine(_dir, stem + ".md");
             if (File.Exists(path))
                 File.Delete(path);
         }
-        return Task.CompletedTask;
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task<IReadOnlyList<SkillVersion>> ListVersionsAsync(string name, CancellationToken ct)
@@ -174,11 +220,12 @@ public sealed class FileSkillStore : ISkillStore
     }
 
     /// <summary>
-    /// Copies the current file into the skill's history under a timestamp id. The id is claimed
+    /// Copies the current file into the skill's history under a timestamp id. The caller holds the
+    /// skill's gate, so no other saver in this process touches the file meanwhile. The id is claimed
     /// atomically with <see cref="FileMode.CreateNew"/>: if the file already exists (two saves in
-    /// the same millisecond, a clock that doesn't advance, or another agent sharing this store) the
-    /// id moves forward one millisecond and tries again, so every overwrite keeps its own version
-    /// and ids stay chronologically sortable.
+    /// the same millisecond, a clock that doesn't advance, or a process that doesn't share the gate)
+    /// the id moves forward one millisecond and tries again, so every overwrite keeps its own
+    /// version and ids stay chronologically sortable.
     /// </summary>
     private async Task ArchiveAsync(string stem, string currentPath, CancellationToken ct)
     {
@@ -207,6 +254,9 @@ public sealed class FileSkillStore : ISkillStore
             return;
         }
     }
+
+    private static SemaphoreSlim GateFor(string skillPath) =>
+        Gates.GetOrAdd(Path.GetFullPath(skillPath), _ => new SemaphoreSlim(1, 1));
 
     private string HistoryDir(string stem) =>
         Path.Combine(_dir, ".history", stem);

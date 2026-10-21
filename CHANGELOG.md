@@ -363,6 +363,22 @@ public API even though most consumers only implement a few of them.
   **Behavioural change:** a `Subscribe` consumer now always sees ascending `Seq`; before, a concurrent
   publisher could make it see `4, 3`. No code change is needed.
 
+- **`FileSkillStore`: concurrent saves of one skill (concurrent runs, or two store instances on one
+  directory) could throw `FileNotFoundException`/`EndOfStreamException`, lose a reported-successful
+  version, or archive one version twice.** `SaveAsync` read the current file, archived it and wrote the new
+  one with no coordination, and every save of a skill shared one `{name}.tmp` file. Two overlapping saves
+  both archived the same version while the one written in between was never archived, a save could
+  overwrite another's temp file (so a save that returned normally was lost), and `DeleteAsync` could remove
+  the file between a save's existence check and its read. Saves and deletes of one skill file are now
+  serialised per skill file, process-wide (keyed by full path, so `AgentFactory` sub-agents and the other
+  stores `WithLearning`/`WithSkills`/`WithSkillStore` build on one directory share the gate), and each save
+  writes a uniquely named temp file. Writers in other processes sharing the directory are still not
+  coordinated and can lose a history version. No code change is needed.
+
+- **`WithLearning`/`WithSkills` built their `FileSkillStore`s with the system clock instead of the
+  registered `TimeProvider`**, so replacing `TimeProvider` through DI did not control skill archive
+  timestamps (`WithSkillStore(directory)` already honoured it). They now use the registered clock.
+
 ### Docs
 
 - **`MaxWallClock` includes the time a HITL run spends waiting for the human.** This has been the behaviour

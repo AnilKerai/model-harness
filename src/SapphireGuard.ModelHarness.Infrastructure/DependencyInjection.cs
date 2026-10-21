@@ -356,7 +356,7 @@ public static class DependencyInjection
 
         var config = new SkillStoreConfiguration();
         builder.Services.AddSingleton(config);
-        builder.WithSkillStore(sp => sp.GetRequiredService<SkillStoreConfiguration>().Build());
+        builder.WithSkillStore(sp => sp.GetRequiredService<SkillStoreConfiguration>().Build(sp.GetRequiredService<TimeProvider>()));
         return config;
     }
 
