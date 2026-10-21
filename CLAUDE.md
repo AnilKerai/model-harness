@@ -173,6 +173,8 @@ Unit tests live in `tests/SapphireGuard.ModelHarness.Framework.Tests.Unit`. Run 
 dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/
 ```
 
+The project multi-targets `net8.0;net10.0`, matching the shipped libraries, so both TFMs are executed rather than only compiled. The `net8.0` leg needs an 8.x runtime visible to the `dotnet` muxer in use: CI installs both the 8.x and 10.x SDKs, and locally the Homebrew muxer ignores `DOTNET_ROOT`, so run it through a `~/.dotnet` muxer that has 8.x installed.
+
 Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelClient`, etc.) carry `[ExcludeFromCodeCoverage]` — no tests needed for them. Everything with conditional logic has tests.
 
 ## Roadmap status
