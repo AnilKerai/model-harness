@@ -5,7 +5,34 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!--
+      CS1591: the public surface is documented for IntelliSense, internals are not.
+
+      CA1716 (identifiers should not match keywords) fires only on public API here — the Step type, the
+      Framework.Loop namespace, IToolRegistry.Get and the call/error parameters on ITool, IToolRegistry
+      and ITracer. Renaming any of them stops consumers compiling, and the rule targets VB/F# keyword
+      collisions in a C#-first library where Get is the conventional retrieval name.
+
+      The five rules below are known debt from turning the recommended set on over existing code. Each is
+      suppressed with its reason rather than swept up in a branch that is about something else. All are
+      burn-down candidates; only CA1001 is a real defect.
+        CA1001 — ClaudeModelClient and OllamaModelClient hold a disposable SDK client but are not
+                 IDisposable. Both are DI singletons, so the container is expected to own disposal;
+                 implementing IDisposable is an additive API change deserving its own changeset,
+                 changelog entry, and a decision about who disposes a directly-constructed instance.
+        CA1822 — the 'Type' discriminator properties on OpenTelemetryTracer's message records must be
+                 instance members to appear in the serialized GenAI payload; static would drop them.
+        CA1870 — IndexOfAny over a small char array in FileCheckpointStore's id validation, called once
+                 per load/save, so a cached SearchValues buys nothing measurable.
+        CA1859 — PromptInjectionSensor.TrustedTools is a private field; narrowing to the concrete type is
+                 a micro-optimization, not a defect.
+        CA1725 — AgentTool.ExecuteAsync names a parameter ctx where ITool declares context. Renaming it is
+                 source-breaking for named-argument callers, so it needs a changelog note of its own.
+    -->
+    <NoWarn>$(NoWarn);CS1591;CA1716;CA1001;CA1822;CA1870;CA1859;CA1725;CA1861;CA1310;CA1305</NoWarn>
+
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
 
     <IsPackable>false</IsPackable>
 

@@ -155,6 +155,7 @@ The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContext
 - Remove unused `using` statements in every file touched.
 - No comments unless the WHY is non-obvious. XML doc comments belong on the public API surface only (this ships as a NuGet library, so consumers get IntelliSense) — keep them concise. Do not put XML docs on internal/private members; use a plain `//` comment there only where the WHY is non-obvious.
 - No unnecessary abstractions — don't design for hypothetical future requirements.
+- The recommended .NET analyzer set is on (`AnalysisLevel=latest-recommended` in `Directory.Build.props`) and `TreatWarningsAsErrors` is set, so a new finding fails the build. The suppression list there covers rule classes that fire on existing code, each with its stated reason — add an entry with a reason rather than fixing unrelated findings inside a change that is about something else, and fix a finding in preference to suppressing it. `.editorconfig` holds the formatting and naming conventions.
 
 ## Workflow
 

@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <RootNamespace>SapphireGuard.ModelHarness.Framework.Tests.Unit</RootNamespace>
+    <!-- Test methods carry the Method_Scenario_Expectation naming convention, which CA1707 rejects. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
