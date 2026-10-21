@@ -449,9 +449,13 @@ for a **live agent console** with no OTLP, collector, or Docker. It turns each l
 `DashboardEvent` (kind, `taskId`, nullable `turn`, a summary, and a structured `detail` bag),
 keeps a bounded ring buffer so a browser connecting mid-run replays the history, and exposes
 `Subscribe(ct)` for a host endpoint (e.g. Server-Sent Events) to stream. A reconnecting client that
-already processed part of the stream passes the last `DashboardEvent.Seq` it saw to
-`Subscribe(ct, afterSeq)` and is replayed only what came after it (the SSE endpoint does this from
-the `Last-Event-ID` header). Run/turn aggregation is
+already processed part of the stream is replayed only what came after it: write
+`tracer.EventId(evt)` (`{Epoch}-{Seq}`) as the SSE `id:`, and pass the `Last-Event-ID` header the
+browser sends back to `Subscribe(lastEventId, ct)` (the bundled SSE endpoint does exactly this). `Epoch`
+is a GUID per tracer instance, so an id from before a restart, from another instance behind a load
+balancer, a missing id or an unparseable one replays the whole backlog instead of silently skipping
+events. `Subscribe(afterSeq, ct)` takes a bare seq for in-process callers; it has no epoch, so it
+cannot detect a restart (it only guesses when `afterSeq` is beyond the newest seq). Run/turn aggregation is
 left to the consumer, so the tracer stays transport-neutral. Pass
 `new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to also
 include conversation content — each model response's text (the run's result), the task text (otherwise a run
