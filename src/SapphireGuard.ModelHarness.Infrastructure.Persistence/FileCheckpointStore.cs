@@ -12,8 +12,20 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Persistence;
 /// Because the task ID becomes a directory name, it must be a single path segment;
 /// IDs that are empty or contain directory separators or <c>..</c> traversal are rejected.
 /// </summary>
-public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
+/// <param name="baseDirectory">Directory holding one subdirectory per task.</param>
+/// <param name="retainPerTask">
+/// How many of the newest checkpoints to keep per task, pruned after each successful save; older
+/// files are deleted. <see langword="null"/> (the default) retains every checkpoint, so a task's
+/// directory grows by one trajectory-sized file per turn. Setting 1 keeps resume working but gives
+/// up the fallback past a corrupt newest file that <see cref="LoadLatestAsync"/> otherwise provides
+/// — use 2 or more to keep that.
+/// </param>
+public sealed class FileCheckpointStore(string baseDirectory, int? retainPerTask = null) : ICheckpointStore
 {
+    private readonly int? _retainPerTask = retainPerTask is null || retainPerTask.Value > 0
+        ? retainPerTask
+        : throw new ArgumentOutOfRangeException(nameof(retainPerTask), retainPerTask, "Must be greater than zero, or null to retain every checkpoint.");
+
     public async Task SaveAsync(Checkpoint checkpoint, CancellationToken ct = default)
     {
         var dir = TaskDirectory(checkpoint.State.TaskId);
@@ -33,6 +45,41 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
         // .json for LoadLatestAsync to trip over. The .tmp suffix keeps it out of the *.json glob.
         await File.WriteAllTextAsync(tmp, json, ct);
         File.Move(tmp, path, overwrite: true);
+
+        // Retention bounds the task directory, which otherwise grows by one trajectory-sized file per
+        // turn (each checkpoint carries the whole trajectory; only ModelCallStep.Prompt is stripped).
+        // It is a disk-bounding policy, not a correctness one: resume always reads the newest
+        // checkpoint, and the file just renamed into place is the newest, so a prune cannot remove
+        // what this save wrote.
+        if (_retainPerTask is { } retain)
+            PruneOldest(dir, retain);
+    }
+
+    // Only this store's own *.json names are candidates — a .tmp left by a killed process is not a
+    // checkpoint and is left alone. A failed delete is swallowed rather than failing the save that
+    // just succeeded: a concurrent reader or another process may hold the file, and losing a prune is
+    // recoverable where a lost save is not.
+    private static void PruneOldest(string dir, int retain)
+    {
+        var checkpoints = Directory.GetFiles(dir, "*.json");
+        if (checkpoints.Length <= retain)
+            return;
+
+        foreach (var stale in checkpoints.OrderDescending().Skip(retain))
+        {
+            try
+            {
+                File.Delete(stale);
+            }
+            catch (IOException)
+            {
+                // Held by a reader, or gone already — the next save prunes again.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Read-only or permission-denied — not worth failing a completed save over.
+            }
+        }
     }
 
     public async Task<Checkpoint?> LoadAsync(string checkpointId, CancellationToken ct = default)
