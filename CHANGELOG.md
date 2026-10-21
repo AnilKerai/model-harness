@@ -80,6 +80,15 @@ public API even though most consumers only implement a few of them.
   unchanged. A browser tab left open across the upgrade still holds a numeric id, so it gets a full replay on
   its next reconnect and, because the page does not dedupe, counts that run's events once more.
 
+- **`ReActGuide` keeps its framing out of the final answer.** It asked for a one-line *Observation* after every tool
+  result, so on the last turn the model wrote that Observation, often a `---` and a heading, and then the answer, all
+  in one response, which became `FinalAnswer`. The guide now asks for Observations only on turns that call another
+  tool, and says the final reply goes to the user as written: no Thought/Observation lines, labels, headings or
+  separators. Measured live on `getting-started` with claude-haiku-4-5, 8 runs each: ReAct labels in `FinalAnswer`
+  went from 7/8 to 0/8. The prompt text is the only change; tool-calling turns keep their Thought and Observation.
+  The getting-started system prompt also now says its answer is sent to the customer verbatim, which removed the
+  "Here's a reply for the customer:" preambles and subject lines (8/8 → 0/8 together with the guide change).
+
 - **Checkpoints no longer persist `ModelCallStep.Prompt`, so their size grows with the trajectory instead of with
   every turn's whole context window.** Each `ModelCallStep` stores the full rendered prompt of its call — up to
   `CompactionOptions.WindowTokens`, about 400 KB of text at the default — and every turn saves a checkpoint of the
