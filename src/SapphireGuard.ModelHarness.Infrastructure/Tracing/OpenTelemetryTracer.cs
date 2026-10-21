@@ -411,9 +411,13 @@ public sealed class OpenTelemetryTracer(bool enableSensitiveData = false, string
 
     private sealed record ChatMessage(string Role, List<object> Parts);
     private sealed record OutputMessage(string Role, List<object> Parts, string FinishReason);
+    // CA1822 wants these Type members static. That would drop them from the serialized payload: the GenAI
+    // message schema needs them as instance members to emit the "type" discriminator.
+#pragma warning disable CA1822
     private sealed record TextPart(string Content) { [JsonPropertyOrder(-1)] public string Type => "text"; }
     private sealed record ToolCallPart(string? Id, string Name, object? Arguments) { [JsonPropertyOrder(-1)] public string Type => "tool_call"; }
     private sealed record ToolCallResponsePart(string? Id, string Response) { [JsonPropertyOrder(-1)] public string Type => "tool_call_response"; }
+#pragma warning restore CA1822
 
     private sealed class ModelCallScope(Activity? activity, bool enableSensitiveData) : IModelCallScope
     {

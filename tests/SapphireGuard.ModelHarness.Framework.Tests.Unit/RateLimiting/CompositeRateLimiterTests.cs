@@ -12,10 +12,10 @@ public sealed class CompositeRateLimiterTests
         MaxWallClock = TimeSpan.FromMinutes(1)
     }, DateTimeOffset.UtcNow);
 
-    private static IRateLimiter PassLimiter() =>
+    private static StubRateLimiter PassLimiter() =>
         new StubRateLimiter(RateLimitCheck.Pass);
 
-    private static IRateLimiter LimitedLimiter(TimeSpan retryAfter, string reason = "limited") =>
+    private static StubRateLimiter LimitedLimiter(TimeSpan retryAfter, string reason = "limited") =>
         new StubRateLimiter(RateLimitCheck.Limited(retryAfter, reason));
 
     [Fact]

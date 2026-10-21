@@ -155,7 +155,7 @@ The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContext
 - Remove unused `using` statements in every file touched.
 - No comments unless the WHY is non-obvious. XML doc comments belong on the public API surface only (this ships as a NuGet library, so consumers get IntelliSense) — keep them concise. Do not put XML docs on internal/private members; use a plain `//` comment there only where the WHY is non-obvious.
 - No unnecessary abstractions — don't design for hypothetical future requirements.
-- The recommended .NET analyzer set is on (`AnalysisLevel=latest-recommended` in `Directory.Build.props`) and `TreatWarningsAsErrors` is set, so a new finding fails the build. The suppression list there covers rule classes that fire on existing code, each with its stated reason — add an entry with a reason rather than fixing unrelated findings inside a change that is about something else, and fix a finding in preference to suppressing it. `.editorconfig` holds the formatting and naming conventions.
+- The recommended .NET analyzer set is on (`AnalysisLevel=latest-recommended` in `Directory.Build.props`) and `TreatWarningsAsErrors` is set, so a new finding fails the build. Suppress at the site, with a reason — `[SuppressMessage]` or `#pragma` — never rule-wide: only `CS1591` and `CA1716` live in `Directory.Build.props`, and both are properties of the public surface rather than one-off hits. A rule-wide entry disables the rule for all future code, so a single exception becomes a blind spot. Fix a finding in preference to suppressing it.
 
 ## Workflow
 
@@ -171,10 +171,10 @@ The guide pipeline, `DefaultGuideRunner`, `DefaultSensorRunner`, `DefaultContext
 Unit tests live in `tests/SapphireGuard.ModelHarness.Framework.Tests.Unit`. Run with:
 
 ```bash
-dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/
+dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/ -f net10.0
 ```
 
-The project multi-targets `net8.0;net10.0`, matching the shipped libraries, so both TFMs are executed rather than only compiled. The `net8.0` leg needs an 8.x runtime visible to the `dotnet` muxer in use: CI installs both the 8.x and 10.x SDKs, and locally the Homebrew muxer ignores `DOTNET_ROOT`, so run it through a `~/.dotnet` muxer that has 8.x installed.
+The project multi-targets `net8.0;net10.0`, matching the shipped libraries, so CI runs both legs; `-f net10.0` selects one locally, which is the form that works on a machine without an 8.x runtime. The `net8.0` leg needs an 8.x runtime the `dotnet` muxer in use can see, and the Homebrew muxer ignores `DOTNET_ROOT` — so a local net8 run has to go through a `~/.dotnet` muxer carrying 8.x (`"$HOME/.dotnet/dotnet" test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/`). That muxer's SDK is the one that misbehaves with `--coverage`, so coverage and the net8 leg currently need different local installations.
 
 Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelClient`, etc.) carry `[ExcludeFromCodeCoverage]` — no tests needed for them. Everything with conditional logic has tests.
 

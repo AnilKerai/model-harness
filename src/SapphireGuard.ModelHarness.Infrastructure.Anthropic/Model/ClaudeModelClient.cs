@@ -16,6 +16,8 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 /// testable logic lives; this class is transport only.
 /// </summary>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "Not IDisposable yet: wrapping the SDK client means nothing outside can dispose it, and implementing IDisposable is additive but needs a decision about directly-constructed instances first.")]
 public sealed class ClaudeModelClient : IModelClient
 {
     private readonly AnthropicClient _client;

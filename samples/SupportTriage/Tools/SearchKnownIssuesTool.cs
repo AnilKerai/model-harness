@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -34,8 +35,8 @@ public sealed class SearchKnownIssuesTool : ITool
         var sb = new StringBuilder();
         foreach (var issue in issues)
         {
-            sb.AppendLine($"[{issue.Id}] {issue.Title}");
-            sb.AppendLine($"  Workaround: {issue.Workaround}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"[{issue.Id}] {issue.Title}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  Workaround: {issue.Workaround}");
         }
 
         return Task.FromResult(new ToolResult(call.CallId, sb.ToString().TrimEnd()));

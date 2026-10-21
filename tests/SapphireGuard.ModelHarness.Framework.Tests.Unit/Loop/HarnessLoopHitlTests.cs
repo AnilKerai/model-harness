@@ -307,7 +307,7 @@ public sealed class HarnessLoopHitlTests
         Assert.Equal(0, toolB.ExecuteCount);
 
         var prompt = Assert.Single(client.Prompts);
-        Assert.Contains(prompt, m => m.Role == MessageRole.ToolUse && m.Content.StartsWith($"[tool_call name=delete id={callB.CallId}]"));
+        Assert.Contains(prompt, m => m.Role == MessageRole.ToolUse && m.Content.StartsWith($"[tool_call name=delete id={callB.CallId}]", StringComparison.Ordinal));
         Assert.Contains(prompt, m => m.Role == MessageRole.Tool && m.Content == $"[tool_result id={callB.CallId} error=True] {NotExecutedText}");
         // The answered ask_human pair is there too, ahead of the skipped one.
         var toolMessages = prompt.Where(m => m.Role == MessageRole.Tool).Select(m => m.Content).ToList();
