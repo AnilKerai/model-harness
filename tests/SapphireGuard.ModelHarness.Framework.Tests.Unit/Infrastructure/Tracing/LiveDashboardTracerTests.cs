@@ -35,7 +35,7 @@ public sealed class LiveDashboardTracerTests
         var tracer = PublishRateLimits(5); // seq 1..5
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await using var feed = tracer.Subscribe(cts.Token, afterSeq: 3).GetAsyncEnumerator();
+        await using var feed = tracer.Subscribe(3, cts.Token).GetAsyncEnumerator();
 
         Assert.True(await feed.MoveNextAsync());
         Assert.Equal(4, feed.Current.Seq);
@@ -53,7 +53,7 @@ public sealed class LiveDashboardTracerTests
         var tracer = PublishRateLimits(3);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await using var feed = tracer.Subscribe(cts.Token, afterSeq: 3).GetAsyncEnumerator();
+        await using var feed = tracer.Subscribe(3, cts.Token).GetAsyncEnumerator();
 
         var next = feed.MoveNextAsync();
         tracer.LogRateLimit("t", 0, TimeSpan.FromSeconds(1));
@@ -68,7 +68,7 @@ public sealed class LiveDashboardTracerTests
         var tracer = PublishRateLimits(5);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var seqs = await TakeSeqsAsync(tracer.Subscribe(cts.Token, afterSeq: 0), 5);
+        var seqs = await TakeSeqsAsync(tracer.Subscribe(0, cts.Token), 5);
 
         Assert.Equal([1L, 2, 3, 4, 5], seqs);
     }
@@ -76,13 +76,140 @@ public sealed class LiveDashboardTracerTests
     [Fact]
     public async Task Subscribe_WithAfterSeqBeyondTheNewestSeq_ReplaysTheWholeBacklog()
     {
-        // The client last saw seq 99 from an earlier process; this one restarted, so seq began again at 1.
+        // A heuristic for the seq-only overload, which has no epoch: seq 99 can't belong to this young process,
+        // so the client is taken to hold an earlier process's id and the whole backlog is replayed.
         var tracer = PublishRateLimits(3);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var seqs = await TakeSeqsAsync(tracer.Subscribe(cts.Token, afterSeq: 99), 3);
+        var seqs = await TakeSeqsAsync(tracer.Subscribe(99, cts.Token), 3);
 
         Assert.Equal([1L, 2, 3], seqs);
+    }
+
+    [Fact]
+    public void EventId_IsTheEpochAndSeq_AndEpochsDifferBetweenTracers()
+    {
+        var a = new LiveDashboardTracer();
+        var b = new LiveDashboardTracer();
+
+        Assert.Matches("^[0-9a-f]{32}$", a.Epoch);
+        Assert.NotEqual(a.Epoch, b.Epoch);
+        Assert.Equal($"{a.Epoch}-7", a.EventId(new DashboardEvent(7, "run", "t", null, "s")));
+    }
+
+    [Fact]
+    public async Task Subscribe_WithThisEpochsEventId_ResumesAfterIt_ThenStreamsLiveEvents()
+    {
+        var tracer = PublishRateLimits(11); // seq 1..11
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var feed = tracer.Subscribe($"{tracer.Epoch}-9", cts.Token).GetAsyncEnumerator();
+
+        Assert.True(await feed.MoveNextAsync());
+        Assert.Equal(10, feed.Current.Seq);
+        Assert.True(await feed.MoveNextAsync());
+        Assert.Equal(11, feed.Current.Seq);
+
+        tracer.LogRateLimit("t", 0, TimeSpan.FromSeconds(1));
+        Assert.True(await feed.MoveNextAsync());
+        Assert.Equal(12, feed.Current.Seq);
+    }
+
+    [Fact]
+    public async Task Subscribe_WithAnEventIdTheTracerIssued_ResumesAfterThatEvent()
+    {
+        // The id written to the wire and the id parsed back are one format: round-trip through EventId.
+        var tracer = PublishRateLimits(5);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var firstThree = new List<DashboardEvent>();
+        await foreach (var e in tracer.Subscribe(cts.Token))
+        {
+            firstThree.Add(e);
+            if (firstThree.Count == 3) break;
+        }
+
+        var seqs = await TakeSeqsAsync(tracer.Subscribe(tracer.EventId(firstThree[^1]), cts.Token), 2);
+
+        Assert.Equal([4L, 5], seqs);
+    }
+
+    [Fact]
+    public async Task Subscribe_WithThisEpochsEventIdAtTheNewestSeq_ReplaysNothing_ThenStreamsLiveEvents()
+    {
+        var tracer = PublishRateLimits(3);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await using var feed = tracer.Subscribe($"{tracer.Epoch}-3", cts.Token).GetAsyncEnumerator();
+
+        var next = feed.MoveNextAsync();
+        tracer.LogRateLimit("t", 0, TimeSpan.FromSeconds(1));
+
+        Assert.True(await next);
+        Assert.Equal(4, feed.Current.Seq);
+    }
+
+    // The restart bug: the new process has already published 11 events (the sample's startup run), and the
+    // reconnecting client holds the old process's id for seq 11 (or 5, or 17). Seq alone can't tell that from
+    // "same stream, resume after N"; the epoch can, so the new process's whole run is replayed.
+    [Theory]
+    [InlineData("deadbeef-11")]
+    [InlineData("deadbeef-5")]
+    [InlineData("deadbeef-17")]
+    [InlineData("11")]   // a pre-epoch, seq-only id (a tab left open across the upgrade)
+    [InlineData("5")]
+    [InlineData("garbage")]
+    [InlineData("-")]
+    [InlineData("-5")]
+    [InlineData("deadbeef-")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task Subscribe_WithAnEventIdFromAnotherEpochOrNoneOrGarbage_ReplaysTheWholeBacklog(string? lastEventId)
+    {
+        var tracer = PublishRateLimits(11); // the restarted process, caught up to the old process's id
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var seqs = await TakeSeqsAsync(tracer.Subscribe(lastEventId, cts.Token), 11);
+
+        Assert.Equal(Enumerable.Range(1, 11).Select(i => (long)i), seqs);
+    }
+
+    [Theory]
+    [InlineData("")]      // epoch matches, seq missing
+    [InlineData("abc")]
+    [InlineData("-3")]
+    [InlineData("3x")]
+    [InlineData(" 3")]
+    [InlineData("99999999999999999999")] // overflows long
+    public async Task Subscribe_WithThisEpochButAnUnparseableSeq_ReplaysTheWholeBacklog(string seq)
+    {
+        var tracer = PublishRateLimits(5);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var seqs = await TakeSeqsAsync(tracer.Subscribe($"{tracer.Epoch}-{seq}", cts.Token), 5);
+
+        Assert.Equal([1L, 2, 3, 4, 5], seqs);
+    }
+
+    [Fact]
+    public async Task Subscribe_WithAnEpochThatOnlyStartsWithThisOne_ReplaysTheWholeBacklog()
+    {
+        var tracer = PublishRateLimits(5);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var seqs = await TakeSeqsAsync(tracer.Subscribe($"{tracer.Epoch}0-3", cts.Token), 5);
+
+        Assert.Equal([1L, 2, 3, 4, 5], seqs);
+    }
+
+    [Fact]
+    public async Task Subscribe_WithoutAnId_ReplaysTheWholeBacklog()
+    {
+        var tracer = PublishRateLimits(5);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var seqs = await TakeSeqsAsync(tracer.Subscribe(cts.Token), 5);
+
+        Assert.Equal([1L, 2, 3, 4, 5], seqs);
     }
 
     [Fact]
@@ -132,7 +259,7 @@ public sealed class LiveDashboardTracerTests
         await firstConnection.DisposeAsync();
 
         // EventSource reconnects with Last-Event-ID = the last id it received.
-        var resumed = await TakeSeqsAsync(tracer.Subscribe(cts.Token, afterSeq: seen[^1]), total - (int)seen[^1]);
+        var resumed = await TakeSeqsAsync(tracer.Subscribe(seen[^1], cts.Token), total - (int)seen[^1]);
         await publishing;
 
         Assert.Equal(Enumerable.Range(1, total).Select(i => (long)i), seen.Concat(resumed));

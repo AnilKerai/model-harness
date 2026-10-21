@@ -9,16 +9,16 @@ internal sealed class SkillStoreConfiguration
     public string? AgentDirectory { get; set; }
     public List<string> UserDirectories { get; } = [];
 
-    public ISkillStore Build()
+    public ISkillStore Build(TimeProvider time)
     {
         ISkillStore agentStore = AgentDirectory is not null
-            ? new FileSkillStore(AgentDirectory)
+            ? new FileSkillStore(AgentDirectory, time)
             : new NullSkillStore();
 
         return UserDirectories.Count == 0
             ? agentStore
             : new CompositeSkillStore(
                 agentStore,
-                UserDirectories.Select(d => (ISkillStore)new FileSkillStore(d)).ToList());
+                UserDirectories.Select(d => (ISkillStore)new FileSkillStore(d, time)).ToList());
     }
 }

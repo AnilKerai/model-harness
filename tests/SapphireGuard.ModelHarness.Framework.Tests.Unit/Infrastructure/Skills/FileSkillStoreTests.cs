@@ -624,6 +624,46 @@ public sealed class FileSkillStoreTests : IDisposable
         Assert.Null(await store.GetVersionAsync("s", Path.Combine(_dir, "secret"), CancellationToken.None));
     }
 
+    // ── Concurrency: saves and deletes of one skill file are serialised process-wide ──
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ParallelSaves_OfOneSkill_AllSucceedAndEachKeepsItsOwnVersion(int storeInstances)
+    {
+        // A fixed clock makes every archive want the same id, and a pre-created current file means
+        // every save archives. Two instances on one directory mirror AgentFactory sub-containers.
+        const int saves = 40;
+        var stores = Enumerable.Range(0, storeInstances).Select(_ => new FileSkillStore(_dir, new TestClock(T0))).ToArray();
+        await stores[0].SaveAsync(new Skill("race", "d", "u", "body-0"), CancellationToken.None);
+
+        await Parallel.ForEachAsync(Enumerable.Range(1, saves), new ParallelOptions { MaxDegreeOfParallelism = 16 },
+            (i, ct) => new ValueTask(stores[i % storeInstances].SaveAsync(new Skill("race", "d", "u", $"body-{i}"), ct)));
+
+        var archived = (await stores[0].ListVersionsAsync("race", CancellationToken.None)).Select(v => v.Skill.Body).ToList();
+        var current = (await stores[0].GetAsync("race", CancellationToken.None))!.Body;
+        Assert.Equal(saves, archived.Count);
+        Assert.Equal(saves, archived.Distinct().Count());
+        Assert.Equal(
+            Enumerable.Range(0, saves + 1).Select(i => $"body-{i}").Order(),
+            archived.Append(current).Order());
+        Assert.Empty(Directory.EnumerateFiles(_dir, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task SaveRacingDelete_OfOneSkill_NeverThrows()
+    {
+        var store = new FileSkillStore(_dir);
+        for (var round = 0; round < 200; round++)
+        {
+            await store.SaveAsync(new Skill("race", "d", "u", "v0"), CancellationToken.None);
+
+            await Task.WhenAll(
+                Task.Run(() => store.SaveAsync(new Skill("race", "d", "u", "v1"), CancellationToken.None)),
+                Task.Run(() => store.DeleteAsync("race", CancellationToken.None)));
+        }
+    }
+
     private async Task<FileSkillStore> StoreWithSecretOutsideAsync()
     {
         Directory.CreateDirectory(_dir);

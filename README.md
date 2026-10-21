@@ -85,7 +85,7 @@ A real implementation runs unless you override it.
 | `IBudgetEnforcer` | `DefaultBudgetEnforcer` | Enforces turn / token / cost / wall-clock limits at the top of each turn; returns `PartialResult` on exhaustion rather than throwing. |
 | `IContextBuilder` | `DefaultContextBuilder` | Assembles the final prompt from the `ContextDraft` guides produce. |
 | `ITrajectoryGuide` | `HeadEvictionTrajectoryGuide` | Renders turn history into the context window, evicting the oldest steps when the budget is tight. Always runs last. |
-| `IToolSelector` | `PassthroughToolSelector` | Filters which tools the model sees each turn — all of them, by default. The filter is enforced: a call to a tool it withheld is not dispatched. |
+| `IToolSelector` | `PassthroughToolSelector` | Filters which tools the model sees each turn — all of them, by default. The filter is enforced: a call to a tool it withheld is not dispatched, and a selector that throws offers no tools that turn. |
 | `IToolRegistry` | `InMemoryToolRegistry` *(standard)* | Holds and dispatches tools. Bare `AddModelHarness` starts empty with `NullToolRegistry`. |
 | `ITracer` | `OpenTelemetryTracer` *(standard)* | Nested `gen_ai.*` spans + metrics; per-turn events for sensors, guides, compaction, checkpoints, rate-limit waits, and budget burn-down. Bare uses `NullTracer`; add `WithConsoleTracer()` / `WithOtelTracer()` / `WithLiveDashboardTracer()` (in-process live console, no backend). |
 

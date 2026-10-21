@@ -221,6 +221,16 @@ public sealed class MyToolRegistry : IToolRegistry
 
 `List()` must report every tool `DispatchAsync` accepts. The loop sends the model only the tools `List()` returns (narrowed by any `IToolSelector`) and does not dispatch a call to any other name: it records an error step, `Tool '<name>' is not available on this turn.`, and the run continues. A registry that dispatches tools it does not list, such as one that resolves names lazily on a remote server, will see those calls refused until they appear in `List()`. The same rule makes `IToolSelector` a policy boundary rather than a hint: a tool the selector drops cannot run on that turn, and neither can any tool on a turn where a sensor suppressed tools.
 
+**A selector that throws fails closed.** `ToolSelectorGuide` offers the model no tools on that turn rather than falling back to every tool: a selector that applies policy (a remote permission service, say) must not turn into a bypass on exactly the turns its service is down. The error is still logged as a guide error (guide `tool-selector`), the run continues, and the next turn asks the selector again. Only genuine cancellation of the run's token ends the run; the selector's own timeout (a `TaskCanceledException` with that token untouched) is a fault like any other. A persistently failing selector therefore leaves the model toolless, so it may answer in prose and `PreReturn` may accept that. A selector that would rather stay available than strict, such as a relevance ranker, opts in by catching its own errors and returning the tools it was given:
+
+```csharp
+public async Task<IReadOnlyList<ITool>> SelectAsync(IReadOnlyList<ITool> tools, AgentState state, CancellationToken ct)
+{
+    try { return await RankAsync(tools, state, ct); }
+    catch (Exception) when (!ct.IsCancellationRequested) { return tools; }
+}
+```
+
 ## Expose MCP tools
 
 This approach enumerates the MCP server's tools at startup and registers them statically. It is the right choice when the tool set is known upfront and does not change while the agent is running. If your MCP server's tools are dynamic or not fully known at composition time, replace the tool registry instead — see [Replace the tool registry](#replace-the-tool-registry) above.
@@ -344,6 +354,8 @@ builder.WithGuide<MyGuide>() // runs after the built-in guides, before the traje
 
 See the [guide pattern](../README.md#the-guide-pattern--shaping-perception) for how to implement `IGuide`.
 
+A supporting guide that throws is logged (`ITracer.LogGuideError`) and skipped, and the turn goes on without its contribution. The runner does not roll the `ContextDraft` back, though, so anything the guide changed before it threw stays. That suits an additive guide (memory, skills). A guide whose job is to *restrict* what the model may do, for example by narrowing `draft.AvailableTools` as policy, must fail closed itself: empty the list in a `catch` and rethrow, as `ToolSelectorGuide` does, because the runner will not do it for you. To filter tools, implement `IToolSelector` instead and get that behaviour built in.
+
 ## Structured output — a typed final answer
 
 `WithStructuredOutput<T>()` constrains the run's **final answer** to `T`. It is a guide plus a sensor over one shared contract — no new port, no loop change:
@@ -437,9 +449,13 @@ for a **live agent console** with no OTLP, collector, or Docker. It turns each l
 `DashboardEvent` (kind, `taskId`, nullable `turn`, a summary, and a structured `detail` bag),
 keeps a bounded ring buffer so a browser connecting mid-run replays the history, and exposes
 `Subscribe(ct)` for a host endpoint (e.g. Server-Sent Events) to stream. A reconnecting client that
-already processed part of the stream passes the last `DashboardEvent.Seq` it saw to
-`Subscribe(ct, afterSeq)` and is replayed only what came after it (the SSE endpoint does this from
-the `Last-Event-ID` header). Run/turn aggregation is
+already processed part of the stream is replayed only what came after it: write
+`tracer.EventId(evt)` (`{Epoch}-{Seq}`) as the SSE `id:`, and pass the `Last-Event-ID` header the
+browser sends back to `Subscribe(lastEventId, ct)` (the bundled SSE endpoint does exactly this). `Epoch`
+is a GUID per tracer instance, so an id from before a restart, from another instance behind a load
+balancer, a missing id or an unparseable one replays the whole backlog instead of silently skipping
+events. `Subscribe(afterSeq, ct)` takes a bare seq for in-process callers; it has no epoch, so it
+cannot detect a restart (it only guesses when `afterSeq` is beyond the newest seq). Run/turn aggregation is
 left to the consumer, so the tracer stays transport-neutral. Pass
 `new LiveDashboardTracer(enableSensitiveData: true)` (then `WithLiveDashboardTracer(that)`) to also
 include conversation content — each model response's text (the run's result), the task text (otherwise a run

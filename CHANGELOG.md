@@ -24,12 +24,61 @@ public API even though most consumers only implement a few of them.
   and a checkpoint written before this release loads with `false`, which for taint purposes means "the tool's
   own output".
 
-- **`LiveDashboardTracer.Subscribe(CancellationToken, long afterSeq)`** — resumes a dropped connection:
-  backlog events with `Seq <= afterSeq` are skipped, so a reconnecting client is not sent events it has
-  already processed. An `afterSeq` beyond the newest seq (the process restarted and seq began again)
-  replays the whole backlog. `Subscribe(CancellationToken)` is unchanged and still replays everything.
+- **`LiveDashboardTracer.Subscribe(string? lastEventId, CancellationToken)`, `Epoch` and `EventId(DashboardEvent)`** —
+  resume a dropped connection without re-sending events the client has already processed. `Epoch` is a GUID fixed
+  per tracer instance, and `EventId` returns `{Epoch}-{Seq}`, the token to write as the SSE `id:`. `Subscribe`
+  takes the raw `Last-Event-ID` and skips backlog events up to that id only when its epoch is the tracer's own;
+  an id from another epoch (the process restarted, or a different instance served the earlier connection), a
+  missing id or an unparseable one replays the whole backlog. `Seq` restarts at 1 with every process, so a bare
+  seq cannot tell "resume after N" from "a restarted process that has already reached N" and would silently
+  skip the new process's first N events. `Subscribe(CancellationToken)` is unchanged and still replays everything.
+  `Subscribe(long afterSeq, CancellationToken)` resumes from a bare seq for in-process callers; it cannot detect a
+  restart, and treats an `afterSeq` beyond the newest seq as one only as a heuristic.
 
 ### Changed
+
+- **A throwing `IToolSelector` now offers the model no tools for that turn, where it used to offer every
+  registered tool.** The loop dispatches only the tools it offered on each model call, so the selector's output
+  is the dispatch allowlist, and `IToolSelector` is documented as a policy boundary. But `ToolSelectorGuide` was
+  an ordinary supporting guide: when the selector threw (a remote permission service timing out raises
+  `TaskCanceledException` with the harness token untouched), `DefaultGuideRunner` logged the error and skipped the
+  guide, which left the full registry list the draft had been seeded with. On exactly the turns the policy could
+  not be evaluated, every registered tool was offered and dispatchable, including the ones the policy exists to
+  withhold, and `ToolCatalogueGuide` advertised them in the system prompt. `ToolSelectorGuide` now catches the
+  failure, empties `ContextDraft.AvailableTools` and rethrows, so the runner still logs it via
+  `ITracer.LogGuideError` (guide `tool-selector`) and the run continues. On that turn the model is offered no
+  tools, a call to any tool gets `Tool '<name>' is not available on this turn.` without running a `PreToolCall`
+  sensor, and `ToolCatalogueGuide` renders no catalogue. The next turn asks the selector again. Only genuine
+  cancellation of the harness token propagates untouched; a selector's own `TaskCanceledException` fails closed.
+  `DefaultGuideRunner` and every signature are unchanged.
+
+  **Behavioural change:** a selector that throws used to leave the model with every tool and now leaves it with
+  none. A persistently failing selector therefore leaves the model toolless, so it may answer in prose and
+  `PreReturn` may accept that as final. A selector that would rather stay available than strict (a relevance or
+  ranking selector) must now catch its own errors and return the tools it was given:
+
+  ```csharp
+  // Before — a ranking failure fell through to "every tool is offered"
+  public Task<IReadOnlyList<ITool>> SelectAsync(IReadOnlyList<ITool> tools, AgentState state, CancellationToken ct)
+      => RankAsync(tools, state, ct);
+
+  // After — opt back in to availability over enforcement
+  public async Task<IReadOnlyList<ITool>> SelectAsync(IReadOnlyList<ITool> tools, AgentState state, CancellationToken ct)
+  {
+      try { return await RankAsync(tools, state, ct); }
+      catch (Exception) when (!ct.IsCancellationRequested) { return tools; }
+  }
+  ```
+
+  The same applies to a custom guide (`WithGuide<T>`) that narrows `AvailableTools` as policy: `DefaultGuideRunner`
+  skips a throwing guide but does not roll the draft back, so it keeps whatever the guide had changed before it
+  threw (the docs said the contribution was "lost"; they now say so). Empty the list and rethrow, as
+  `ToolSelectorGuide` does, if the restriction must hold when the guide fails.
+
+- **Dashboard SSE event ids are now `{epoch}-{seq}`** (for example `3f2a…c9-12`) rather than the bare seq, so
+  `/feed` can tell a reconnect to the same process from one to a restarted process. `DashboardEvent`'s JSON is
+  unchanged. A browser tab left open across the upgrade still holds a numeric id, so it gets a full replay on
+  its next reconnect and, because the page does not dedupe, counts that run's events once more.
 
 - **Checkpoints no longer persist `ModelCallStep.Prompt`, so their size grows with the trajectory instead of with
   every turn's whole context window.** Each `ModelCallStep` stores the full rendered prompt of its call — up to
@@ -287,6 +336,38 @@ public API even though most consumers only implement a few of them.
   trailing user turn in your own tests, or match the old strings in a custom `IModelClient` or tracer, update
   them to the new wording.
 
+- **One unreadable or malformed file in a `FileSkillStore` directory hid every skill, and a skill could be listed
+  under a name it could not be loaded by.** `ListAsync` threw on the first `*.md` file that would not read or
+  parse (a stray `README.md` with no frontmatter, a torn write), and `ListVersionsAsync` did the same for a bad
+  archive, so one bad file hid the whole catalogue: `SkillsGuide` fails open, and the model saw no skills.
+  `GetAsync` returned `{name}.md` whatever its frontmatter said and never looked at any other file, so a skill that
+  `ListAsync` reported under its frontmatter `name` could not be loaded when its file had another name. `SaveAsync`
+  named the file after the raw name while `Serialize` writes it trimmed and on one line, so saving `"deploy "`
+  wrote `deploy .md`, which listed as `deploy` and was not found by `GetAsync("deploy")`; saving `".."` archived
+  the previous version into the skills directory itself; and `GetVersionAsync` joined the version id into a
+  path, so `"../../../x"` read any `.md` outside the store. Now a bad file affects only itself: `ListAsync`,
+  `GetAsync` and `ListVersionsAsync` skip a file that cannot be read or parsed, silently (`ISkillStore` has no
+  diagnostics channel, so the skip leaves no trace). `GetAsync` resolves a skill by its frontmatter `name`
+  (case-insensitive): it tries `{name}.md` first, accepts it only when the name inside matches, and otherwise
+  scans the directory. When several files declare one name, the file named after the skill wins, then the first by
+  ordinal filename; `ListAsync` applies the same rule, returns one entry per name in ordinal filename order, and
+  so lists the skill that `GetAsync` loads. `SaveAsync` and `DeleteAsync` (and the history directory) use the
+  canonical name `Serialize` writes (single line, trimmed). `SaveAsync` writes a temp file and renames it over
+  the target, so a crash cannot leave a torn `.md`, and `GetVersionAsync` returns null for a version id that
+  contains path characters.
+
+  **Behavioural change** in `GetAsync`: it no longer returns `{name}.md` just because the filename matches; the
+  frontmatter `name` must match too, ignoring case. A `deploy.md` whose frontmatter says `name: release` is no
+  longer what `GetAsync("deploy")` returns (it is now found as `release`). Rename the file or correct its
+  frontmatter if you relied on the filename alone. Where a directory used to make `ListAsync`, `GetAsync` or
+  `ListVersionsAsync` throw, they now return what they could read, so code that caught the exception to detect a
+  bad skill file sees none.
+
+  **Behavioural change** in `SaveAsync`: it throws `ArgumentException` for a name that is empty or `.` or `..`
+  once trimmed (before, it wrote a file named `.md`, `..md` or `...md`); the `skill_manage` tool
+  reports it as an error result. Saving a skill named `"deploy "` now writes `deploy.md`, and
+  `DeleteAsync("deploy ")` deletes it, where before they used `deploy .md`.
+
 - **`FileSkillStore` lost version history when a skill was overwritten twice in the same second, and its
   archive ids followed the process culture.** The archive id was a second-resolution timestamp, so two
   overwrites in one second (a model can issue two `skill_manage` saves in one response) wrote the same
@@ -324,6 +405,33 @@ public API even though most consumers only implement a few of them.
 
   **Behavioural change:** a `Subscribe` consumer now always sees ascending `Seq`; before, a concurrent
   publisher could make it see `4, 3`. No code change is needed.
+
+- **`FileSkillStore`: concurrent saves of one skill (concurrent runs, or two store instances on one
+  directory) could throw `FileNotFoundException`/`EndOfStreamException`, lose a reported-successful
+  version, or archive one version twice.** `SaveAsync` read the current file, archived it and wrote the new
+  one with no coordination, and every save of a skill shared one `{name}.tmp` file. Two overlapping saves
+  both archived the same version while the one written in between was never archived, a save could
+  overwrite another's temp file (so a save that returned normally was lost), and `DeleteAsync` could remove
+  the file between a save's existence check and its read. Saves and deletes of one skill file are now
+  serialised per skill file, process-wide (keyed by full path, so `AgentFactory` sub-agents and the other
+  stores `WithLearning`/`WithSkills`/`WithSkillStore` build on one directory share the gate), and each save
+  writes a uniquely named temp file. Writers in other processes sharing the directory are still not
+  coordinated and can lose a history version. No code change is needed.
+
+- **`WithLearning`/`WithSkills` built their `FileSkillStore`s with the system clock instead of the
+  registered `TimeProvider`**, so replacing `TimeProvider` through DI did not control skill archive
+  timestamps (`WithSkillStore(directory)` already honoured it). They now use the registered clock.
+
+- **A crafted task id could inject script into the live dashboard page.** `app.js` interpolated the run's id
+  unescaped into the run list's `data-id="…"` attribute, so an id such as `x" onmouseover="…` closed the attribute
+  and added an event handler that ran in the dashboard's origin for everyone viewing the feed. The id is the
+  `taskId` the host gave the run, which a host may take from its own users. `escapeHtml` did not cover it: it used
+  the `textContent` → `innerHTML` trick, which escapes `&`, `<` and `>` but leaves quotes alone, so it was safe in
+  element text and not in a quoted attribute value. `escapeHtml` now also escapes `"` and `'`, and the `data-id`
+  and `data-seq` attributes go through it (`data-seq` is the tracer's own sequence number and not attacker-controlled;
+  it is escaped so that no attribute interpolates feed data raw). The page is an embedded resource of the
+  `SapphireGuard.ModelHarness.Dashboard` package, so upgrading the package is the whole fix and no host code
+  changes.
 
 ### Docs
 

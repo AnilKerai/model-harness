@@ -50,10 +50,14 @@ public sealed class DefaultGuideRunner(
             catch (Exception ex)
             {
                 // Fail open: a supporting guide's contribution is an optional enhancement (memory,
-                // skills, tool filtering). If it throws — a memory store times out, a skill store
-                // can't read — skip it and carry on rather than failing the whole run. The trajectory
-                // guide below is deliberately NOT wrapped: it is mandatory, and a turn with no rendered
-                // trajectory is worse than surfacing the failure.
+                // skills). If it throws — a memory store times out, a skill store can't read — skip
+                // it and carry on rather than failing the whole run. The draft is NOT rolled back:
+                // whatever the guide changed before it threw stays. That is why a guide whose
+                // contribution is a restriction must fail closed itself, before rethrowing —
+                // ToolSelectorGuide empties AvailableTools, because the list is the dispatch
+                // allowlist and skipping the guide would leave every registered tool in it. The
+                // trajectory guide below is deliberately NOT wrapped: it is mandatory, and a turn
+                // with no rendered trajectory is worse than surfacing the failure.
                 _tracer.LogGuideError(state.TaskId, turn, guide.Name, $"{ex.GetType().Name}: {ex.Message}");
                 continue;
             }
