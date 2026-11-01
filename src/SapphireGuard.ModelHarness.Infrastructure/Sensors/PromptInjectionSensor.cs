@@ -91,7 +91,7 @@ public sealed class PromptInjectionSensor : ISensor
     // Both assume the corresponding source is operator-authored. A deployment that lets untrusted
     // parties write skills (agent learning) or answer ask_human (a relayed channel) needs a different
     // control at the write/ingress boundary — a regex over instruction-shaped text is the wrong one.
-    private static readonly IReadOnlySet<string> TrustedTools =
+    private static readonly HashSet<string> TrustedTools =
         new HashSet<string>(StringComparer.Ordinal) { "ask_human", "skill_view" };
 
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)

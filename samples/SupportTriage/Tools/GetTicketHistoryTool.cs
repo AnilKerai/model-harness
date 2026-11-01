@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -33,7 +34,7 @@ public sealed class GetTicketHistoryTool : ITool
 
         var sb = new StringBuilder();
         foreach (var t in history)
-            sb.AppendLine($"{t.Id}: {t.Subject} — {t.Resolution}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{t.Id}: {t.Subject} — {t.Resolution}");
 
         return Task.FromResult(new ToolResult(call.CallId, sb.ToString().TrimEnd()));
     }

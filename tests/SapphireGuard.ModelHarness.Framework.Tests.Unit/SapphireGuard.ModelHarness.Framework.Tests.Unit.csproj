@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <RootNamespace>SapphireGuard.ModelHarness.Framework.Tests.Unit</RootNamespace>
+    <!-- Test methods carry the Method_Scenario_Expectation naming convention, which CA1707 rejects, and
+         CA1861 flags constant array arguments that are idiomatic in a test call. -->
+    <NoWarn>$(NoWarn);CA1707;CA1861</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

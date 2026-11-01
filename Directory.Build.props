@@ -5,7 +5,25 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!--
+      CS1591: the public surface is documented for IntelliSense, internals are not.
+
+      CA1716 (identifiers should not match keywords) fires across the whole public API — the Step type, the
+      Framework.Loop namespace, IToolRegistry.Get and the call/error parameters on ITool, IToolRegistry and
+      ITracer. It is suppressed rule-wide because it is a property of the public surface rather than a few
+      locations, and every hit is public API where renaming stops consumers compiling. The rule targets VB/F#
+      keyword collisions, which do not apply to a C#-first library where Get is the conventional name.
+
+      Everything else that fires on existing code is suppressed at its own site with its reason, so it cannot
+      cover new code: CA1001 on the two model clients, CA1725 on AgentTool.ExecuteAsync, CA1822 on
+      OpenTelemetryTracer's discriminator records, CA1870 in FileCheckpointStore. CA1859 was fixed rather than
+      suppressed. Use the site form for new cases too — a rule-wide entry here disables the rule everywhere,
+      which is how a one-off exception becomes a blind spot.
+    -->
+    <NoWarn>$(NoWarn);CS1591;CA1716</NoWarn>
+
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
 
     <IsPackable>false</IsPackable>
 

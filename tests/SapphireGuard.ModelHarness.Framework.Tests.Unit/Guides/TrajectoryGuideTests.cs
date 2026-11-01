@@ -536,7 +536,7 @@ public sealed class HeadEvictionTrajectoryGuideTests
     {
         var draft = await ContributeAsync(SecondTurnWithBulkyToolResult(), windowTokens: 500, pinOriginalGoal: false);
 
-        var note = Assert.Single(draft.TrajectoryMessages, m => m.Content.StartsWith("[CURRENT REQUEST]"));
+        var note = Assert.Single(draft.TrajectoryMessages, m => m.Content.StartsWith("[CURRENT REQUEST]", StringComparison.Ordinal));
         Assert.Equal(MessageRole.System, note.Role);
         Assert.Equal(CurrentRequestNote, note.Content);
         // Evicted from its position, so it is not also rendered as a user turn.
@@ -604,7 +604,7 @@ public sealed class HeadEvictionTrajectoryGuideTests
         await new HeadEvictionTrajectoryGuide(new SilentViewStrategy(), new CompactionOptions { WindowTokens = window }, pinOriginalGoal: false)
             .ContributeAsync(draft, state, CancellationToken.None);
 
-        Assert.Single(draft.TrajectoryMessages, m => m.Content.StartsWith("[CURRENT REQUEST]"));
+        Assert.Single(draft.TrajectoryMessages, m => m.Content.StartsWith("[CURRENT REQUEST]", StringComparison.Ordinal));
         var rendered = RenderedTokens(draft);
         Assert.True(rendered <= window,
             $"rendered {rendered} tokens into a {window}-token window — the current request is not being charged for");
