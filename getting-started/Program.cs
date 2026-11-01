@@ -31,6 +31,7 @@ services.AddStandardModelHarness(builder =>
             """
             You are a friendly customer-support assistant for an online shop.
             When a customer asks about an order, load the answer-order-enquiry skill with skill_view and follow it.
+            Your final answer is sent to the customer exactly as you write it, so write only the message itself: no preamble, subject line or separators.
             """)
         .WithSkills(skillsDir)                 // procedural memory: a reusable procedure the agent loads on demand
         .WithTool<OrderStatusTool>()           // the one action the agent can take

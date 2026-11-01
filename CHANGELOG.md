@@ -37,6 +37,19 @@ public API even though most consumers only implement a few of them.
   is swallowed rather than failing a save that already succeeded, and only this store's own `*.json` names
   are candidates (a `.tmp` left by a killed process is not a checkpoint and is left alone).
 
+### Changed
+
+- **`ReActGuide` keeps its framing out of the final answer.** It asked for a one-line *Observation* after every tool
+  result, so on the last turn the model wrote that Observation, often a `---` and a heading, and then the answer, all
+  in one response, which became `FinalAnswer`. The guide now asks for Observations only on turns that call another
+  tool, and says the final reply goes to the user as written: no Thought/Observation lines, labels, headings or
+  separators. Measured live on `getting-started` with claude-haiku-4-5, 8 runs each: ReAct labels in `FinalAnswer`
+  went from 7/8 to 0/8. The prompt text is the only change; tool-calling turns keep their Thought and Observation.
+  The getting-started system prompt also now says its answer is sent to the customer verbatim, which removed the
+  "Here's a reply for the customer:" preambles and subject lines (8/8 → 0/8 together with the guide change).
+  Re-measured on the 4.0.0 source, 8 runs each: labels 6/8 → 0/8, preamble/separator/subject framing 8/8 → 0/8,
+  and every answer still named the order and its status.
+
 ## [4.0.0] — 2026-11-01
 
 A major release of corrections, most from a bug hunt over the loop, the skill store and the live dashboard.
