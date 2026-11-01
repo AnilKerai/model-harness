@@ -37,6 +37,20 @@ public API even though most consumers only implement a few of them.
   is swallowed rather than failing a save that already succeeded, and only this store's own `*.json` names
   are candidates (a `.tmp` left by a killed process is not a checkpoint and is left alone).
 
+## [4.0.0] — 2026-11-01
+
+A major release of corrections, most from a bug hunt over the loop, the skill store and the live dashboard.
+Nothing is removed and nothing stops compiling. It is major because four corrections change runtime behaviour
+a consumer may depend on, each with its migration below. A throwing `IToolSelector` now fails closed, so the
+model is offered no tools that turn instead of every tool. Checkpoints no longer store `ModelCallStep.Prompt`,
+and they are written as compact JSON. The live dashboard feed sends no conversation content unless
+`enableSensitiveData` is on. The rest are fixes, plus two additions (`ToolCallStep.HarnessAuthored` and a
+resumable dashboard feed). Among the fixes: tool calls are dispatched only if their tool was offered, the
+forced-finalisation answer is both instructed and sensor-checked, a HITL suspension is no longer reported as
+an error, and `ClaudeClientOptions.ModelId` defaults to a model that exists.
+
+### Added
+
 - **`ToolCallStep.HarnessAuthored`** — an init-only `bool` (default `false`) that is `true` when the harness
   wrote the step's `Result` itself rather than the tool: a call blocked at `PreToolCall`, one that hit
   `Budget.MaxToolCallDuration`, a call to a tool that was not offered on that turn, or a call not run

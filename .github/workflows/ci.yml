@@ -70,6 +70,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write   # create the GitHub Release on a v* tag
+      id-token: write   # GitHub OIDC token for nuget.org Trusted Publishing
     steps:
       - uses: actions/checkout@v7
         with:
@@ -81,8 +82,19 @@ jobs:
 
       - run: dotnet pack SapphireGuard.ModelHarness.slnx -c Release --output ./nupkg
 
-      - run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-      - run: dotnet nuget push ./nupkg/*.snupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      # nuget.org Trusted Publishing: no stored key. This job's OIDC token is exchanged for a
+      # single-use API key that lasts about an hour, checked against the nuget.org policy for
+      # AnilKerai/model-harness + ci.yml, so the step must stay in this file. It runs after
+      # pack so the key is fresh for the pushes. `user` is the nuget.org profile that created
+      # the policy, not an email address.
+      - name: NuGet login (OIDC → temporary API key)
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: SapphireGuard
+
+      - run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - run: dotnet nuget push ./nupkg/*.snupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       # A v* tag published to NuGet but never created a GitHub Release, so the Releases page
       # stalled at v1.0.0 (the only one made by hand). Create it from the tag's own annotation
