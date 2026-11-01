@@ -1,0 +1,13 @@
+{
+  "model": "claude-sonnet-4-5-20250929",
+  "max_tokens": 8096,
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello"
+    }
+  ],
+  "cache_control": {
+    "type": "ephemeral"
+  }
+}
