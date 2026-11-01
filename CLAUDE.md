@@ -175,7 +175,14 @@ Unit tests live in `tests/SapphireGuard.ModelHarness.Framework.Tests.Unit`. Run 
 dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/ -f net10.0
 ```
 
-The project multi-targets `net8.0;net10.0`, matching the shipped libraries, so CI runs both legs; `-f net10.0` selects one locally, which is the form that works on a machine without an 8.x runtime. The `net8.0` leg needs an 8.x runtime the `dotnet` muxer in use can see, and the Homebrew muxer ignores `DOTNET_ROOT` — so a local net8 run has to go through a `~/.dotnet` muxer carrying 8.x (`"$HOME/.dotnet/dotnet" test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/`). That muxer's SDK is the one that misbehaves with `--coverage`, so coverage and the net8 leg currently need different local installations.
+The project multi-targets `net8.0;net10.0`, matching the shipped libraries, so CI runs both legs; `-f net10.0` selects one locally, which is the form that works on a machine without an 8.x runtime. The `net8.0` leg needs an 8.x runtime the `dotnet` muxer in use can see, and the Homebrew muxer ignores `DOTNET_ROOT` — so a local net8 run has to go through a `~/.dotnet` muxer carrying 8.x. Use that muxer only to *run* the tests, and build with your main SDK first: its older SDK can fail to compile the solution (CS9057, e.g. OllamaSharp's source generator needs a newer compiler than SDK 10.0.103 ships), and it misbehaves with `--coverage`.
+
+```bash
+dotnet build tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/
+"$HOME/.dotnet/dotnet" test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/ --no-build -f net8.0
+```
+
+Keep the build and the test run on the same configuration (both default `Debug` above): `--no-build` runs whatever that configuration last built, so a mismatch tests stale binaries or finds none.
 
 Trivial delegation classes (`SystemPromptGuide`, `NullMemoryStore`, `FakeModelClient`, etc.) carry `[ExcludeFromCodeCoverage]` — no tests needed for them. Everything with conditional logic has tests.
 
