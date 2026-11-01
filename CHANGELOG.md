@@ -12,6 +12,56 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Changed
+
+- **Dependencies bumped to latest stable.** The consumer-facing floors that rise transitively are the adapter
+  SDKs, `Polly` and the Microsoft.Extensions packages:
+  - `Anthropic` 12.42.0 → 12.60.0 (Claude adapter)
+    - **Behavioural change:** since 12.48.0 the SDK retries an attempt that hits the client-side timeout, and
+      honours any `Retry-After`. The defaults are unchanged (2 retries, 10-minute timeout), but before, a
+      timed-out attempt threw straight away, and a `Retry-After` of a minute or more was ignored in favour of a
+      0.5–8 s back-off. Now a timed-out attempt is retried like a connection error, and the SDK waits out
+      whatever `Retry-After` the API sends, with no practical cap. So with the defaults, a Claude call to a
+      backend that hangs can take up to three timeouts (about 30 minutes) to fail instead of one, and a
+      rate-limited call can sit out a long `Retry-After` inside the call. The failure that finally surfaces is
+      still a `TaskCanceledException` (its message now says the configured client timeout elapsed, and it
+      carries a `TimeoutException` as inner exception), so the loop's handling of a collaborator timeout and the
+      circuit breaker in `Infrastructure.Resilience` are unchanged; they just see it later. The run's own
+      cancellation token is never retried. To keep the old bound, lower `Timeout` or `MaxRetries` in
+      `ClaudeClientOptions.ConfigureClient`.
+    - **Behavioural change:** since 12.56.0 the SDK emits its own OpenTelemetry spans, but only to a tracer
+      provider that subscribes to the `com.anthropic.sdk.csharp` source, and without message content unless
+      `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE` is `content`. Set `OpenTelemetry = false` in
+      `ConfigureClient` to turn them off.
+    - **Behavioural change:** 12.44.0 renamed types in the SDK's beta namespaces (for example
+      `Anthropic.Models.Beta.Messages.BetaSkill` → `BetaContainerSkill`), and 12.56.0 made the streaming helpers
+      `Aggregate()` and `CollectAsync` return when the response body ends rather than at `message_stop`. The
+      interface `IAnthropicClient` also gained the abstract properties `Organization`, `OpenTelemetry` and
+      `UserProfiles` between 12.42.0 and 12.60.0, so a class that implements it, such as a test fake, stops
+      compiling. The adapter uses none of these (it holds the concrete `AnthropicClient` privately and exposes
+      only `Anthropic.Core.ClientOptions` through `ConfigureClient`), but code that reaches the SDK directly can
+      stop compiling or see the new streaming behaviour once it resolves the new version.
+  - `OllamaSharp` 5.4.30 → 5.5.0 (Ollama adapter)
+    - **Behavioural change:** the interface `IOllamaApiClient` gained the abstract method `SystemOneAsync` (the
+      new System One endpoint), so a class that implements it, such as a test fake, stops compiling once it
+      resolves 5.5.0. The client also now reads every response with `AllowOutOfOrderMetadataProperties` turned
+      on, which lets a polymorphic type discriminator appear anywhere in the JSON object instead of only first.
+      The only polymorphic types in the library are the new System One ones, so the chat responses the adapter
+      reads are deserialized as before. The adapter holds the concrete `OllamaApiClient` privately and neither
+      implements nor exposes `IOllamaApiClient`.
+  - `Polly` 8.7.0 → 8.9.0 (resilience)
+  - `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.DependencyInjection.Abstractions` and
+    `System.Text.Json` (`net8.0` only) 10.0.11 → 10.0.14 (runtime; the tests, samples and `getting-started` use
+    the same version)
+  - Build-time only: `MinVer` 7.0.0 → 8.0.0, `Microsoft.SourceLink.GitHub` 10.0.400 → 10.0.403
+  - Test tooling: `Microsoft.NET.Test.Sdk` 18.9.0 → 18.11.0, `xunit.runner.visualstudio` 4.0.0 → 4.0.1
+  - Samples and `getting-started`: `Microsoft.Extensions.Configuration.Json`,
+    `Microsoft.Extensions.Configuration.EnvironmentVariables` and `Microsoft.Extensions.Options` 10.0.11 → 10.0.14,
+    `OpenTelemetry` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.19.1 → 1.20.1 (`samples/Langfuse`), and
+    the three `SapphireGuard.ModelHarness*` references in `getting-started` 3.1.0 → 4.1.0
+
 ## [4.1.0] — 2026-11-01
 
 A minor release with one addition and one prompt fix. Nothing is removed and nothing stops compiling.
