@@ -12,7 +12,14 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
-## [Unreleased]
+## [4.1.0] — 2026-11-01
+
+A minor release with one addition and one prompt fix. Nothing is removed and nothing stops compiling.
+`FileCheckpointStore` can now keep only the newest N checkpoints per task. This is opt-in, and the default
+still keeps every checkpoint. `ReActGuide` no longer leaks its Thought/Observation framing into the final
+answer. That is a change to prompt text only, so a model's final answer is cleaner and nothing else changes.
+Everything else in this release (a read-only `PromptInjectionSensor` allowlist, CI path filters, test and docs
+fixes) changes no behaviour a consumer can see.
 
 ### Added
 
