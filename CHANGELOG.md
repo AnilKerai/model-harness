@@ -16,6 +16,54 @@ public API even though most consumers only implement a few of them.
 
 ### Added
 
+- **`FileCheckpointStore` checkpoint retention (`retainPerTask`)** — an additive `FileCheckpointStore(string, int?)`
+  constructor and a matching `WithFileCheckpointStore(directory, retainPerTask)` overload that keeps only the newest
+  N checkpoints per task and prunes the rest after each successful save. Both are genuine overloads alongside the
+  existing one-argument signatures rather than optional parameters: adding an optional parameter changes the
+  signature, so a caller already compiled against the old form would fail with `MissingMethodException` after
+  upgrading. A checkpoint holds the whole
+  trajectory with every tool result and model response — only `ModelCallStep.Prompt` is stripped — so a
+  task's directory otherwise grows by one trajectory-sized file per turn, accumulating roughly `S·T²/2`
+  bytes for `S` bytes of per-turn trajectory growth over `T` turns (a 60-turn run at 50 KB/turn is about
+  90 MB for one task; 100 turns at 100 KB/turn is about 500 MB). **The default is `null`, which keeps every
+  checkpoint**, so existing behaviour is unchanged and pruning is opt-in; pass 0 or a negative value and the
+  constructor throws rather than silently keeping none. Retention is a disk-bounding policy, not a
+  correctness one — resume always reads the newest checkpoint — and the file just written is excluded from
+  the prune candidates outright rather than assumed newest by ordering: the filename's timestamp only
+  resolves to the millisecond, so two saves in the same millisecond tie-break on the random checkpoint id,
+  and a clock that steps backwards puts the newest write last. Either way the newest state could be pruned,
+  and the loop saves both at the top of each turn and when it suspends for human input. **Retaining 1 gives up the fallback past a
+  corrupt newest file** that `LoadLatestAsync` otherwise provides; use 2 or more to keep it. A failed delete
+  is swallowed rather than failing a save that already succeeded, and only this store's own `*.json` names
+  are candidates (a `.tmp` left by a killed process is not a checkpoint and is left alone).
+
+### Changed
+
+- **`ReActGuide` keeps its framing out of the final answer.** It asked for a one-line *Observation* after every tool
+  result, so on the last turn the model wrote that Observation, often a `---` and a heading, and then the answer, all
+  in one response, which became `FinalAnswer`. The guide now asks for Observations only on turns that call another
+  tool, and says the final reply goes to the user as written: no Thought/Observation lines, labels, headings or
+  separators. Measured live on `getting-started` with claude-haiku-4-5, 8 runs each: ReAct labels in `FinalAnswer`
+  went from 7/8 to 0/8. The prompt text is the only change; tool-calling turns keep their Thought and Observation.
+  The getting-started system prompt also now says its answer is sent to the customer verbatim, which removed the
+  "Here's a reply for the customer:" preambles and subject lines (8/8 → 0/8 together with the guide change).
+  Re-measured on the 4.0.0 source, 8 runs each: labels 6/8 → 0/8, preamble/separator/subject framing 8/8 → 0/8,
+  and every answer still named the order and its status.
+
+## [4.0.0] — 2026-11-01
+
+A major release of corrections, most from a bug hunt over the loop, the skill store and the live dashboard.
+Nothing is removed and nothing stops compiling. It is major because four corrections change runtime behaviour
+a consumer may depend on, each with its migration below. A throwing `IToolSelector` now fails closed, so the
+model is offered no tools that turn instead of every tool. Checkpoints no longer store `ModelCallStep.Prompt`,
+and they are written as compact JSON. The live dashboard feed sends no conversation content unless
+`enableSensitiveData` is on. The rest are fixes, plus two additions (`ToolCallStep.HarnessAuthored` and a
+resumable dashboard feed). Among the fixes: tool calls are dispatched only if their tool was offered, the
+forced-finalisation answer is both instructed and sensor-checked, a HITL suspension is no longer reported as
+an error, and `ClaudeClientOptions.ModelId` defaults to a model that exists.
+
+### Added
+
 - **`ToolCallStep.HarnessAuthored`** — an init-only `bool` (default `false`) that is `true` when the harness
   wrote the step's `Result` itself rather than the tool: a call blocked at `PreToolCall`, one that hit
   `Budget.MaxToolCallDuration`, a call to a tool that was not offered on that turn, or a call not run
@@ -79,15 +127,6 @@ public API even though most consumers only implement a few of them.
   `/feed` can tell a reconnect to the same process from one to a restarted process. `DashboardEvent`'s JSON is
   unchanged. A browser tab left open across the upgrade still holds a numeric id, so it gets a full replay on
   its next reconnect and, because the page does not dedupe, counts that run's events once more.
-
-- **`ReActGuide` keeps its framing out of the final answer.** It asked for a one-line *Observation* after every tool
-  result, so on the last turn the model wrote that Observation, often a `---` and a heading, and then the answer, all
-  in one response, which became `FinalAnswer`. The guide now asks for Observations only on turns that call another
-  tool, and says the final reply goes to the user as written: no Thought/Observation lines, labels, headings or
-  separators. Measured live on `getting-started` with claude-haiku-4-5, 8 runs each: ReAct labels in `FinalAnswer`
-  went from 7/8 to 0/8. The prompt text is the only change; tool-calling turns keep their Thought and Observation.
-  The getting-started system prompt also now says its answer is sent to the customer verbatim, which removed the
-  "Here's a reply for the customer:" preambles and subject lines (8/8 → 0/8 together with the guide change).
 
 - **Checkpoints no longer persist `ModelCallStep.Prompt`, so their size grows with the trajectory instead of with
   every turn's whole context window.** Each `ModelCallStep` stores the full rendered prompt of its call — up to

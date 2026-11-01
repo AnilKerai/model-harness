@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
@@ -34,6 +35,8 @@ public sealed class AgentTool(string agentName, AgentFactory factory, Budget? bu
         }
         """).RootElement;
 
+    [SuppressMessage("Naming", "CA1725:Parameter names should match base declaration",
+        Justification = "'ctx' is what the other members on this class use; renaming the parameter alone is a source break for named-argument callers.")]
     public async Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext ctx, CancellationToken ct)
     {
         var task = call.Arguments.GetProperty("task").GetString()

@@ -33,6 +33,8 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Ollama.Model;
 ///   • Ollama runs locally; cost is always zero.
 /// </summary>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "Not IDisposable yet: wrapping the SDK client means nothing outside can dispose it, and implementing IDisposable is additive but needs a decision about directly-constructed instances first.")]
 public sealed class OllamaModelClient : IModelClient
 {
     private readonly OllamaApiClient _client;

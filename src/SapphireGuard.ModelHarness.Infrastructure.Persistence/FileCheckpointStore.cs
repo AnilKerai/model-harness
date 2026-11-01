@@ -12,8 +12,25 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Persistence;
 /// Because the task ID becomes a directory name, it must be a single path segment;
 /// IDs that are empty or contain directory separators or <c>..</c> traversal are rejected.
 /// </summary>
-public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
+/// <param name="baseDirectory">Directory holding one subdirectory per task.</param>
+/// <param name="retainPerTask">
+/// How many of the newest checkpoints to keep per task, pruned after each successful save; older
+/// files are deleted. <see langword="null"/> (the default) retains every checkpoint, so a task's
+/// directory grows by one trajectory-sized file per turn. Setting 1 keeps resume working but gives
+/// up the fallback past a corrupt newest file that <see cref="LoadLatestAsync"/> otherwise provides
+/// — use 2 or more to keep that.
+/// </param>
+public sealed class FileCheckpointStore(string baseDirectory, int? retainPerTask) : ICheckpointStore
 {
+    // A real overload, not a default on the parameter above: an optional parameter changes the
+    // constructor's signature, so callers already compiled against the one-argument form would fail
+    // with MissingMethodException after an upgrade. Both signatures have to exist.
+    public FileCheckpointStore(string baseDirectory) : this(baseDirectory, null) { }
+
+    private readonly int? _retainPerTask = retainPerTask is null || retainPerTask.Value > 0
+        ? retainPerTask
+        : throw new ArgumentOutOfRangeException(nameof(retainPerTask), retainPerTask, "Must be greater than zero, or null to retain every checkpoint.");
+
     public async Task SaveAsync(Checkpoint checkpoint, CancellationToken ct = default)
     {
         var dir = TaskDirectory(checkpoint.State.TaskId);
@@ -33,6 +50,52 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
         // .json for LoadLatestAsync to trip over. The .tmp suffix keeps it out of the *.json glob.
         await File.WriteAllTextAsync(tmp, json, ct);
         File.Move(tmp, path, overwrite: true);
+
+        // Retention bounds the task directory, which otherwise grows by one trajectory-sized file per
+        // turn (each checkpoint carries the whole trajectory; only ModelCallStep.Prompt is stripped).
+        // It is a disk-bounding policy, not a correctness one: resume always reads the newest checkpoint,
+        // and the prune is told which path it just wrote so it can never remove it.
+        if (_retainPerTask is { } retain)
+            PruneOldest(dir, path, retain);
+    }
+
+    // The file just renamed into place is excluded from the candidates, not assumed to be the newest by
+    // ordering. Ordering is by filename, and the filename's timestamp is only millisecond-resolution, so
+    // two saves in the same millisecond — a frozen test clock, a fast host — tie-break on the random
+    // checkpoint id, and a clock that steps backwards puts the newest write last. Either way the newest
+    // state could be pruned, on the very path that matters most: HarnessLoop saves at the top of each
+    // turn and again when a run suspends for human input (HarnessLoop.cs SuspendForHuman), so losing that
+    // save loses the resumable state. Excluding it makes "retention never removes what it just wrote"
+    // true by construction rather than by argument.
+    //
+    // Only this store's own *.json names are candidates — a .tmp left by a killed process is not a
+    // checkpoint and is left alone. A failed delete is swallowed rather than failing the save that just
+    // succeeded: a concurrent reader or another process may hold the file, and losing a prune is
+    // recoverable where a lost save is not.
+    private static void PruneOldest(string dir, string justWritten, int retain)
+    {
+        // `retain` counts the file just written, so only retain-1 of the others are kept.
+        var stale = Directory.GetFiles(dir, "*.json")
+            .Where(file => !string.Equals(file, justWritten, StringComparison.Ordinal))
+            .OrderDescending()
+            .Skip(retain - 1)
+            .ToArray();
+
+        foreach (var file in stale)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (IOException)
+            {
+                // Held by a reader, or gone already — the next save prunes again.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Read-only or permission-denied — not worth failing a completed save over.
+            }
+        }
     }
 
     public async Task<Checkpoint?> LoadAsync(string checkpointId, CancellationToken ct = default)
@@ -110,7 +173,9 @@ public sealed class FileCheckpointStore(string baseDirectory) : ICheckpointStore
 
     private static void ValidateCheckpointId(string checkpointId)
     {
+#pragma warning disable CA1870 // a cached SearchValues buys nothing on a once-per-load/save path
         if (string.IsNullOrWhiteSpace(checkpointId) || checkpointId.IndexOfAny(UnsafeIdChars) >= 0)
+#pragma warning restore CA1870
             throw new ArgumentException(
                 $"Checkpoint ID '{checkpointId}' must be non-empty and contain no wildcards or directory separators.",
                 nameof(checkpointId));

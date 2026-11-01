@@ -162,14 +162,19 @@ public sealed class FileSkillStoreTests : IDisposable
     }
 
     [Theory]
-    [InlineData("th-TH")] // Buddhist calendar: 2026 renders as 2569
-    [InlineData("ar-SA")] // Umm al-Qura calendar: 2026 renders as 1447/1448
-    public async Task Save_UnderANonGregorianCalendarCulture_WritesTheInvariantId(string cultureName)
+    [InlineData("th-TH", typeof(ThaiBuddhistCalendar))] // 2026 renders as 2569
+    [InlineData("ar-SA", typeof(UmAlQuraCalendar))]     // 2026 renders as 1447/1448
+    public async Task Save_UnderANonGregorianCalendarCulture_WritesTheInvariantId(string cultureName, Type calendarType)
     {
         // The id was rendered and parsed with the ambient culture: a Gregorian id failed to parse under
         // ar-SA (the version vanished from ListVersionsAsync) and read as year 1483 under th-TH.
+        // The calendar is selected explicitly because a locale's default comes from the host's ICU/CLDR
+        // data and moves between versions: ar-SA defaults to Umm al-Qura on ICU 74 (Ubuntu 24.04) but to
+        // Gregorian on ICU 78 (Ubuntu 26.04), where Umm al-Qura is still one of its optional calendars.
         var culture = new CultureInfo(cultureName);
-        Assert.IsNotType<GregorianCalendar>(culture.DateTimeFormat.Calendar); // only live with ICU present
+        var calendar = culture.OptionalCalendars.SingleOrDefault(c => c.GetType() == calendarType);
+        Assert.NotNull(calendar); // only live with ICU present
+        culture.DateTimeFormat.Calendar = calendar;
 
         var store = new FileSkillStore(_dir, new TestClock(T0));
         var original = CultureInfo.CurrentCulture;

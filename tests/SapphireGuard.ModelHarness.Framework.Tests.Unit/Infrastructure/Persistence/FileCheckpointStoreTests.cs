@@ -293,4 +293,125 @@ public sealed class FileCheckpointStoreTests : IDisposable
 
         await Assert.ThrowsAsync<ArgumentException>(() => store.DeleteAsync(taskId));
     }
+
+    [Fact]
+    public async Task Save_RetainPerTask_KeepsTheNewestAndPrunesTheRest()
+    {
+        // A task's directory grows by one trajectory-sized file per turn (each checkpoint carries the
+        // whole trajectory), so an unbounded directory is what fills a disk on a long run. Retention
+        // bounds it without touching resumability — but only if the newest checkpoint survives the
+        // prune the same save performs, which is the ordering this pins.
+        var store = new FileCheckpointStore(_dir, retainPerTask: 2);
+        var state = SampleState();
+
+        for (var turn = 0; turn < 5; turn++)
+            await store.SaveAsync(At(state, $"c{turn}", T0.AddSeconds(turn), turn));
+
+        var files = Directory.GetFiles(Path.Combine(_dir, state.TaskId), "*.json");
+        Assert.Equal(2, files.Length);
+
+        var loaded = await store.LoadLatestAsync(state.TaskId);
+        Assert.Equal(4, loaded!.TurnNumber);
+    }
+
+    [Fact]
+    public async Task Save_RetainPerTaskOne_KeepsOnlyTheLatest()
+    {
+        var store = new FileCheckpointStore(_dir, retainPerTask: 1);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "c1", T0, turn: 1));
+        await store.SaveAsync(At(state, "c2", T0.AddSeconds(1), turn: 2));
+        await store.SaveAsync(At(state, "c3", T0.AddSeconds(2), turn: 3));
+
+        var taskDir = Path.Combine(_dir, state.TaskId);
+        Assert.Single(Directory.GetFiles(taskDir, "*.json"));
+
+        var loaded = await store.LoadLatestAsync(state.TaskId);
+        Assert.Equal("c3", loaded!.CheckpointId);
+    }
+
+    [Fact]
+    public async Task Save_WithoutRetention_KeepsEveryCheckpoint()
+    {
+        // The default must stay the old behaviour: a consumer that relies on the full per-turn
+        // history still has it after upgrading, and pruning is opt-in only.
+        var store = new FileCheckpointStore(_dir);
+        var state = SampleState();
+
+        for (var turn = 0; turn < 3; turn++)
+            await store.SaveAsync(At(state, $"c{turn}", T0.AddSeconds(turn), turn));
+
+        Assert.Equal(3, Directory.GetFiles(Path.Combine(_dir, state.TaskId), "*.json").Length);
+    }
+
+    [Fact]
+    public async Task Save_SameMillisecondWithRetention_KeepsTheCheckpointJustWritten()
+    {
+        // Filename ordering only resolves to the millisecond, so two saves sharing one tie-break on the
+        // random checkpoint id and the newest write can sort last. Ownership therefore has to be decided
+        // by the path just written rather than by ordering. This is the case that used to delete the
+        // newest checkpoint — including the save HarnessLoop makes when a run suspends for human input,
+        // where losing it loses the resumable state.
+        var store = new FileCheckpointStore(_dir, retainPerTask: 1);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "b", T0, turn: 1));
+        await store.SaveAsync(At(state, "a", T0, turn: 2));
+
+        var loaded = await store.LoadLatestAsync(state.TaskId);
+
+        Assert.Equal(2, loaded!.TurnNumber);
+        Assert.Equal("a", loaded.CheckpointId);
+    }
+
+    [Fact]
+    public async Task Save_RetainPerTaskTwo_SameMillisecond_KeepsTheNewestAndOneOther()
+    {
+        var store = new FileCheckpointStore(_dir, retainPerTask: 2);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "c1", T0, turn: 1));
+        await store.SaveAsync(At(state, "c2", T0, turn: 2));
+        await store.SaveAsync(At(state, "c3", T0, turn: 3));
+
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(_dir, state.TaskId), "*.json").Length);
+        Assert.Equal(3, (await store.LoadLatestAsync(state.TaskId))!.TurnNumber);
+    }
+
+    [Fact]
+    public async Task Save_ClockSteppingBackwards_KeepsTheCheckpointJustWritten()
+    {
+        // NTP can step the clock back, so "written later" is not the same as "later timestamp" and the
+        // newest state must not be pruned on the strength of its filename.
+        var store = new FileCheckpointStore(_dir, retainPerTask: 1);
+        var state = SampleState();
+
+        await store.SaveAsync(At(state, "first", T0.AddSeconds(1), turn: 1));
+        await store.SaveAsync(At(state, "second", T0, turn: 2));
+
+        var loaded = await store.LoadLatestAsync(state.TaskId);
+
+        Assert.Equal(2, loaded!.TurnNumber);
+        Assert.Equal("second", loaded.CheckpointId);
+    }
+
+    [Fact]
+    public void Constructors_BothSignaturesExist_SoCompiledCallersKeepWorking()
+    {
+        // Adding an optional parameter to a constructor changes its signature rather than adding an
+        // overload, and a caller already compiled against the one-argument form fails at run time with
+        // MissingMethodException. Both signatures have to be real methods.
+        Assert.NotNull(typeof(FileCheckpointStore).GetConstructor(new[] { typeof(string) }));
+        Assert.NotNull(typeof(FileCheckpointStore).GetConstructor(new[] { typeof(string), typeof(int?) }));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Constructor_RetainPerTaskNonPositive_Throws(int retainPerTask)
+    {
+        // Zero means "keep none", which is never what a caller asking to bound disk wants.
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FileCheckpointStore(_dir, retainPerTask));
+    }
 }
