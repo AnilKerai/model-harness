@@ -40,7 +40,9 @@ public sealed record ClaudeClientOptions
     /// request timeout by default; use this to tune them. The hook receives the options with
     /// <see cref="ApiKey"/> already set and must <b>return</b> the options to use. They are a struct, so
     /// editing the parameter would change a copy and nothing would apply; use a <c>with</c> expression:
-    /// <c>o =&gt; o with { Timeout = TimeSpan.FromMinutes(2), MaxRetries = 1 }</c>.
+    /// <c>o =&gt; o with { Timeout = TimeSpan.FromMinutes(2), MaxRetries = 1 }</c>. The SDK accepts at most one of
+    /// <c>ApiKey</c>, <c>AuthToken</c> and <c>Credentials</c>, so to authenticate another way clear the key first:
+    /// <c>o =&gt; o with { ApiKey = null, AuthToken = token }</c>.
     /// </summary>
     public Func<AnthropicSdkOptions, AnthropicSdkOptions>? ConfigureClient { get; init; }
 }
