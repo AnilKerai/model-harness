@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -91,8 +92,8 @@ public sealed class PromptInjectionSensor : ISensor
     // Both assume the corresponding source is operator-authored. A deployment that lets untrusted
     // parties write skills (agent learning) or answer ask_human (a relayed channel) needs a different
     // control at the write/ingress boundary — a regex over instruction-shaped text is the wrong one.
-    private static readonly HashSet<string> TrustedTools =
-        new HashSet<string>(StringComparer.Ordinal) { "ask_human", "skill_view" };
+    private static readonly FrozenSet<string> TrustedTools =
+        new[] { "ask_human", "skill_view" }.ToFrozenSet(StringComparer.Ordinal);
 
     public Task<SensorResult> CheckAsync(HookPoint hookPoint, AgentState state, Step? triggeringStep, CancellationToken ct)
     {
