@@ -16,17 +16,33 @@ public API even though most consumers only implement a few of them.
 
 ## [5.0.0] — 2026-11-01
 
-A major release for the Claude adapter. `ClaudeClientOptions.ConfigureClient` changes type, and the adapter moves
-to Anthropic SDK 13. The hook was an `Action`, but the SDK's `ClientOptions` is a struct, so the action edited a
-copy and nothing set there ever reached the client: in 4.x a timeout, retry count, base URL, header or telemetry
-setting in `ConfigureClient` compiled and was silently ignored. It is now a `Func` that returns the options, so an
-old lambda stops compiling, and a setting a consumer had written there starts to apply, which is a behaviour
-change in itself. Anthropic 13 is a major version of the SDK with a new API version, so code that uses its types
-directly has to follow, and a consumer's own lower `Anthropic` reference no longer restores. Three behaviours that
-arrived with the dependency bumps since 4.1.0 are recorded here with their migrations: the SDK retries an attempt
-that times out, the SDK emits its own OpenTelemetry spans, and the runtime packages need 10.0.14.
+A major release for the Claude adapter. The default model changes to `claude-sonnet-5-5`,
+`ClaudeClientOptions.ConfigureClient` changes type, and the adapter moves to Anthropic SDK 13. The hook was an
+`Action`, but the SDK's `ClientOptions` is a struct, so the action edited a copy and nothing set there ever reached
+the client: in 4.x a timeout, retry count, base URL, header or telemetry setting in `ConfigureClient` compiled and
+was silently ignored. It is now a `Func` that returns the options, so an old lambda stops compiling, and a setting
+a consumer had written there starts to apply, which is a behaviour change in itself. Anthropic 13 is a major
+version of the SDK with a new API version, so code that uses its types directly has to follow, and a consumer's own
+lower `Anthropic` reference no longer restores. Three behaviours that arrived with the dependency bumps since 4.1.0
+are recorded here with their migrations: the SDK retries an attempt that times out, the SDK emits its own
+OpenTelemetry spans, and the runtime packages need 10.0.14.
 
 ### Breaking
+
+- **`ClaudeClientOptions.ModelId` now defaults to `claude-sonnet-5-5` (was `claude-sonnet-4-5-20250929`).**
+  The new default is Claude Sonnet 5.5. Claude 5.x models have no dated snapshot ids, so the default is the plain
+  id and not a pinned snapshot. This reaches every host that does not set `ModelId`: it now calls a different
+  model, so its output and token counts differ. Per-token prices are lower ($2 / $10 per million input / output
+  tokens and $0.10 per million cache-read tokens, from $3 / $15 / $0.30), and `ModelResponse.Cost` reports the new
+  prices. A host that sets `ModelId` is unaffected.
+
+  ```csharp
+  // Before — 4.x: no ModelId, so this called Claude Sonnet 4.5
+  var options = new ClaudeClientOptions { ApiKey = apiKey };
+
+  // After — 5.0.0: the same code calls Claude Sonnet 5.5; to keep Sonnet 4.5, set it
+  var options = new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-sonnet-4-5-20250929" };
+  ```
 
 - **`ClaudeClientOptions.ConfigureClient` is now a `Func<ClientOptions, ClientOptions>`, and it now applies.**
   It was an `Action<Anthropic.Core.ClientOptions>`. `ClientOptions` is a struct, so the action received a copy

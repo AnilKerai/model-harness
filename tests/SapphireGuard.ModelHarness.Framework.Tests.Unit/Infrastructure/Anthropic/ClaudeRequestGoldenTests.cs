@@ -14,7 +14,9 @@ namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Infrastructure.Anthrop
 // HTTP layer, so a change of Anthropic SDK version that alters what goes on the wire fails here.
 //
 // The golden files under Golden/ were captured on Anthropic 12.60.0 and reviewed by hand against the Messages API.
-// A golden that fails after an SDK bump means the request body changed.
+// A golden that fails after an SDK bump means the request body changed. The goldens' "model" value is
+// ClaudeClientOptions.ModelId's default, which moved to claude-sonnet-5-5 in 5.0.0; no other byte of the goldens
+// changed.
 public sealed class ClaudeRequestGoldenTests
 {
     private const string CannedResponse = """
@@ -22,7 +24,7 @@ public sealed class ClaudeRequestGoldenTests
           "id": "msg_01",
           "type": "message",
           "role": "assistant",
-          "model": "claude-sonnet-4-5-20250929",
+          "model": "claude-sonnet-5-5",
           "content": [ { "type": "text", "text": "ok" } ],
           "stop_reason": "end_turn",
           "stop_sequence": null,
