@@ -14,7 +14,7 @@ namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Infrastructure.Anthrop
 // HTTP layer, so a change of Anthropic SDK version that alters what goes on the wire fails here.
 //
 // The golden files under Golden/ were captured on Anthropic 12.60.0 and reviewed by hand against the Messages API.
-// If one of these tests fails after an SDK bump, the wire format changed: fix the adapter, do not edit the golden.
+// A golden that fails after an SDK bump means the request body changed.
 public sealed class ClaudeRequestGoldenTests
 {
     private const string CannedResponse = """

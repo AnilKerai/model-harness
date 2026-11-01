@@ -96,7 +96,8 @@ Four components invert, narrow or route around the rule, deliberately:
   flag, unlike an intervention reason, so a failing sensor is diagnosable without turning
   on content capture.
 - The harness applies no second deadline to model calls. The provider SDKs already impose
-  a request timeout, tunable per adapter via `ConfigureClient`. Adding one would duplicate
+  a request timeout, tunable per adapter via `ConfigureClient` (Claude's returns the options,
+  `o => o with { Timeout = … }`; Azure's edits them in place). Adding one would duplicate
   a timeout and re-raise exactly this ambiguity.
 
 ## Alternatives rejected
