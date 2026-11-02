@@ -10,11 +10,11 @@ public sealed record ClaudeClientOptions
     public required string ApiKey { get; init; }
 
     /// <summary>
-    /// Anthropic model identifier. Defaults to <c>claude-sonnet-4-5-20250929</c>, a dated snapshot of
-    /// Claude Sonnet 4.5 (unlike an alias such as <c>claude-sonnet-4-5</c>, it always resolves to the same model).
+    /// Anthropic model identifier. Defaults to <c>claude-sonnet-5-5</c>, Claude Sonnet 5.5. Claude 5.x models have
+    /// no dated snapshot ids, so there is no dated form to pin.
     /// See https://docs.anthropic.com/en/docs/about-claude/models for current model IDs.
     /// </summary>
-    public string ModelId { get; init; } = "claude-sonnet-4-5-20250929";
+    public string ModelId { get; init; } = "claude-sonnet-5-5";
 
     /// <summary>
     /// Maximum number of output tokens the model may generate per call. The Anthropic API requires
@@ -36,8 +36,13 @@ public sealed record ClaudeClientOptions
 
     /// <summary>
     /// Optional hook to configure the underlying SDK client — retry count, request timeout, base URL,
-    /// custom headers, etc. The Anthropic SDK already retries transient failures and applies a request
-    /// timeout by default; use this to tune them (e.g. <c>o =&gt; o.Timeout = TimeSpan.FromMinutes(2)</c>).
+    /// custom headers, OpenTelemetry, etc. The Anthropic SDK already retries transient failures and applies a
+    /// request timeout by default; use this to tune them. The hook receives the options with
+    /// <see cref="ApiKey"/> already set and must <b>return</b> the options to use. They are a struct, so
+    /// editing the parameter would change a copy and nothing would apply; use a <c>with</c> expression:
+    /// <c>o =&gt; o with { Timeout = TimeSpan.FromMinutes(2), MaxRetries = 1 }</c>. The SDK accepts at most one of
+    /// <c>ApiKey</c>, <c>AuthToken</c> and <c>Credentials</c>, so to authenticate another way clear the key first:
+    /// <c>o =&gt; o with { ApiKey = null, AuthToken = token }</c>.
     /// </summary>
-    public Action<AnthropicSdkOptions>? ConfigureClient { get; init; }
+    public Func<AnthropicSdkOptions, AnthropicSdkOptions>? ConfigureClient { get; init; }
 }

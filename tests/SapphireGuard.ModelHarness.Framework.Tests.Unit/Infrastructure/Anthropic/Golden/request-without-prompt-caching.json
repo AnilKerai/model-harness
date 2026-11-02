@@ -1,0 +1,79 @@
+{
+  "model": "claude-sonnet-5-5",
+  "max_tokens": 2048,
+  "system": "You are a careful assistant.",
+  "tools": [
+    {
+      "name": "lookup",
+      "description": "Looks up an order by its number.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "integer",
+            "description": "The order number."
+          }
+        },
+        "required": [
+          "orderId"
+        ]
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Check order 42."
+        },
+        {
+          "type": "text",
+          "text": "It is urgent."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Looking it up."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_1",
+          "name": "lookup",
+          "input": {
+            "orderId": 42
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_1",
+          "content": "order service unavailable",
+          "is_error": true
+        },
+        {
+          "type": "text",
+          "text": "Try once more."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "It is still failing."
+    },
+    {
+      "role": "user",
+      "content": "Thanks, stop there."
+    }
+  ],
+  "cache_control": null
+}

@@ -5,7 +5,7 @@ using SapphireGuard.ModelHarness.Framework.State;
 using SapphireGuard.ModelHarness.Framework.Tools;
 
 using SdkMessage = Anthropic.Models.Messages.Message;
-using SdkRole = Anthropic.Models.Messages.Role;
+using SdkRole = Anthropic.Models.Messages.MessageParamRole;
 using FrameworkMessage = SapphireGuard.ModelHarness.Framework.State.Message;
 using FrameworkUsage = SapphireGuard.ModelHarness.Framework.State.Usage;
 using FrameworkToolCall = SapphireGuard.ModelHarness.Framework.Tools.ToolCall;
@@ -97,14 +97,16 @@ internal static class ClaudeWireFormat
 
     private static void Flush(List<MessageParam> result, SdkRole role, List<ContentBlockParam> blocks)
     {
-        if (blocks.Count == 1 && blocks[0].TryPickText(out var textBlock))
-        {
-            result.Add(new MessageParam { Role = role, Content = textBlock.Text });
-        }
-        else
-        {
-            result.Add(new MessageParam { Role = role, Content = new MessageParamContent([.. blocks]) });
-        }
+        // A lone text block goes as the plain string; anything else as the block array (copied, because the
+        // caller reuses `blocks`).
+        MessageContentParam content = blocks.Count == 1 && blocks[0].TryPickText(out var textBlock)
+            ? textBlock.Text
+            : new List<ContentBlockParam>(blocks);
+
+        // MessageParam is a read-only union of per-role types; the role is fixed by which one is built.
+        result.Add(role == SdkRole.Assistant
+            ? new MessageParam(new AssistantMessageParam { Content = content })
+            : new MessageParam(new UserMessageParam { Content = content }));
     }
 
     // A marker that does not parse yields empty name/id rather than throwing: the SDK still builds a
