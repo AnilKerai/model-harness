@@ -6,7 +6,7 @@ using SapphireGuard.ModelHarness.Infrastructure.Anthropic.Model;
 using Xunit;
 
 using SdkMessage = Anthropic.Models.Messages.Message;
-using SdkRole = Anthropic.Models.Messages.Role;
+using SdkRole = Anthropic.Models.Messages.MessageParamRole;
 using FrameworkMessage = SapphireGuard.ModelHarness.Framework.State.Message;
 using StopReason = SapphireGuard.ModelHarness.Framework.State.StopReason;
 

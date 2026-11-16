@@ -14,35 +14,176 @@ public API even though most consumers only implement a few of them.
 
 ## [Unreleased]
 
+## [5.0.0] — 2026-11-01
+
+A major release for the Claude adapter. The default model changes to `claude-sonnet-5-5`,
+`ClaudeClientOptions.ConfigureClient` changes type, and the adapter moves to Anthropic SDK 13. The hook was an
+`Action`, but the SDK's `ClientOptions` is a struct, so the action edited a copy and nothing set there ever reached
+the client: in 4.x a timeout, retry count, base URL, header or telemetry setting in `ConfigureClient` compiled and
+was silently ignored. It is now a `Func` that returns the options, so an old lambda stops compiling, and a setting
+a consumer had written there starts to apply, which is a behaviour change in itself. Anthropic 13 is a major
+version of the SDK with a new API version, so code that uses its types directly has to follow, and a consumer's own
+lower `Anthropic` reference no longer restores. Three behaviours that arrived with the dependency bumps since 4.1.0
+are recorded here with their migrations: the SDK retries an attempt that times out, the SDK emits its own
+OpenTelemetry spans, and the runtime packages need 10.0.14.
+
+### Breaking
+
+- **`ClaudeClientOptions.ModelId` now defaults to `claude-sonnet-5-5` (was `claude-sonnet-4-5-20250929`).**
+  The new default is Claude Sonnet 5.5. Claude 5.x models have no dated snapshot ids, so the default is the plain
+  id and not a pinned snapshot. This reaches every host that does not set `ModelId`: it now calls a different
+  model, so its output and token counts differ. Per-token prices are lower ($2 / $10 per million input / output
+  tokens and $0.10 per million cache-read tokens, from $3 / $15 / $0.30), and `ModelResponse.Cost` reports the new
+  prices. A host that sets `ModelId` is unaffected.
+
+  ```csharp
+  // Before — 4.x: no ModelId, so this called Claude Sonnet 4.5
+  var options = new ClaudeClientOptions { ApiKey = apiKey };
+
+  // After — 5.0.0: the same code calls Claude Sonnet 5.5; to keep Sonnet 4.5, set it
+  var options = new ClaudeClientOptions { ApiKey = apiKey, ModelId = "claude-sonnet-4-5-20250929" };
+  ```
+
+- **`ClaudeClientOptions.ConfigureClient` is now a `Func<ClientOptions, ClientOptions>`, and it now applies.**
+  It was an `Action<Anthropic.Core.ClientOptions>`. `ClientOptions` is a struct, so the action received a copy
+  and edited that, and `ClaudeModelClient` then built the SDK client from its own, untouched options. Nothing
+  set in the hook took effect in 4.x (checked on 4.1.0: `Timeout` and `MaxRetries` stay unset) and nothing
+  warned: not `Timeout`, `MaxRetries`, `BaseUrl`, `ExtraHeaders` or `OpenTelemetry`. The hook now receives the
+  options with `ApiKey` already set and returns the options to use, so a lambda written for the old form fails
+  to compile. **Behavioural change too:** once you rewrite it, whatever it sets applies for the first time, so a
+  `Timeout` or `MaxRetries` that was dead code in 4.x now changes how your calls fail. Check the values before
+  you upgrade. The Azure adapter's `ConfigureClient` is unchanged: its options are a class, so its `Action`
+  always worked.
+
+  ```csharp
+  // Before — compiled, and did nothing: the action edited a copy of the struct
+  var options = new ClaudeClientOptions
+  {
+      ApiKey = apiKey,
+      ConfigureClient = o => o.Timeout = TimeSpan.FromMinutes(3)
+  };
+
+  // After — return the options to use
+  var options = new ClaudeClientOptions
+  {
+      ApiKey = apiKey,
+      ConfigureClient = o => o with { Timeout = TimeSpan.FromMinutes(3), MaxRetries = 1 }
+  };
+  ```
+
+- **Anthropic SDK 12.42.0 → 13.3.0** (4.1.0 shipped with 12.42.0). This reaches you if your code uses Anthropic
+  SDK types directly, including `ClientOptions` through the hook above, or sits between the adapter and the API.
+  The adapter's request is unchanged: a test pins the JSON body it sends for a representative conversation,
+  captured on 12.60.0 and unchanged on 13.3.0, and its mapping of responses, stop reasons, usage and cache
+  buckets is unchanged. What changes comes from the SDK:
+  - **13.0.0 moves the SDK to API version `2026-10-21`** (see the SDK's
+    [migration guide](https://platform.claude.com/docs/en/api/migration-2026-10-21)). It sends
+    `anthropic-version: 2026-10-21` where 12.x sent `2023-06-01`, and sends an API key in an
+    `Authorization: Bearer` header where 12.x used `X-Api-Key`. A proxy, gateway or allow-list that matches on
+    either header sees the change. `Temperature`, `TopK` and `TopP` are gone from `MessageCreateParams`, since
+    the new API version rejects them.
+  - **`MessageParam` is a union of `UserMessageParam`, `AssistantMessageParam` and `SystemMessageParam`.** The
+    `Role` enum is gone (read the role as `MessageParamRole`), `Role` and `Content` are read-only on the union,
+    and `MessageParamContent` is now `MessageContentParam`. `BetaMessageParam` splits the same way. Properties that
+    could hold only one value, such as the `Type` of the classes under `Anthropic.Models.Beta`, are now constants
+    the constructor fills in. `Betas` is gone from the non-beta `ModelListParams` and `ModelRetrieveParams`: use
+    `client.Beta.Models`.
+
+    ```csharp
+    // Before — Anthropic 12.x
+    var turn = new MessageParam { Role = Role.User, Content = "Hello, Claude" };
+    var isAssistant = turn.Role.Value() == Role.Assistant;
+
+    // After — Anthropic 13.x: build the class for the role
+    MessageParam turn = new UserMessageParam { Content = "Hello, Claude" };
+    var isAssistant = turn.Role.Value() == MessageParamRole.Assistant;
+    ```
+  - **At most one credential.** The SDK now accepts only one of `ApiKey`, `AuthToken` and `Credentials`, and
+    setting a second throws `ArgumentException`. The hook receives `ApiKey` already set, so to authenticate another
+    way clear it first: `o => o with { ApiKey = null, AuthToken = token }`.
+  - **The package licence is Apache-2.0** from 13.0.0 (12.x was MIT).
+  - Earlier notes that still apply: 12.44.0 renamed types in the SDK's beta namespaces (for example
+    `Anthropic.Models.Beta.Messages.BetaSkill` → `BetaContainerSkill`), and 12.56.0 made the streaming helpers
+    `Aggregate()` and `CollectAsync` return when the response body ends rather than at `message_stop`. The
+    interface `IAnthropicClient` also gained the abstract properties `Organization`, `OpenTelemetry` and
+    `UserProfiles` between 12.42.0 and 12.60.0 (13.3.0 adds none), so a class that implements it, such as a test
+    fake, stops compiling. The adapter uses none of these (it holds the concrete `AnthropicClient` privately and
+    exposes only `Anthropic.Core.ClientOptions` through `ConfigureClient`).
+  - **A direct `Anthropic` reference below 13.3.0 fails restore with NU1605** (a package downgrade). Raise it, or
+    remove it to take the adapter's:
+
+    ```xml
+    <!-- Before — restores against 4.x -->
+    <PackageReference Include="Anthropic" Version="12.60.0" />
+
+    <!-- After — NU1605 until the reference is 13.3.0 or higher -->
+    <PackageReference Include="Anthropic" Version="13.3.0" />
+    ```
+
+- **A Claude call that times out is now retried, and the SDK honours `Retry-After`** (since Anthropic 12.48.0).
+  The defaults are unchanged in 13.3.0 (2 retries, a 10-minute timeout), but before, a timed-out attempt threw
+  straight away, and a `Retry-After` of a minute or more was ignored in favour of a 0.5–8 s back-off. Now a
+  timed-out attempt is retried like a connection error, and the SDK waits out whatever `Retry-After` the API
+  sends, with no practical cap. So with the defaults, a Claude call to a backend that hangs can take up to three
+  timeouts (about 30 minutes) to fail instead of one, and a rate-limited call can sit out a long `Retry-After`
+  inside the call. The failure that finally surfaces is still a `TaskCanceledException` (its message now says the
+  configured client timeout elapsed, and it carries a `TimeoutException` as inner exception), so the loop's
+  handling of a collaborator timeout and the circuit breaker in `Infrastructure.Resilience` are unchanged; they
+  just see it later. The run's own cancellation token is never retried. To keep a bound, lower `Timeout` or
+  `MaxRetries` in `ConfigureClient`, which applies from this release (in 4.x it did not):
+
+  ```csharp
+  // Before — 4.x (Anthropic 12.42.0), defaults: a hung call failed after one 10-minute timeout
+  var options = new ClaudeClientOptions { ApiKey = apiKey };
+
+  // After — same code, but a hung call can now take three timeouts (about 30 minutes) to fail.
+  // Bound it with two 3-minute attempts at most (MaxRetries = 0 restores a single attempt):
+  var bounded = new ClaudeClientOptions
+  {
+      ApiKey = apiKey,
+      ConfigureClient = o => o with { Timeout = TimeSpan.FromMinutes(3), MaxRetries = 1 }
+  };
+  ```
+
+- **`Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.DependencyInjection.Abstractions` and
+  `System.Text.Json` (`net8.0` only) now require 10.0.14** (they were 10.0.11). `SapphireGuard.ModelHarness`
+  needs `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.14 (and `System.Text.Json` 10.0.14 on
+  `net8.0`), and `SapphireGuard.ModelHarness.Infrastructure` needs `Microsoft.Extensions.DependencyInjection`
+  10.0.14. A consumer with its own direct reference to one of them below 10.0.14 fails restore with NU1605 and
+  must raise it:
+
+  ```xml
+  <!-- Before — restores against 4.x -->
+  <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+
+  <!-- After — NU1605 until the reference is 10.0.14 or higher -->
+  <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+  ```
+
+- **The Anthropic SDK emits its own OpenTelemetry spans** (since 12.56.0). They go only to a tracer provider that
+  subscribes to the `com.anthropic.sdk.csharp` source, and carry no message content unless
+  `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE` is `content`, so a host that already registers
+  `AddSource("*")` or that source now receives them next to the harness's own `invoke_agent` / `chat` spans.
+  Turn them off with the hook, which only works from this release (in 4.x it did nothing), or with the
+  `ANTHROPIC_OPEN_TELEMETRY=false` environment variable:
+
+  ```csharp
+  // Before — 4.x: the SDK shipped with 4.1.0 (12.42.0) emitted no spans, so there was nothing to turn off
+  var options = new ClaudeClientOptions { ApiKey = apiKey };
+
+  // After — opt out of the SDK's spans
+  var quiet = new ClaudeClientOptions
+  {
+      ApiKey = apiKey,
+      ConfigureClient = o => o with { OpenTelemetry = false }
+  };
+  ```
+
 ### Changed
 
 - **Dependencies bumped to latest stable.** The consumer-facing floors that rise transitively are the adapter
   SDKs, `Polly` and the Microsoft.Extensions packages:
-  - `Anthropic` 12.42.0 → 12.60.0 (Claude adapter)
-    - **Behavioural change:** since 12.48.0 the SDK retries an attempt that hits the client-side timeout, and
-      honours any `Retry-After`. The defaults are unchanged (2 retries, 10-minute timeout), but before, a
-      timed-out attempt threw straight away, and a `Retry-After` of a minute or more was ignored in favour of a
-      0.5–8 s back-off. Now a timed-out attempt is retried like a connection error, and the SDK waits out
-      whatever `Retry-After` the API sends, with no practical cap. So with the defaults, a Claude call to a
-      backend that hangs can take up to three timeouts (about 30 minutes) to fail instead of one, and a
-      rate-limited call can sit out a long `Retry-After` inside the call. The failure that finally surfaces is
-      still a `TaskCanceledException` (its message now says the configured client timeout elapsed, and it
-      carries a `TimeoutException` as inner exception), so the loop's handling of a collaborator timeout and the
-      circuit breaker in `Infrastructure.Resilience` are unchanged; they just see it later. The run's own
-      cancellation token is never retried. To keep the old bound, lower `Timeout` or `MaxRetries` in
-      `ClaudeClientOptions.ConfigureClient`.
-    - **Behavioural change:** since 12.56.0 the SDK emits its own OpenTelemetry spans, but only to a tracer
-      provider that subscribes to the `com.anthropic.sdk.csharp` source, and without message content unless
-      `ANTHROPIC_OPEN_TELEMETRY_TRACES_CONTENT_MODE` is `content`. Set `OpenTelemetry = false` in
-      `ConfigureClient` to turn them off.
-    - **Behavioural change:** 12.44.0 renamed types in the SDK's beta namespaces (for example
-      `Anthropic.Models.Beta.Messages.BetaSkill` → `BetaContainerSkill`), and 12.56.0 made the streaming helpers
-      `Aggregate()` and `CollectAsync` return when the response body ends rather than at `message_stop`. The
-      interface `IAnthropicClient` also gained the abstract properties `Organization`, `OpenTelemetry` and
-      `UserProfiles` between 12.42.0 and 12.60.0, so a class that implements it, such as a test fake, stops
-      compiling. The adapter uses none of these (it holds the concrete `AnthropicClient` privately and exposes
-      only `Anthropic.Core.ClientOptions` through `ConfigureClient`), but code that reaches the SDK directly can
-      stop compiling or see the new streaming behaviour once it resolves the new version.
+  - `Anthropic` 12.42.0 → 13.3.0 (Claude adapter; see Breaking)
   - `OllamaSharp` 5.4.30 → 5.5.0 (Ollama adapter)
     - **Behavioural change:** the interface `IOllamaApiClient` gained the abstract method `SystemOneAsync` (the
       new System One endpoint), so a class that implements it, such as a test fake, stops compiling once it
@@ -53,8 +194,8 @@ public API even though most consumers only implement a few of them.
       implements nor exposes `IOllamaApiClient`.
   - `Polly` 8.7.0 → 8.9.0 (resilience)
   - `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.DependencyInjection.Abstractions` and
-    `System.Text.Json` (`net8.0` only) 10.0.11 → 10.0.14 (runtime; the tests, samples and `getting-started` use
-    the same version)
+    `System.Text.Json` (`net8.0` only) 10.0.11 → 10.0.14 (runtime, see Breaking; the tests, samples and
+    `getting-started` use the same version)
   - Build-time only: `MinVer` 7.0.0 → 8.0.0, `Microsoft.SourceLink.GitHub` 10.0.400 → 10.0.403
   - Test tooling: `Microsoft.NET.Test.Sdk` 18.9.0 → 18.11.0, `xunit.runner.visualstudio` 4.0.0 → 4.0.1
   - Samples and `getting-started`: `Microsoft.Extensions.Configuration.Json`,

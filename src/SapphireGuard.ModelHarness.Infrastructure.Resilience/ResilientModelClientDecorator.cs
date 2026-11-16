@@ -16,7 +16,8 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Resilience;
 /// (Anthropic, Azure OpenAI) already retry transient failures (connection errors, 408/409/429/5xx)
 /// with exponential back-off and apply a request timeout; stacking a second retry layer here caused
 /// compounding back-off and retry storms under rate limits. Tune retry count and timeout via the
-/// adapter's <c>ConfigureClient</c> hook instead (e.g. <c>ConfigureClient = o =&gt; o.Timeout = ...</c>);
+/// adapter's <c>ConfigureClient</c> hook instead (Claude's returns the options, <c>ConfigureClient = o =&gt; o with { Timeout = ... }</c>,
+/// because the SDK's <c>ClientOptions</c> is a struct; Azure's edits them in place, <c>ConfigureClient = o =&gt; o.NetworkTimeout = ...</c>);
 /// this decorator adds only the circuit breaker the SDKs lack. The default breaker counts every
 /// failure surfacing from the inner client except the caller cancelling the call (provider SDKs raise
 /// their own exception types, so a transport-only predicate would never fire). The client's own

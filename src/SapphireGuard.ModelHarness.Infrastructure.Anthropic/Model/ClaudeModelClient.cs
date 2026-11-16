@@ -28,12 +28,20 @@ public sealed class ClaudeModelClient : IModelClient
     public ClaudeModelClient(ClaudeClientOptions options)
     {
         var clientOptions = new AnthropicSdkOptions { ApiKey = options.ApiKey };
-        options.ConfigureClient?.Invoke(clientOptions);
+        if (options.ConfigureClient is not null)
+        {
+            // ClientOptions is a struct: the hook edits its own copy, so what it returns is what applies.
+            clientOptions = options.ConfigureClient(clientOptions);
+        }
+
         _client = new AnthropicClient(clientOptions);
         _modelId = options.ModelId;
         _maxTokens = options.MaxOutputTokens ?? 8096;
         _enablePromptCaching = options.EnablePromptCaching;
     }
+
+    // The built SDK client, so a test can assert that ConfigureClient's result reached it.
+    internal AnthropicClient SdkClient => _client;
 
     public async Task<ModelResponse> CallAsync(
         IReadOnlyList<FrameworkMessage> messages,
