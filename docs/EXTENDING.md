@@ -957,8 +957,10 @@ builder.WithResilientModel(_ => new ClaudeModelClient(new ClaudeClientOptions { 
 ```
 
 The provider SDKs already retry transient failures and apply a request timeout — tune those via
-the adapter's `ConfigureClient` hook (e.g. `ConfigureClient = o => o.Timeout = TimeSpan.FromMinutes(2)`
-on `ClaudeClientOptions`, or `o => o.NetworkTimeout = ...` on `AzureOpenAIClientOptions`). Cap
+the adapter's `ConfigureClient` hook. On `ClaudeClientOptions` it is a `Func` that returns the options
+(`ConfigureClient = o => o with { Timeout = TimeSpan.FromMinutes(2), MaxRetries = 1 }`), because the SDK's
+`ClientOptions` is a struct and a hook that edited its parameter would edit a copy; on `AzureOpenAIClientOptions` it is an
+`Action` that edits the options in place (`ConfigureClient = o => o.NetworkTimeout = TimeSpan.FromMinutes(2)`). Cap
 per-call output length with `MaxOutputTokens` on any of the three options records — Anthropic
 defaults to 8096 when unset (the API requires a value), Azure and Ollama fall back to the
 service/model default. `ClaudeClientOptions` turns on Anthropic prompt caching by default
