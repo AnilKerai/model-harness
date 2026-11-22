@@ -14,7 +14,7 @@ public API even though most consumers only implement a few of them.
 
 ## [Unreleased]
 
-## [5.0.0] — 2026-11-01
+## [5.0.0] — 2026-11-22
 
 A major release for the Claude adapter. The default model changes to `claude-sonnet-5-5`,
 `ClaudeClientOptions.ConfigureClient` changes type, and the adapter moves to Anthropic SDK 13. The hook was an

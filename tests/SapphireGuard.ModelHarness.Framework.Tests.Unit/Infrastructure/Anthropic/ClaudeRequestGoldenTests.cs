@@ -53,14 +53,14 @@ public sealed class ClaudeRequestGoldenTests
 
     private static readonly IReadOnlyList<ToolDefinition> Tools =
     [
-        new("lookup", "Looks up an order by its number.", JsonDocument.Parse(
+        new("lookup", "Looks up an order by its number.", JsonElement.Parse(
             """
             {
               "type": "object",
               "properties": { "orderId": { "type": "integer", "description": "The order number." } },
               "required": [ "orderId" ]
             }
-            """).RootElement.Clone())
+            """))
     ];
 
     [Fact]
