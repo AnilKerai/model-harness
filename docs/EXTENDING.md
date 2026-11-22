@@ -116,7 +116,7 @@ public sealed class MyTool : ITool
 {
     public string Name => "my-tool";
     public string Description => "Does something useful.";
-    public JsonElement InputSchema => JsonDocument.Parse("""{ "type": "object" }""").RootElement;
+    public JsonElement InputSchema => JsonElement.Parse("""{ "type": "object" }""");
 
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext ctx, CancellationToken ct)
         => Task.FromResult(new ToolResult(call.CallId, "result"));
