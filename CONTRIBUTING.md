@@ -11,6 +11,8 @@ dotnet build SapphireGuard.ModelHarness.slnx
 dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/
 ```
 
+`dotnet test` runs both target frameworks (`net8.0` and `net10.0`), so the `dotnet` on your PATH needs the .NET 8 and .NET 10 runtimes, as CI installs; with only a newer runtime the test run aborts.
+
 Warnings are errors (`TreatWarningsAsErrors`), so a clean build is a passing build. To sanity-check a change end to end, run a sample — samples fall back to a `FakeModelClient` when no API key is present, so you don't need one:
 
 ```bash
