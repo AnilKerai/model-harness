@@ -14,7 +14,7 @@ public sealed class ResilientToolTests
     private const string HttpTimeout =
         "The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.";
 
-    private static ToolCall Call() => new("call-1", "stub", JsonDocument.Parse("{}").RootElement);
+    private static ToolCall Call() => new("call-1", "stub", JsonElement.Parse("{}"));
 
     private static Task<ToolResult> Execute(ResilientTool tool, CancellationToken ct = default) =>
         tool.ExecuteAsync(Call(), ToolContext.Empty("task-1", "call-1"), ct);
@@ -97,7 +97,7 @@ public sealed class ResilientToolTests
 
         public string Name => "stub";
         public string Description => "stub";
-        public JsonElement InputSchema { get; } = JsonDocument.Parse("{}").RootElement;
+        public JsonElement InputSchema { get; } = JsonElement.Parse("{}");
 
         public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
         {

@@ -81,7 +81,7 @@ public sealed class HarnessLoopHitlTests
     public async Task RunAsync_ToolReturnsPending_ReturnsAwaitingHuman()
     {
         var callId = Guid.NewGuid().ToString("n");
-        var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var toolCall = new ToolCall(callId, "ask_human", JsonElement.Parse("{}"));
         var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your name?", IsPending: true), "ask_human");
         var client = new ScriptedModelClient(ToolUseResponse(toolCall));
 
@@ -99,7 +99,7 @@ public sealed class HarnessLoopHitlTests
     public async Task RunAsync_ToolReturnsPending_PendingStepInTrajectory()
     {
         var callId = Guid.NewGuid().ToString("n");
-        var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var toolCall = new ToolCall(callId, "ask_human", JsonElement.Parse("{}"));
         var registry = new StubToolRegistry(_ => new ToolResult(callId, "Approve this action?", IsPending: true), "ask_human");
         var client = new ScriptedModelClient(ToolUseResponse(toolCall));
 
@@ -115,7 +115,7 @@ public sealed class HarnessLoopHitlTests
     public async Task RunAsync_ToolReturnsPending_FinalStateCarriesPendingHumanInput()
     {
         var callId = Guid.NewGuid().ToString("n");
-        var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var toolCall = new ToolCall(callId, "ask_human", JsonElement.Parse("{}"));
         var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your age?", IsPending: true), "ask_human");
         var client = new ScriptedModelClient(ToolUseResponse(toolCall));
 
@@ -134,7 +134,7 @@ public sealed class HarnessLoopHitlTests
     public async Task RunAsync_ResumedAfterHumanAnswer_CompletesToDone()
     {
         var callId = Guid.NewGuid().ToString("n");
-        var toolCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var toolCall = new ToolCall(callId, "ask_human", JsonElement.Parse("{}"));
         var registry = new StubToolRegistry(_ => new ToolResult(callId, "What is your name?", IsPending: true), "ask_human");
         var firstClient = new ScriptedModelClient(ToolUseResponse(toolCall));
 
@@ -156,8 +156,8 @@ public sealed class HarnessLoopHitlTests
     public async Task RunAsync_ResumedAfterHumanAnswer_TurnNumberingContinues()
     {
         var askCallId = Guid.NewGuid().ToString("n");
-        var askCall = new ToolCall(askCallId, "ask_human", JsonDocument.Parse("{}").RootElement);
-        var calcCall = new ToolCall(Guid.NewGuid().ToString("n"), "calc", JsonDocument.Parse("{}").RootElement);
+        var askCall = new ToolCall(askCallId, "ask_human", JsonElement.Parse("{}"));
+        var calcCall = new ToolCall(Guid.NewGuid().ToString("n"), "calc", JsonElement.Parse("{}"));
         var registry = new StubToolRegistry(call => call.ToolName == "ask_human"
             ? new ToolResult(askCallId, "What is your name?", IsPending: true)
             : new ToolResult(call.CallId, "42"), "ask_human", "calc");
@@ -190,7 +190,7 @@ public sealed class HarnessLoopHitlTests
         // loop used to mint a fresh GUID per RunAsync — so a suspend/resume split one logical run
         // across two RunIds and broke correlation. It is now derived from the trajectory.
         var askCallId = Guid.NewGuid().ToString("n");
-        var askCall = new ToolCall(askCallId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var askCall = new ToolCall(askCallId, "ask_human", JsonElement.Parse("{}"));
         var registry = new StubToolRegistry(_ => new ToolResult(askCallId, "What is your name?", IsPending: true), "ask_human");
 
         var firstStore = new RecordingCheckpointStore();
@@ -219,7 +219,7 @@ public sealed class HarnessLoopHitlTests
     private const string NotExecutedText =
         "Not executed: the run suspended for human input before this call ran. Re-issue it after reading the answer if it is still needed.";
 
-    private static ToolCall CallTo(string tool) => new(Guid.NewGuid().ToString("n"), tool, JsonDocument.Parse("{}").RootElement);
+    private static ToolCall CallTo(string tool) => new(Guid.NewGuid().ToString("n"), tool, JsonElement.Parse("{}"));
 
     // The real pipeline, so a test can read the prompt the model is sent after a resume.
     private static DefaultContextBuilder RealContextBuilder() =>
@@ -341,7 +341,7 @@ public sealed class HarnessLoopHitlTests
     {
         public string Name => name;
         public string Description => "asks a human";
-        public JsonElement InputSchema { get; } = JsonDocument.Parse("{}").RootElement;
+        public JsonElement InputSchema { get; } = JsonElement.Parse("{}");
 
         public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct) =>
             Task.FromResult(new ToolResult(call.CallId, question, IsPending: true));
@@ -354,7 +354,7 @@ public sealed class HarnessLoopHitlTests
 
         public string Name => name;
         public string Description => "counts executions";
-        public JsonElement InputSchema { get; } = JsonDocument.Parse("{}").RootElement;
+        public JsonElement InputSchema { get; } = JsonElement.Parse("{}");
 
         public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
         {
@@ -398,7 +398,7 @@ public sealed class HarnessLoopHitlTests
     public void ResumeWithHumanAnswer_ClearsPendingHumanInput()
     {
         var callId = Guid.NewGuid().ToString("n");
-        var pendingCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var pendingCall = new ToolCall(callId, "ask_human", JsonElement.Parse("{}"));
         var pendingStep = new ToolCallStep(
             Guid.NewGuid(), DateTimeOffset.UtcNow, pendingCall,
             new ToolResult(callId, "Ready?", IsPending: true));
@@ -420,7 +420,7 @@ public sealed class HarnessLoopHitlTests
     public void ResumeWithHumanAnswer_ReplacesPendingStep()
     {
         var callId = Guid.NewGuid().ToString("n");
-        var pendingCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var pendingCall = new ToolCall(callId, "ask_human", JsonElement.Parse("{}"));
         var pendingStep = new ToolCallStep(
             Guid.NewGuid(), DateTimeOffset.UtcNow, pendingCall,
             new ToolResult(callId, "What is your name?", IsPending: true));
@@ -442,12 +442,12 @@ public sealed class HarnessLoopHitlTests
         var callId = Guid.NewGuid().ToString("n");
         var otherCallId = Guid.NewGuid().ToString("n");
 
-        var otherCall = new ToolCall(otherCallId, "calc", JsonDocument.Parse("{}").RootElement);
+        var otherCall = new ToolCall(otherCallId, "calc", JsonElement.Parse("{}"));
         var otherStep = new ToolCallStep(
             Guid.NewGuid(), DateTimeOffset.UtcNow, otherCall,
             new ToolResult(otherCallId, "42"));
 
-        var pendingCall = new ToolCall(callId, "ask_human", JsonDocument.Parse("{}").RootElement);
+        var pendingCall = new ToolCall(callId, "ask_human", JsonElement.Parse("{}"));
         var pendingStep = new ToolCallStep(
             Guid.NewGuid(), DateTimeOffset.UtcNow, pendingCall,
             new ToolResult(callId, "Ready?", IsPending: true));

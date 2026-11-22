@@ -5,8 +5,8 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 
 public sealed class GetDateTimeTool(TimeProvider timeProvider) : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
-        """{"type":"object","properties":{}}""").RootElement;
+    private static readonly JsonElement Schema = JsonElement.Parse(
+        """{"type":"object","properties":{}}""");
 
     public string Name => "get_date_time";
 

@@ -85,7 +85,7 @@ sealed class HitlFakeClient : IModelClient
 
     private static ModelResponse AskHumanTurn()
     {
-        var args = JsonDocument.Parse("""{"question":"What is your preferred currency?"}""").RootElement;
+        var args = JsonElement.Parse("""{"question":"What is your preferred currency?"}""");
         return new ModelResponse
         {
             Text = "I need some information from the operator.",

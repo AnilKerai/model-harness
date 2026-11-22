@@ -50,7 +50,7 @@ public sealed class CheckpointSizeTests : IDisposable
     [Fact]
     public async Task FiftyTurnRun_LastCheckpointStaysSmall_AndCarriesNoRenderedPrompt()
     {
-        var args = JsonDocument.Parse("{}").RootElement;
+        var args = JsonElement.Parse("{}");
         var script = Enumerable.Range(0, Turns - 1)
             .Select(i => new ModelResponse
             {

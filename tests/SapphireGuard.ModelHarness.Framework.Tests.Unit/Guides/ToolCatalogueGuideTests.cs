@@ -44,7 +44,7 @@ file sealed class StubTool(string name, string description) : ITool
 {
     public string Name => name;
     public string Description => description;
-    public JsonElement InputSchema => JsonDocument.Parse("{}").RootElement;
+    public JsonElement InputSchema => JsonElement.Parse("{}");
 
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
         => Task.FromResult(new ToolResult(call.CallId, "ok"));

@@ -8,7 +8,7 @@ namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Infrastructure.Tools;
 public sealed class InMemoryToolRegistryTests
 {
     private static ToolCall Call(string toolName, string argsJson = "{}") =>
-        new(Guid.NewGuid().ToString("n"), toolName, JsonDocument.Parse(argsJson).RootElement);
+        new(Guid.NewGuid().ToString("n"), toolName, JsonElement.Parse(argsJson));
 
     private static ToolContext Ctx() =>
         ToolContext.Empty(Guid.NewGuid().ToString("n"), Guid.NewGuid().ToString("n"));
@@ -95,7 +95,7 @@ file sealed class StubTool(string name, string result = "ok") : ITool
 {
     public string Name => name;
     public string Description => name;
-    public JsonElement InputSchema => JsonDocument.Parse("{}").RootElement;
+    public JsonElement InputSchema => JsonElement.Parse("{}");
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
         => Task.FromResult(new ToolResult(call.CallId, result));
 }
@@ -104,7 +104,7 @@ file sealed class ThrowingTool(string name) : ITool
 {
     public string Name => name;
     public string Description => name;
-    public JsonElement InputSchema => JsonDocument.Parse("{}").RootElement;
+    public JsonElement InputSchema => JsonElement.Parse("{}");
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
         => throw new InvalidOperationException("something went wrong");
 }
@@ -113,7 +113,7 @@ file sealed class CancellingTool(string name) : ITool
 {
     public string Name => name;
     public string Description => name;
-    public JsonElement InputSchema => JsonDocument.Parse("{}").RootElement;
+    public JsonElement InputSchema => JsonElement.Parse("{}");
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct)
         => throw new OperationCanceledException();
 }

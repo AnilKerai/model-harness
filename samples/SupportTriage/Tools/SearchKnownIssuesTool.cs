@@ -9,7 +9,7 @@ namespace SapphireGuard.ModelHarness.Samples.SupportTriage.Tools;
 [ExcludeFromCodeCoverage]
 public sealed class SearchKnownIssuesTool : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -18,7 +18,7 @@ public sealed class SearchKnownIssuesTool : ITool
           },
           "required": ["keywords"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "search_known_issues";
     public string Description => "Search the known-issues database for issues matching the given keywords. Returns matching issues with their workarounds.";

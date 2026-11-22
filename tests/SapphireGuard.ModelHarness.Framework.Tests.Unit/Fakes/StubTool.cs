@@ -8,7 +8,7 @@ public sealed class StubTool(string name) : ITool
 {
     public string Name => name;
     public string Description => "stub";
-    public JsonElement InputSchema { get; } = JsonDocument.Parse("{}").RootElement;
+    public JsonElement InputSchema { get; } = JsonElement.Parse("{}");
 
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct) =>
         throw new NotSupportedException("StubToolRegistry dispatches by itself; it never calls ITool.ExecuteAsync.");

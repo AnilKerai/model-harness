@@ -13,7 +13,7 @@ public sealed class PromptInjectionSensorTests
 
     private static ToolCallStep ToolStep(string toolName, string resultContent, IReadOnlyList<PinnedNote>? pins = null) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new ToolCall(Guid.NewGuid().ToString("n"), toolName, JsonDocument.Parse("{}").RootElement),
+            new ToolCall(Guid.NewGuid().ToString("n"), toolName, JsonElement.Parse("{}")),
             new ToolResult("id", resultContent, Pins: pins));
 
     private static AgentState EmptyState() => AgentState.NewTask("t", new Framework.State.Budget

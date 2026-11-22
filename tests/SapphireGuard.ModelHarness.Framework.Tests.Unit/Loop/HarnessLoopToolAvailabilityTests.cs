@@ -22,7 +22,7 @@ namespace SapphireGuard.ModelHarness.Framework.Tests.Unit.Loop;
 // selector and tool suppression decide what the model is shown; these tests pin that they also bind.
 public sealed class HarnessLoopToolAvailabilityTests
 {
-    private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement;
+    private static readonly JsonElement EmptyObject = JsonElement.Parse("{}");
 
     private static ModelResponse ToolUse(params ToolCall[] calls) => new()
     {

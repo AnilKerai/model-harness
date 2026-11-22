@@ -45,7 +45,7 @@ public sealed class HeadEvictionTrajectoryGuideTests
 
     private static ToolCallStep ToolStep() =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            Call: new ToolCall(Guid.NewGuid().ToString("n"), "test-tool", JsonDocument.Parse("{}").RootElement),
+            Call: new ToolCall(Guid.NewGuid().ToString("n"), "test-tool", JsonElement.Parse("{}")),
             Result: new ToolResult("id", "result"));
 
     // Eviction is driven by the compaction window, not the run budget. Basic-rendering tests use a
@@ -520,7 +520,7 @@ public sealed class HeadEvictionTrajectoryGuideTests
 
     private static ToolCallStep BulkyToolStep(int resultChars) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            Call: new ToolCall(Guid.NewGuid().ToString("n"), "fetch", JsonDocument.Parse("{}").RootElement),
+            Call: new ToolCall(Guid.NewGuid().ToString("n"), "fetch", JsonElement.Parse("{}")),
             Result: new ToolResult("id", new string('x', resultChars)));
 
     // A second chat turn whose tool output alone overflows a 500-token window (~1000 tokens), so the

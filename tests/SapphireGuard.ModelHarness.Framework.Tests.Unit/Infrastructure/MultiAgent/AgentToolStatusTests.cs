@@ -15,7 +15,7 @@ public sealed class AgentToolStatusTests
         ToolContext.Empty(Guid.NewGuid().ToString("n"), Guid.NewGuid().ToString("n"));
 
     private static ToolCall SubTaskCall() =>
-        new(Guid.NewGuid().ToString("n"), "sub-agent", JsonDocument.Parse("""{"task":"triage"}""").RootElement);
+        new(Guid.NewGuid().ToString("n"), "sub-agent", JsonElement.Parse("""{"task":"triage"}"""));
 
     private static ModelResponse Response(string? text, StopReason stopReason, params ToolCall[] calls) => new()
     {
@@ -93,7 +93,7 @@ public sealed class AgentToolStatusTests
     {
         var askHuman = new StubToolRegistry(call =>
             new ToolResult(call.CallId, "Which account is this about?", IsPending: true), "ask_human");
-        var call = new ToolCall("c1", "ask_human", JsonDocument.Parse("{}").RootElement);
+        var call = new ToolCall("c1", "ask_human", JsonElement.Parse("{}"));
         var sut = BuildTool(askHuman, Response(null, StopReason.ToolUse, call));
 
         var result = await sut.ExecuteAsync(SubTaskCall(), Ctx, CancellationToken.None);
