@@ -25,7 +25,7 @@ public sealed class AgentTool(string agentName, AgentFactory factory, Budget? bu
     public string Description =>
         $"Delegates a sub-task to the '{agentName}' agent. Pass a self-contained task description.";
 
-    public JsonElement InputSchema => JsonDocument.Parse("""
+    public JsonElement InputSchema => JsonElement.Parse("""
         {
             "type": "object",
             "properties": {
@@ -33,7 +33,7 @@ public sealed class AgentTool(string agentName, AgentFactory factory, Budget? bu
             },
             "required": ["task"]
         }
-        """).RootElement;
+        """);
 
     [SuppressMessage("Naming", "CA1725:Parameter names should match base declaration",
         Justification = "'ctx' is what the other members on this class use; renaming the parameter alone is a source break for named-argument callers.")]

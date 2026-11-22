@@ -25,13 +25,13 @@ public sealed class TaintTrackingSensorTests
     private static ToolCallStep CompletedStep(
         string toolName, string content = "some content", bool isError = false, bool harnessAuthored = false) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new ToolCall(Guid.NewGuid().ToString("n"), toolName, JsonDocument.Parse("{}").RootElement),
+            new ToolCall(Guid.NewGuid().ToString("n"), toolName, JsonElement.Parse("{}")),
             new ToolResult("id", content, IsError: isError))
         { HarnessAuthored = harnessAuthored };
 
     private static ToolCallStep PendingStep(string toolName) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new ToolCall(Guid.NewGuid().ToString("n"), toolName, JsonDocument.Parse("{}").RootElement),
+            new ToolCall(Guid.NewGuid().ToString("n"), toolName, JsonElement.Parse("{}")),
             new ToolResult("id", "(pending)"));
 
     [Fact]

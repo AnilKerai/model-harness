@@ -80,7 +80,7 @@ file sealed class ScriptedInvestigator(int steps) : IModelClient
         if (n <= steps)
         {
             // Args vary per turn so the built-in StuckDetector doesn't flag repeated identical calls.
-            var args = JsonDocument.Parse($$"""{"finding":"detail from subsystem {{n}}"}""").RootElement;
+            var args = JsonElement.Parse($$"""{"finding":"detail from subsystem {{n}}"}""");
             return Task.FromResult(new ModelResponse
             {
                 Text = $"Step {n}: I examined subsystem #{n} and found a noteworthy detail worth recording before moving on to the next area.",
@@ -110,7 +110,7 @@ file sealed class RecordTool : ITool
 {
     public string Name => "record";
     public string Description => "Records a finding to the case file.";
-    public JsonElement InputSchema => JsonDocument.Parse("""{"type":"object","properties":{"finding":{"type":"string"}}}""").RootElement;
+    public JsonElement InputSchema => JsonElement.Parse("""{"type":"object","properties":{"finding":{"type":"string"}}}""");
 
     public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct) =>
         Task.FromResult(new ToolResult(call.CallId, "Finding recorded to the case file for later synthesis."));

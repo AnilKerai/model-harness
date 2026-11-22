@@ -7,7 +7,7 @@ namespace SapphireGuard.ModelHarness.Samples.SupportTriage.Tools;
 [ExcludeFromCodeCoverage]
 public sealed class LookupCustomerTool : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -16,7 +16,7 @@ public sealed class LookupCustomerTool : ITool
           },
           "required": ["email"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "lookup_customer";
     public string Description => "Look up a customer account by email. Returns their tier, account age, and open ticket count. Returns not_found if the email is unknown.";

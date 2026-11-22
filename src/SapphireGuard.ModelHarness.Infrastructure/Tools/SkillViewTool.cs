@@ -14,7 +14,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 /// </summary>
 public sealed class SkillViewTool(ISkillStore store) : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -23,7 +23,7 @@ public sealed class SkillViewTool(ISkillStore store) : ITool
           },
           "required": ["name"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "skill_view";
 

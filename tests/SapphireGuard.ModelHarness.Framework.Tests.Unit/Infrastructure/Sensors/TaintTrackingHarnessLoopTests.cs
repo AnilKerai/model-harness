@@ -23,7 +23,7 @@ public sealed class TaintTrackingHarnessLoopTests
         privilegedActions: ["send_email"]);
 
     private static ToolCall Call(string name) =>
-        new(Guid.NewGuid().ToString("n"), name, JsonDocument.Parse("{}").RootElement);
+        new(Guid.NewGuid().ToString("n"), name, JsonElement.Parse("{}"));
 
     private static ModelResponse ToolUse(params ToolCall[] calls) => new()
     {

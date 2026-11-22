@@ -37,7 +37,7 @@ public sealed class FakeModelClient : IModelClient
 
     private static ModelResponse ToolCallTurn()
     {
-        var args = JsonDocument.Parse("""{"op":"mul","lhs":12,"rhs":7}""").RootElement;
+        var args = JsonElement.Parse("""{"op":"mul","lhs":12,"rhs":7}""");
         return new ModelResponse
         {
             Text = "I'll use the calculator to compute 12 × 7.",

@@ -148,7 +148,7 @@ public sealed class DefaultBudgetEnforcerTests
         var budget = Generous with { MaxTurns = 1 };
         // Trajectory has tool steps but no model call steps — turns should be 0
         var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new Tools.ToolCall("id", "t", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+            new Tools.ToolCall("id", "t", System.Text.Json.JsonElement.Parse("{}")),
             new Tools.ToolResult("id", "ok"));
         var state = EmptyState(budget).AppendStep(toolStep);
 
@@ -162,7 +162,7 @@ public sealed class DefaultBudgetEnforcerTests
     {
         var budget = Generous with { MaxCost = 1m };
         var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+            new Tools.ToolCall("id", "agent", System.Text.Json.JsonElement.Parse("{}")),
             new Tools.ToolResult("id", "ok", Cost: 1.0m));
         var state = EmptyState(budget).AppendStep(toolStep);
 
@@ -177,7 +177,7 @@ public sealed class DefaultBudgetEnforcerTests
     {
         var budget = Generous with { MaxTotalTokens = 100 };
         var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+            new Tools.ToolCall("id", "agent", System.Text.Json.JsonElement.Parse("{}")),
             new Tools.ToolResult("id", "ok", Usage: new Usage(60, 40)));
         var state = EmptyState(budget).AppendStep(toolStep);
 
@@ -193,7 +193,7 @@ public sealed class DefaultBudgetEnforcerTests
         var budget = Generous with { MaxCost = 0.5m, MaxTotalTokens = 50 };
         // Tool result with null Cost and null Usage should not push over the limit
         var toolStep = new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+            new Tools.ToolCall("id", "agent", System.Text.Json.JsonElement.Parse("{}")),
             new Tools.ToolResult("id", "ok"));
         var state = EmptyState(budget).AppendStep(toolStep);
 
@@ -210,7 +210,7 @@ public sealed class DefaultBudgetEnforcerTests
         var state = EmptyState(budget)
             .AppendStep(ModelStep(cost: 0.6m))
             .AppendStep(new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
-                new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+                new Tools.ToolCall("id", "agent", System.Text.Json.JsonElement.Parse("{}")),
                 new Tools.ToolResult("id", "ok", Cost: 0.5m)));
 
         var result = Sut.Check(state);
@@ -251,7 +251,7 @@ public sealed class DefaultBudgetEnforcerTests
         var state = (EmptyState(budget) with { SensorCost = 0.3m })
             .AppendStep(ModelStep(cost: 0.4m))
             .AppendStep(new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
-                new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+                new Tools.ToolCall("id", "agent", System.Text.Json.JsonElement.Parse("{}")),
                 new Tools.ToolResult("id", "ok", Cost: 0.4m)));
 
         var result = Sut.Check(state);

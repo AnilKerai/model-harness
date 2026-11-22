@@ -154,7 +154,7 @@ internal static class AzureOpenAIWireFormat
             JsonElement arguments;
             try
             {
-                arguments = JsonDocument.Parse(call.FunctionArguments).RootElement;
+                arguments = JsonElement.Parse(call.FunctionArguments);
             }
             catch (JsonException) when (stopReason is StopReason.MaxTokens or StopReason.ContentFilter)
             {

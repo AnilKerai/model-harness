@@ -90,7 +90,7 @@ public sealed class ProgressCheckSensorTests
         var toolStep = new ToolCallStep(
             Guid.NewGuid(), DateTimeOffset.UtcNow,
             new Tools.ToolCall(Guid.NewGuid().ToString("n"), "search",
-                System.Text.Json.JsonDocument.Parse("{}").RootElement),
+                System.Text.Json.JsonElement.Parse("{}")),
             new Tools.ToolResult("id", "result"));
 
         var state = WithTurns(4).AppendStep(toolStep);

@@ -203,6 +203,16 @@ OpenTelemetry spans, and the runtime packages need 10.0.14.
     `OpenTelemetry` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.19.1 → 1.20.1 (`samples/Langfuse`), and
     the three `SapphireGuard.ModelHarness*` references in `getting-started` 3.1.0 → 4.1.0
 
+### Fixed
+
+- **The solution failed to build on .NET SDK 11.** SDK 11's analyzers add `CA2026`, which flags
+  `JsonDocument.Parse(...).RootElement` because the `JsonDocument` is never disposed, so its pooled buffer is
+  never returned, and the repo treats warnings as errors. Every such call (the six built-in tool schemas,
+  `AgentTool`, `FakeModelClient`, the Anthropic, Azure OpenAI and Ollama adapters, and the tests, samples and
+  `getting-started`) now uses `JsonElement.Parse`, which returns a self-contained element. There is no public API
+  or behaviour change. CI's `build-and-test` job now also installs SDK 11.x and builds with it, while the jobs
+  that pack stay on 10.x.
+
 ## [4.1.0] — 2026-11-01
 
 A minor release with one addition and one prompt fix. Nothing is removed and nothing stops compiling.

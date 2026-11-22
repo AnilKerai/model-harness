@@ -8,7 +8,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 [ExcludeFromCodeCoverage]
 public sealed class EchoTool : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -17,7 +17,7 @@ public sealed class EchoTool : ITool
           },
           "required": ["text"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "echo";
 

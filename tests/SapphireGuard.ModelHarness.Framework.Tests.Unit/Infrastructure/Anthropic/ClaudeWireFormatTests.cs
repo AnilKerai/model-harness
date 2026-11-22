@@ -28,7 +28,7 @@ public sealed class ClaudeWireFormatTests
     // path a live response takes rather than objects assembled by hand.
     private static SdkMessage Response(string json) =>
         SdkMessage.FromRawUnchecked(
-            JsonDocument.Parse(json).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value));
+            JsonElement.Parse(json).EnumerateObject().ToDictionary(p => p.Name, p => p.Value));
 
     private static string StringContent(MessageParam param)
     {

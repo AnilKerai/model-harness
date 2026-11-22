@@ -204,7 +204,7 @@ internal static class ClaudeWireFormat
             else if (block.TryPickToolUse(out var tu))
             {
                 var argsJson = JsonSerializer.Serialize(tu.Input);
-                var argsElement = JsonDocument.Parse(argsJson).RootElement;
+                var argsElement = JsonElement.Parse(argsJson);
                 toolCalls.Add(new FrameworkToolCall(tu.ID, tu.Name, argsElement));
             }
         }

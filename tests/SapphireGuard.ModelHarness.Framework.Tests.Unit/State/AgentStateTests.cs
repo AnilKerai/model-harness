@@ -110,6 +110,6 @@ public sealed class AgentStateTests
     private static ToolCallStep DelegatingToolStep(Usage? usage, decimal? cost) =>
         new(Guid.NewGuid(), T0,
             Call: new Framework.Tools.ToolCall("call-1", "sub-agent",
-                System.Text.Json.JsonDocument.Parse("{}").RootElement),
+                System.Text.Json.JsonElement.Parse("{}")),
             Result: new Framework.Tools.ToolResult("call-1", "delegated answer", Cost: cost, Usage: usage));
 }

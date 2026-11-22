@@ -9,7 +9,7 @@ namespace SapphireGuard.ModelHarness.Samples.StructuredOutput.Tools;
 /// </summary>
 public sealed class LookupCustomerTool : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -18,7 +18,7 @@ public sealed class LookupCustomerTool : ITool
           },
           "required": ["email"]
         }
-        """).RootElement;
+        """);
 
     private static readonly Dictionary<string, string> Customers = new(StringComparer.OrdinalIgnoreCase)
     {
