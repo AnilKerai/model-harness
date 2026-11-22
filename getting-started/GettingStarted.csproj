@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SapphireGuard.ModelHarness" Version="4.1.0" />
-    <PackageReference Include="SapphireGuard.ModelHarness.Infrastructure" Version="4.1.0" />
-    <PackageReference Include="SapphireGuard.ModelHarness.Anthropic" Version="4.1.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness" Version="5.0.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness.Infrastructure" Version="5.0.0" />
+    <PackageReference Include="SapphireGuard.ModelHarness.Anthropic" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />

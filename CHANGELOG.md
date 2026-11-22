@@ -12,6 +12,14 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
+## [Unreleased]
+
+### Changed
+
+- **`getting-started` now uses the 5.0.0 packages.** Its three `SapphireGuard.ModelHarness*` references move
+  from 4.1.0 to 5.0.0. It sets `ModelId` and doesn't use `ConfigureClient`, so its code is unchanged.
+  `getting-started` isn't packed, so no published package changes.
+
 ## [5.0.0] — 2026-11-22
 
 A major release for the Claude adapter. The default model changes to `claude-sonnet-5-5`,
