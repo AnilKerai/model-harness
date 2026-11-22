@@ -18,7 +18,7 @@ public sealed class FxRateTool : ITool
         ["JPY"] = 157.0, ["CAD"] = 1.36, ["AUD"] = 1.51
     };
 
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -28,7 +28,7 @@ public sealed class FxRateTool : ITool
           },
           "required": ["from", "to"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "fx_rate";
 

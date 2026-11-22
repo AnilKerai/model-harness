@@ -14,7 +14,7 @@ public sealed class CalculatorToolTests
     private static ToolCall Call(string op, double lhs, double rhs)
     {
         var json = $$"""{"op":"{{op}}","lhs":{{lhs}},"rhs":{{rhs}}}""";
-        return new ToolCall(Guid.NewGuid().ToString("n"), "calculator", JsonDocument.Parse(json).RootElement);
+        return new ToolCall(Guid.NewGuid().ToString("n"), "calculator", JsonElement.Parse(json));
     }
 
     [Theory]

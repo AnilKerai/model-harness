@@ -10,7 +10,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 /// </summary>
 public sealed class CalculatorTool : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -21,7 +21,7 @@ public sealed class CalculatorTool : ITool
           },
           "required": ["op", "lhs", "rhs"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "calculator";
 

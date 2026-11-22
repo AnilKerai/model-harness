@@ -9,7 +9,7 @@ namespace SapphireGuard.ModelHarness.Samples.SupportTriage.Tools;
 [ExcludeFromCodeCoverage]
 public sealed class GetTicketHistoryTool : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -18,7 +18,7 @@ public sealed class GetTicketHistoryTool : ITool
           },
           "required": ["customer_id"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "get_ticket_history";
     public string Description => "Retrieve the last 3 support tickets for a customer by their ID.";

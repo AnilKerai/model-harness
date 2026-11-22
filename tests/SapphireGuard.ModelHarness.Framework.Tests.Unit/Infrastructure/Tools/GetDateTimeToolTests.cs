@@ -11,7 +11,7 @@ public sealed class GetDateTimeToolTests
         ToolContext.Empty(Guid.NewGuid().ToString("n"), Guid.NewGuid().ToString("n"));
 
     private static ToolCall EmptyCall() =>
-        new(Guid.NewGuid().ToString("n"), "get_date_time", JsonDocument.Parse("{}").RootElement);
+        new(Guid.NewGuid().ToString("n"), "get_date_time", JsonElement.Parse("{}"));
 
     [Fact]
     public async Task Execute_ReturnsIso8601UtcString()

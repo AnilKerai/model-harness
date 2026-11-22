@@ -105,7 +105,7 @@ public sealed class TurnScopedBudgetEnforcerTests
         var budget = Generous with { MaxCost = 1m };
         var state = EmptyState(budget)
             .AppendStep(new ToolCallStep(Guid.NewGuid(), DateTimeOffset.UtcNow,
-                new Tools.ToolCall("id", "agent", System.Text.Json.JsonDocument.Parse("{}").RootElement),
+                new Tools.ToolCall("id", "agent", System.Text.Json.JsonElement.Parse("{}")),
                 new Tools.ToolResult("id", "ok", Cost: 1.0m)));
 
         var result = Sut.Check(state);

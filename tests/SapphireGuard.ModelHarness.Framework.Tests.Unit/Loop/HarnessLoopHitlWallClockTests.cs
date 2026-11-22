@@ -139,7 +139,7 @@ public sealed class HarnessLoopHitlWallClockTests
             checkpointStore: new NullCheckpointStore(),
             timeProvider: clock);
 
-    private static JsonElement EmptyArgs() => JsonDocument.Parse("{}").RootElement;
+    private static JsonElement EmptyArgs() => JsonElement.Parse("{}");
 
     private static ToolCall AskCall() => new(AskCallId, "ask_human", EmptyArgs());
 

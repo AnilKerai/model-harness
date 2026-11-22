@@ -49,7 +49,7 @@ public sealed class StepJsonConverterTests
         var json = JsonSerializer.Serialize<Step>(step, Options);
 
         Assert.DoesNotContain("secret-prompt-text", json);
-        Assert.Empty(JsonDocument.Parse(json).RootElement.GetProperty("Prompt").EnumerateArray());
+        Assert.Empty(JsonElement.Parse(json).GetProperty("Prompt").EnumerateArray());
         Assert.Single(step.Prompt); // serialising never mutates the in-memory step
     }
 
@@ -116,7 +116,7 @@ public sealed class StepJsonConverterTests
     [Fact]
     public void ToolCallStep_round_trips()
     {
-        var args = JsonDocument.Parse("""{"x":1}""").RootElement;
+        var args = JsonElement.Parse("""{"x":1}""");
         var step = new ToolCallStep(
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
@@ -140,7 +140,7 @@ public sealed class StepJsonConverterTests
         var step = new ToolCallStep(
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
-            new ToolCall("call-1", "fetch_webpage", JsonDocument.Parse("{}").RootElement),
+            new ToolCall("call-1", "fetch_webpage", JsonElement.Parse("{}")),
             new ToolResult("call-1", "Blocked by sensor 'x': nope", IsError: true))
         { HarnessAuthored = harnessAuthored };
 
@@ -285,7 +285,7 @@ public sealed class StepJsonConverterTests
             MaxWallClock = TimeSpan.FromMinutes(15), MaxToolCallDuration = TimeSpan.FromSeconds(30)
         };
         var t0 = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
-        var args = JsonDocument.Parse("""{"order":"A1001"}""").RootElement;
+        var args = JsonElement.Parse("""{"order":"A1001"}""");
 
         var trajectory = new Step[]
         {

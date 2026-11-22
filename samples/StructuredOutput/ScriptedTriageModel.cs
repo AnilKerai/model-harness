@@ -39,7 +39,7 @@ public sealed class ScriptedTriageModel : IModelClient
 
     private static ModelResponse LooksUpTheCustomer()
     {
-        var args = JsonDocument.Parse("""{"email":"ada@contoso.com"}""").RootElement;
+        var args = JsonElement.Parse("""{"email":"ada@contoso.com"}""");
 
         return Response(
             text: "Let me look up this customer first.",
