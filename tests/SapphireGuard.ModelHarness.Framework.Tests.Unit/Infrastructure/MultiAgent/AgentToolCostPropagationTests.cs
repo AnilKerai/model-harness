@@ -26,7 +26,7 @@ public sealed class AgentToolCostPropagationTests
 
     private static ToolCall SubTaskCall(string task = "do something") =>
         new(Guid.NewGuid().ToString("n"), "sub-agent",
-            JsonDocument.Parse($$$"""{"task":"{{{task}}}"}""").RootElement);
+            JsonElement.Parse($$$"""{"task":"{{{task}}}"}"""));
 
     private static ModelResponse EndTurnResponse(string text, decimal cost = 0m, int inputTokens = 0, int outputTokens = 0) =>
         new()

@@ -31,7 +31,7 @@ public sealed class HarnessLoopToolSpanTests
     private static ModelResponse ToolUseResponse(string tool) => new()
     {
         Text = null,
-        ToolCalls = [new ToolCall(Guid.NewGuid().ToString("n"), tool, JsonDocument.Parse("{}").RootElement)],
+        ToolCalls = [new ToolCall(Guid.NewGuid().ToString("n"), tool, JsonElement.Parse("{}"))],
         StopReason = StopReason.ToolUse,
         Usage = Usage.Zero,
         Cost = 0m

@@ -228,7 +228,7 @@ public sealed class OllamaModelClient : IModelClient
                 // Use the Ollama-provided call ID if present; synthesise one otherwise.
                 var callId = string.IsNullOrEmpty(tc.Id) ? Guid.NewGuid().ToString("n") : tc.Id;
                 var argsJson = JsonSerializer.Serialize(tc.Function.Arguments);
-                var argsElement = JsonDocument.Parse(argsJson).RootElement.Clone();
+                var argsElement = JsonElement.Parse(argsJson);
                 toolCalls.Add(new FrameworkToolCall(callId, tc.Function.Name ?? string.Empty, argsElement));
             }
         }

@@ -7,7 +7,7 @@ namespace SapphireGuard.ModelHarness.Infrastructure.Tools;
 [ExcludeFromCodeCoverage]
 public sealed class AskHumanTool(IHumanNotifier notifier) : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -16,7 +16,7 @@ public sealed class AskHumanTool(IHumanNotifier notifier) : ITool
           },
           "required": ["question"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "ask_human";
 

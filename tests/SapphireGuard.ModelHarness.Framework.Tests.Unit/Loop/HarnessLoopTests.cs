@@ -74,7 +74,7 @@ public sealed class HarnessLoopTests
     };
 
     private static ToolCall MakeToolCall(string name = "test-tool") =>
-        new(Guid.NewGuid().ToString("n"), name, JsonDocument.Parse("{}").RootElement);
+        new(Guid.NewGuid().ToString("n"), name, JsonElement.Parse("{}"));
 
     // ── Basic outcomes ────────────────────────────────────────────────────────
 

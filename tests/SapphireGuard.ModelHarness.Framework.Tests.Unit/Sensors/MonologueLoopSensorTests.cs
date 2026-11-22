@@ -22,7 +22,7 @@ public sealed class MonologueLoopSensorTests
             {
                 Text = text,
                 ToolCalls = withToolCall
-                    ? [new ToolCall("id", "act", JsonDocument.Parse("{}").RootElement)]
+                    ? [new ToolCall("id", "act", JsonElement.Parse("{}"))]
                     : [],
                 StopReason = StopReason.EndTurn, Usage = Usage.Zero, Cost = 0m
             },

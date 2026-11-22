@@ -95,7 +95,7 @@ public sealed class ToolSelectorGuideTests
     {
         public string Name => name;
         public string Description => "stub";
-        public JsonElement InputSchema => JsonDocument.Parse("{}").RootElement;
+        public JsonElement InputSchema => JsonElement.Parse("{}");
 
         public Task<ToolResult> ExecuteAsync(ToolCall call, ToolContext context, CancellationToken ct) =>
             Task.FromResult(new ToolResult(call.CallId, "ok"));

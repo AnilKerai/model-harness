@@ -21,10 +21,10 @@ public sealed class OrderStatusTool : ITool
     public string Description =>
         "Look up a customer order by its id (for example A1001). Returns the status, the date it was placed, and the customer's email.";
 
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         { "type": "object", "properties": { "orderId": { "type": "string", "description": "The order id, e.g. A1001" } }, "required": ["orderId"] }
-        """).RootElement;
+        """);
 
     public JsonElement InputSchema => Schema;
 

@@ -7,7 +7,7 @@ namespace SapphireGuard.ModelHarness.Samples.SupportTriage.Tools;
 [ExcludeFromCodeCoverage]
 public sealed class DraftResponseTool : ITool
 {
-    private static readonly JsonElement Schema = JsonDocument.Parse(
+    private static readonly JsonElement Schema = JsonElement.Parse(
         """
         {
           "type": "object",
@@ -17,7 +17,7 @@ public sealed class DraftResponseTool : ITool
           },
           "required": ["ticket_id", "body"]
         }
-        """).RootElement;
+        """);
 
     public string Name => "draft_response";
     public string Description => "Record and send a response to the customer for the given ticket.";

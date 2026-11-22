@@ -175,7 +175,7 @@ Unit tests live in `tests/SapphireGuard.ModelHarness.Framework.Tests.Unit`. Run 
 dotnet test tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/ -f net10.0
 ```
 
-The project multi-targets `net8.0;net10.0`, matching the shipped libraries, so CI runs both legs; `-f net10.0` selects one locally, which is the form that works on a machine without an 8.x runtime. The `net8.0` leg needs an 8.x runtime the `dotnet` muxer in use can see, and the Homebrew muxer ignores `DOTNET_ROOT` — so a local net8 run has to go through a `~/.dotnet` muxer carrying 8.x. Use that muxer only to *run* the tests, and build with your main SDK first: its older SDK can fail to compile the solution (CS9057, e.g. OllamaSharp's source generator needs a newer compiler than SDK 10.0.103 ships), and it misbehaves with `--coverage`.
+The project multi-targets `net8.0;net10.0`, matching the shipped libraries, so CI runs both legs; `-f net10.0` selects one locally, which is the form that works on a machine without an 8.x runtime. The `net8.0` leg needs an 8.x runtime the `dotnet` muxer in use can see, and the Homebrew muxer ignores `DOTNET_ROOT` — so a local net8 run has to go through a `~/.dotnet` muxer carrying 8.x. Use that muxer only to *run* the tests, and build with your main SDK first, as a precaution: an older SDK in it can fail to compile when a package's source generator needs a newer compiler (CS9057 — OllamaSharp 5.4.30's did on SDK 10.0.103). OllamaSharp 5.5.0, the version now referenced, compiles on SDK 10.0.103 and on SDK 11, so today the muxer can also build and run in one step, but a future package can bring the failure back. The muxer also misbehaves with `--coverage`.
 
 ```bash
 dotnet build tests/SapphireGuard.ModelHarness.Framework.Tests.Unit/

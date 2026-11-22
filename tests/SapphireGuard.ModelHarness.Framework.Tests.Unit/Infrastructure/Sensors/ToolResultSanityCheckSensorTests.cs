@@ -18,7 +18,7 @@ public sealed class ToolResultSanityCheckSensorTests
 
     private static ToolCallStep Step(string content, bool isError = false) =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new ToolCall(Guid.NewGuid().ToString("n"), "my-tool", JsonDocument.Parse("{}").RootElement),
+            new ToolCall(Guid.NewGuid().ToString("n"), "my-tool", JsonElement.Parse("{}")),
             new ToolResult("id", content, IsError: isError));
 
     private static readonly ToolResultSanityCheckSensor Default = new();

@@ -17,7 +17,7 @@ public sealed class StuckDetectorTests
 
     private static ToolCallStep ToolStep(string name, string argsJson = "{}") =>
         new(Guid.NewGuid(), DateTimeOffset.UtcNow,
-            new ToolCall(Guid.NewGuid().ToString("n"), name, JsonDocument.Parse(argsJson).RootElement),
+            new ToolCall(Guid.NewGuid().ToString("n"), name, JsonElement.Parse(argsJson)),
             new ToolResult("id", "result"));
 
     private static readonly StuckDetector Sut = new(repeatThreshold: 3);

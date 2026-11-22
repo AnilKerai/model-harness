@@ -79,7 +79,7 @@ public sealed class OpenTelemetryTracerTests
         var output = Assert.IsType<string>(chat.GetTagItem("gen_ai.output.messages"));
         Assert.Contains("secret answer", output);
         // Well-formed JSON per the GenAI output-messages schema: an array of messages, not a raw dump.
-        Assert.Equal("assistant", JsonDocument.Parse(output).RootElement[0].GetProperty("role").GetString());
+        Assert.Equal("assistant", JsonElement.Parse(output)[0].GetProperty("role").GetString());
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public sealed class OpenTelemetryTracerTests
     // ── Conversation id ──────────────────────────────────────────────────────
 
     private static ToolCall Call(string name, string argsJson) =>
-        new("c1", name, JsonDocument.Parse(argsJson).RootElement);
+        new("c1", name, JsonElement.Parse(argsJson));
 
     private static Activity Root(IEnumerable<Activity> activities, string taskId) =>
         activities.Single(a => a.OperationName == "invoke_agent" && (string?)a.GetTagItem("harness.task.id") == taskId);
@@ -256,12 +256,12 @@ public sealed class OpenTelemetryTracerTests
         var root = RunWithOutcome(new OpenTelemetryTracer(enableSensitiveData: true),
             SecondTurnOutcome("otel-io-" + Guid.NewGuid().ToString("N")));
 
-        var input = JsonDocument.Parse(Assert.IsType<string>(root.GetTagItem("gen_ai.input.messages"))).RootElement;
+        var input = JsonElement.Parse(Assert.IsType<string>(root.GetTagItem("gen_ai.input.messages")));
         Assert.Equal("user", input[0].GetProperty("role").GetString());
         // The latest user message, not the conversation opener held in TaskText.
         Assert.Equal("the second question", input[0].GetProperty("parts")[0].GetProperty("content").GetString());
 
-        var output = JsonDocument.Parse(Assert.IsType<string>(root.GetTagItem("gen_ai.output.messages"))).RootElement;
+        var output = JsonElement.Parse(Assert.IsType<string>(root.GetTagItem("gen_ai.output.messages")));
         Assert.Equal("the second answer", output[0].GetProperty("parts")[0].GetProperty("content").GetString());
         Assert.Equal("stop", output[0].GetProperty("finish_reason").GetString());
     }
@@ -299,7 +299,7 @@ public sealed class OpenTelemetryTracerTests
         });
 
         var chat = activities.Single(a => a.OperationName == "chat" && a.TraceId == Root(activities, taskId).TraceId);
-        var messages = JsonDocument.Parse(Assert.IsType<string>(chat.GetTagItem("gen_ai.input.messages"))).RootElement;
+        var messages = JsonElement.Parse(Assert.IsType<string>(chat.GetTagItem("gen_ai.input.messages")));
 
         Assert.Equal(["system", "user", "assistant", "tool"],
             messages.EnumerateArray().Select(m => m.GetProperty("role").GetString()));
@@ -336,7 +336,7 @@ public sealed class OpenTelemetryTracerTests
         });
 
         var chat = activities.Single(a => a.OperationName == "chat" && a.TraceId == Root(activities, taskId).TraceId);
-        var message = JsonDocument.Parse(Assert.IsType<string>(chat.GetTagItem("gen_ai.output.messages"))).RootElement[0];
+        var message = JsonElement.Parse(Assert.IsType<string>(chat.GetTagItem("gen_ai.output.messages")))[0];
 
         Assert.Equal("tool_call", message.GetProperty("finish_reason").GetString());
         var part = Assert.Single(message.GetProperty("parts").EnumerateArray());
