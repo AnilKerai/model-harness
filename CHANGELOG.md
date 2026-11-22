@@ -12,8 +12,6 @@ can stop a consumer compiling or silently change runtime behaviour they depend o
 extension-point interfaces (`IBudgetEnforcer`, `ITracer`, `ISensor`, `IGuide`, `IModelClient`, …), which are
 public API even though most consumers only implement a few of them.
 
-## [Unreleased]
-
 ## [5.0.0] — 2026-11-22
 
 A major release for the Claude adapter. The default model changes to `claude-sonnet-5-5`,
